@@ -84,6 +84,10 @@ jobs:
         run: pipx install semgrep
 
       - name: Run every gate
+        # QA-04: the pull request's labels say which public surface changes it
+        # declares: api-change (additions) or breaking (anything).
+        env:
+          HARNESS_SURFACE_ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') && 'all' || (contains(github.event.pull_request.labels.*.name, 'api-change') && 'additions' || 'none') }}
         run: vendor/bin/pollora-qa check --coverage=.harness/coverage.xml
 
       - name: Keep the report
@@ -123,6 +127,35 @@ jobs:
 
       - name: Run the tests
         run: vendor/bin/pest
+
+  contract:
+    name: PHP API compatibility (QA-05)
+    needs: setup
+    runs-on: ubuntu-latest
+    # A pull request labelled "breaking" is a major version: the check reports, it does not block.
+    continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' || contains(github.event.pull_request.labels.*.name, 'breaking') }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.quality-php }}
+          coverage: none
+
+      - name: Compare the PHP API with the latest release
+        run: |
+          tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            echo "::notice::No release tag yet: nothing to compare the API with."
+            exit 0
+          fi
+          composer global require roave/backward-compatibility-check --no-interaction --no-progress
+          "$(composer global config bin-dir --absolute)/roave-backward-compatibility-check" --from="$tag" --format=github-actions
 
   secrets:
     name: Secrets (SEC-08)

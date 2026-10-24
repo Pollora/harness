@@ -4,6 +4,8 @@ on:
   push:
     branches: [{{branches}}]
   pull_request:
+    # A label (api-change, breaking) changes what the public surface gate allows.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:

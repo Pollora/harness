@@ -4,6 +4,10 @@
 
 ### Added
 
+- `pollora-qa surface`: records the public surface (attributes and their parameters, hooks fired, configuration keys, commands) in `api-surface.json` and compares the code with it; a change needs the `api-change` or `breaking` label (QA-04)
+- The public surface gate in `pollora-qa check`, reading the pull request's labels in CI
+- The `contract` job in the reusable workflow: `roave/backward-compatibility-check` against the latest tag (QA-05)
+- CONV-04 and CONV-06 reported from the surface: hook and command names that do not follow the conventions
 - `pollora-qa` command line: `init`, `check` (full and `--fast`), `ratchet`, `deps`, `rules`, `agents`, `hook`.
 - Profiles `core`, `framework`, `integration`, `wp-plugin`, `template` and `project`, with observe and enforce modes.
 - Rule catalogue (`resources/rules.php`) with ARCH, CONV, SEC, PERF and QA identifiers.

@@ -39,6 +39,7 @@ composer qa
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree |
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
+| `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
 | `pollora-qa rules [ID]` | Lists the rules, or explains one |
 | `pollora-qa agents` | Regenerates the harness block of `AGENTS.md` |
 | `pollora-qa hook <event>` | Agent hooks: `pre-edit`, `post-edit`, `stop` |
@@ -53,6 +54,19 @@ composer qa
 - **A reusable workflow**, `.github/workflows/php-package.yml`: quality gates, a test matrix (PHP × lowest/stable dependencies), a gitleaks scan, and the **downstream** job that runs the framework's tests against a changed core package.
 - **Agent hooks** for Claude Code: style fixed after each edit, PHPStan on the edited file, protected threshold files (QA-02), the fast gates before the agent hands back.
 
+## Public surface
+
+Projects built on Pollora rely on more than PHP signatures: the attributes and their parameters, the hooks Pollora fires, the configuration keys and the console commands. `pollora-qa surface --update` records them in `api-surface.json`, one line per entry:
+
+```json
+"attribute:Pollora\\Attributes\\WpRestRoute($permissionCallback)": "Pollora\\Attributes\\WpRestRoute\\Permission|string|null, optional = NULL",
+"hook:pollora/media/stored": "hook",
+"config:media.disk": "key",
+"command:pollora:make:block": "command"
+```
+
+In CI, a pull request that changes the surface needs a label (QA-04): `api-change` when it only adds entries (a minor version), `breaking` when it removes or changes one, or adds a required parameter to an existing attribute (a major version, after a deprecation). The diff shows exactly what a release changes for its users. PHP signatures are compared with the latest tag by `roave/backward-compatibility-check` (QA-05).
+
 ## Rules
 
 `vendor/bin/pollora-qa rules` prints the catalogue, from `resources/rules.php`. Each rule is `enforced` (fails the gate), `observed` (reported only) or `planned` (not checked by this version yet).
@@ -61,4 +75,4 @@ An exception to a rule is written on the line it concerns, with its reason: `// 
 
 ## Status
 
-This is phase 1 of the rollout: the harness measures every repository without blocking it. The public API surface check (`api-surface.json`), integration tests against a real WordPress, adapter contract tests, mutation testing and performance budgets follow in the next phases.
+This is phase 1 of the rollout: the harness measures every repository without blocking it. Integration tests against a real WordPress, adapter contract tests, mutation testing and performance budgets follow in the next phases.

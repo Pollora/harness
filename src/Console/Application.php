@@ -12,6 +12,7 @@ use Pollora\Harness\Console\Commands\HookCommand;
 use Pollora\Harness\Console\Commands\InitCommand;
 use Pollora\Harness\Console\Commands\RatchetCommand;
 use Pollora\Harness\Console\Commands\RulesCommand;
+use Pollora\Harness\Console\Commands\SurfaceCommand;
 
 final class Application
 {
@@ -95,6 +96,7 @@ final class Application
             new CheckCommand,
             new RatchetCommand,
             new DepsCommand,
+            new SurfaceCommand,
             new RulesCommand,
             new AgentsCommand,
             new HookCommand,

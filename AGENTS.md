@@ -36,7 +36,9 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **ARCH-08** Attribute classes are final, readonly and declare their targets _(Pest arch, G1)_
 - **ARCH-09** declare(strict_types=1) in every file _(Pest arch + Pint, G1)_
 - **CONV-03** Laravel naming: ServiceProvider, Command, Exception, Repository, Factory suffixes _(Pest arch, G1)_
+- **CONV-04** Hooks fired by Pollora are named pollora/<module>/<event_snake_case> _(pollora-qa surface, G2)_
 - **CONV-05** Configuration lives under pollora.<package>; env() is only called in config/ _(Pest arch, G1)_
+- **CONV-06** Commands are named pollora:<verb> or pollora:make-<thing> _(pollora-qa surface, G2)_
 - **CONV-07** Domain and Application code never calls app() or resolve(); it receives contracts _(Pest arch, G1)_
 - **CONV-10** One named exception per business case; never throw a bare \Exception _(Semgrep, G1)_
 - **CONV-11** Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated _(PHPStan + Pest type coverage, G1)_
@@ -48,5 +50,7 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **SEC-09** No dependency with a known vulnerability _(composer audit, G1)_
 - **QA-01** Ratchet: no metric gets worse (PHPStan level and baseline, coverage, mutation score) _(pollora-qa ratchet, G2)_
 - **QA-02** The harness files are protected: baseline, .harness.json and api-surface.json change only through a human _(Agent hooks + CODEOWNERS, G0)_
+- **QA-04** The public surface (attributes, hooks fired, configuration keys, commands) changes only with a label: api-change to add, breaking to remove or change _(pollora-qa surface, G2)_
+- **QA-05** No PHP signature breaks backward compatibility outside a major version _(roave/backward-compatibility-check, G2)_
 - **QA-03** A change to a core package keeps the framework green _(Downstream job, G2)_
 <!-- pollora-harness:end -->
