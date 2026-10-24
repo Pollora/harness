@@ -29,9 +29,9 @@ return [
     'CONV-01' => ['title' => 'Expressive API: the common case needs no configuration; options are chained methods or named arguments', 'tool' => 'Review + documentation examples run as tests', 'gate' => 'G2', 'status' => 'planned'],
     'CONV-02' => ['title' => 'No raw WordPress argument array in the public API', 'tool' => 'PHPStan', 'gate' => 'G1', 'status' => 'planned'],
     'CONV-03' => ['title' => 'Laravel naming: ServiceProvider, Command, Exception, Repository, Factory suffixes', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
-    'CONV-04' => ['title' => 'Hooks fired by Pollora are named pollora/<module>/<event_snake_case>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'planned'],
+    'CONV-04' => ['title' => 'Hooks fired by Pollora are named pollora/<module>/<event_snake_case>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'observed'],
     'CONV-05' => ['title' => 'Configuration lives under pollora.<package>; env() is only called in config/', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
-    'CONV-06' => ['title' => 'Commands are named pollora:<verb> or pollora:make-<thing>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'planned'],
+    'CONV-06' => ['title' => 'Commands are named pollora:<verb> or pollora:make-<thing>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'observed'],
     'CONV-07' => ['title' => 'Domain and Application code never calls app() or resolve(); it receives contracts', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-08' => ['title' => 'Public classes stay open (final only on attributes and internal classes); builders and facade-backed services use Macroable', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'planned'],
     'CONV-09' => ['title' => 'A facade fronts an injectable service, with a contract and a fake() for tests', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'planned'],
@@ -59,5 +59,7 @@ return [
     // Process
     'QA-01' => ['title' => 'Ratchet: no metric gets worse (PHPStan level and baseline, coverage, mutation score)', 'tool' => 'pollora-qa ratchet', 'gate' => 'G2', 'status' => 'enforced'],
     'QA-02' => ['title' => 'The harness files are protected: baseline, .harness.json and api-surface.json change only through a human', 'tool' => 'Agent hooks + CODEOWNERS', 'gate' => 'G0', 'status' => 'enforced'],
+    'QA-04' => ['title' => 'The public surface (attributes, hooks fired, configuration keys, commands) changes only with a label: api-change to add, breaking to remove or change', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'enforced'],
+    'QA-05' => ['title' => 'No PHP signature breaks backward compatibility outside a major version', 'tool' => 'roave/backward-compatibility-check', 'gate' => 'G2', 'status' => 'enforced'],
     'QA-03' => ['title' => 'A change to a core package keeps the framework green', 'tool' => 'Downstream job', 'gate' => 'G2', 'status' => 'observed'],
 ];

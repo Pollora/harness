@@ -9,6 +9,8 @@ use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\Paths;
+use Pollora\Harness\Surface\SurfaceCheck;
+use Pollora\Harness\Surface\SurfaceFile;
 
 /**
  * Decides which steps `pollora-qa check` runs for a repository.
@@ -59,8 +61,26 @@ final readonly class Plan
             new Step('Dependency analysis', ['ARCH-07'], ['vendor/bin/composer-dependency-analyser'], requires: ['vendor/bin/composer-dependency-analyser']),
             $this->semgrep(),
             $this->audit(),
+            $this->publicSurface(),
             $this->ratchet($coverage, $infection),
         ];
+    }
+
+    private function publicSurface(): Step
+    {
+        $rules = ['QA-04', 'CONV-04', 'CONV-06'];
+        $cwd = $this->cwd;
+
+        if (! SurfaceFile::exists($cwd)) {
+            return Step::skipped('Public surface', $rules, SurfaceFile::FILE.' not recorded yet (vendor/bin/pollora-qa surface --update)');
+        }
+
+        return new Step('Public surface', $rules, static function () use ($cwd): StepResult {
+            $result = (new SurfaceCheck($cwd))->run(SurfaceCheck::allowance(null));
+            $detail = implode("\n", $result['lines']);
+
+            return $result['passed'] ? StepResult::passed($detail) : StepResult::failed($detail);
+        });
     }
 
     private function style(bool $dirty): Step

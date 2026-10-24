@@ -113,7 +113,7 @@ jobs:
       - name: The report lists every step
         working-directory: hook
         run: |
-          jq -e '.steps | length == 9' .harness/report.json
+          jq -e '.steps | length == 10' .harness/report.json
           jq -r '.steps[] | "\(.status)\t\(.name)"' .harness/report.json
 
       - name: Agent hooks behave
@@ -124,3 +124,49 @@ jobs:
           test $? -eq 2 || { echo "::error::pre-edit should block a protected file"; exit 1; }
           echo '{"tool_input":{"file_path":"src/Hook.php"}}' | vendor/bin/pollora-qa hook pre-edit
           test $? -eq 0 || { echo "::error::pre-edit should let the code be edited"; exit 1; }
+
+  surface-of-framework:
+    name: Public surface of Pollora/framework
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: harness
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Pollora/framework
+          ref: develop
+          path: framework
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      - name: Require the harness from this checkout
+        working-directory: framework
+        run: |
+          composer config repositories.harness '{"type": "path", "url": "../harness", "options": {"symlink": false, "versions": {"pollora/harness": "1.0.0"}}}'
+          composer require --dev pollora/harness:1.0.0 --with-all-dependencies --no-interaction --no-progress
+
+      - name: Read the surface
+        working-directory: framework
+        run: |
+          vendor/bin/pollora-qa surface --print --no-ansi | tee surface.txt
+          echo "Entries by kind:"; cut -d: -f1 surface.txt | sort | uniq -c
+          grep -q '^hook:pollora/media/stored' surface.txt
+          grep -q '^command:pollora:make:block' surface.txt
+          grep -q '^config:media\.' surface.txt || { echo "::error::The framework's configuration was not read"; exit 1; }
+          ! grep -q 'unreadable without the application' surface.txt || echo "::warning::Some configuration files need the application to be read"
+
+      - name: Record it, then find it unchanged
+        working-directory: framework
+        run: |
+          vendor/bin/pollora-qa surface --update --no-ansi
+          vendor/bin/pollora-qa surface --no-ansi

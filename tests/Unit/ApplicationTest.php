@@ -69,3 +69,27 @@ it('tightens the ratchet without ever loosening it', function (): void {
         'coverage' => 81.2,
     ]);
 });
+
+it('records the public surface, then passes while it is unchanged and asks for a label once it changes', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/src');
+    file_put_contents($cwd.'/composer.json', '{"autoload": {"psr-4": {"Acme\\\\": "src/"}}}');
+    file_put_contents($cwd.'/src/Events.php', "<?php\n\ndo_action('pollora/orders/placed');\n");
+
+    [$missing] = polloraQa($cwd, 'surface');
+    [$recorded] = polloraQa($cwd, 'surface', '--update');
+    [$unchanged, $unchangedOutput] = polloraQa($cwd, 'surface');
+
+    file_put_contents($cwd.'/src/Events.php', "<?php\n\ndo_action('pollora/orders/shipped');\n");
+    [$broken, $brokenOutput] = polloraQa($cwd, 'surface');
+    [$labelled] = polloraQa($cwd, 'surface', '--allow=all');
+
+    expect($missing)->toBe(1)
+        ->and($recorded)->toBe(0)
+        ->and(json_decode((string) file_get_contents($cwd.'/api-surface.json'), true))->toBe(['version' => 1, 'surface' => ['hook:pollora/orders/placed' => 'action']])
+        ->and($unchanged)->toBe(0)
+        ->and($unchangedOutput)->toContain('unchanged (1 entries)')
+        ->and($broken)->toBe(1)
+        ->and($brokenOutput)->toContain('- hook:pollora/orders/placed', '+ hook:pollora/orders/shipped', 'label the pull request "breaking"')
+        ->and($labelled)->toBe(0);
+});
