@@ -66,7 +66,7 @@ final class Preset
             self::constant($sets, 'LARAVEL_CODE_QUALITY'),
             self::constant($sets, 'LARAVEL_COLLECTION'),
             self::constant($sets, 'LARAVEL_TYPE_DECLARATIONS'),
-        ])));
+        ], static fn (?string $set): bool => $set !== null)));
     }
 
     private static function constant(string $class, string $name): ?string
