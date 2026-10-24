@@ -117,7 +117,8 @@ final class Runner
             return;
         }
 
-        $detail = strtr($result->detail, ['%' => '%25', "\r" => '%0D', "\n" => '%0A']);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $result->detail);
+        $detail = strtr($plain, ['%' => '%25', "\r" => '%0D', "\n" => '%0A']);
         $this->io->line(sprintf('::error title=Pollora harness · %s (%s)::%s', $step->name, implode(' ', $step->rules), $detail));
     }
 

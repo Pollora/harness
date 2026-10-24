@@ -15,6 +15,8 @@ use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
 
 return (new Configuration)
     ->disableReportingUnmatchedIgnores()
+    // Fixtures break the rules on purpose and call WordPress, which is not installed here.
+    ->addPathToExclude(__DIR__.'/tests/Fixtures')
     ->ignoreErrorsOnPackages([
         'laravel/pint',
         'phpstan/phpstan-deprecation-rules',
@@ -22,7 +24,10 @@ return (new Configuration)
         'shipmonk/composer-dependency-analyser',
         'szepeviktor/phpstan-wordpress',
     ], [ErrorType::UNUSED_DEPENDENCY])
-    ->ignoreErrorsOnPackage('pestphp/pest', [ErrorType::DEV_DEPENDENCY_IN_PROD])
+    ->ignoreErrorsOnPackages(['pestphp/pest', 'pestphp/pest-plugin-arch'], [ErrorType::DEV_DEPENDENCY_IN_PROD, ErrorType::SHADOW_DEPENDENCY])
+    // The PHPStan rule uses the PHP-Parser that PHPStan bundles and loads:
+    // requiring nikic/php-parser could install a second, incompatible copy.
+    ->ignoreErrorsOnPackage('nikic/php-parser', [ErrorType::SHADOW_DEPENDENCY])
     // PHPStan and Rector ship their own prefixed copies of these classes.
     ->ignoreUnknownClassesRegex('~^(PHPStan|PhpParser|Rector)\\\\~')
     ->ignoreUnknownFunctions(['arch', 'test', 'expect']);
