@@ -80,8 +80,9 @@ final class Collector
     public static function countNeonBaseline(string $neon): int
     {
         $total = 0;
+        $chunks = preg_split('/^\s*-\s*$/m', $neon);
 
-        foreach (preg_split('/^\s*-\s*$/m', $neon) ?: [] as $chunk) {
+        foreach ($chunks === false ? [] : $chunks as $chunk) {
             if (preg_match('/^\s*(message|rawMessage|identifier):/m', $chunk) !== 1) {
                 continue;
             }

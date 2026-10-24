@@ -73,7 +73,10 @@ final class Io
     {
         $value = $this->option($name);
 
-        return $value === null ? [] : array_values(array_filter(array_map(trim(...), explode(',', $value))));
+        return $value === null ? [] : array_values(array_filter(
+            array_map(trim(...), explode(',', $value)),
+            static fn (string $item): bool => $item !== '',
+        ));
     }
 
     public function line(string $text = ''): void

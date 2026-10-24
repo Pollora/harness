@@ -53,10 +53,12 @@ final class InitCommand implements Command
         $level = $collector->phpstanLevel();
         $require = DependencyPolicy::readRequire($io->cwd);
 
+        $downstream = $io->list('downstream');
+
         $config = new HarnessConfig(
             profile: $profile,
             mode: Mode::tryFrom($io->option('mode') ?? '') ?? $existing->mode ?? Mode::Observe,
-            downstream: $io->list('downstream') ?: ($existing->downstream ?? ($profile->hasDownstream() ? ['framework'] : [])),
+            downstream: $downstream !== [] ? $downstream : ($existing->downstream ?? ($profile->hasDownstream() ? ['framework'] : [])),
             // ARCH-04 starts green: the Laravel packages a core package needs
             // today are recorded as exceptions, each one to remove explicitly.
             allowLaravel: $existing->allowLaravel ?? ($profile->mustStayLaravelFree() ? self::laravelPackages($require) : []),

@@ -39,6 +39,10 @@ final class Runner
                 default => $this->io->warning('  skipped: '.$result->detail),
             }.$this->io->muted(sprintf(' (%.1fs)', $result->seconds)));
 
+            if ($result->isFailed()) {
+                $this->annotate($step, $result);
+            }
+
             $results[] = ['step' => $step, 'result' => $result];
         }
 
@@ -101,6 +105,20 @@ final class Runner
         fclose($pipes[1]);
 
         return [proc_close($process), $output];
+    }
+
+    /**
+     * In GitHub Actions, a failed step becomes an annotation on the run, so
+     * the reason shows on the pull request without opening the log.
+     */
+    private function annotate(Step $step, StepResult $result): void
+    {
+        if (getenv('GITHUB_ACTIONS') !== 'true') {
+            return;
+        }
+
+        $detail = strtr($result->detail, ['%' => '%25', "\r" => '%0D', "\n" => '%0A']);
+        $this->io->line(sprintf('::error title=Pollora harness · %s (%s)::%s', $step->name, implode(' ', $step->rules), $detail));
     }
 
     private static function quote(string $argument): string
