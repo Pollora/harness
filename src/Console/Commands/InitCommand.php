@@ -17,7 +17,7 @@ use Pollora\Harness\Scaffold\Scaffolder;
 final class InitCommand implements Command
 {
     /** The level a new PHPStan configuration starts at, as most Pollora packages do today. */
-    private const DEFAULT_LEVEL = 5;
+    private const int DEFAULT_LEVEL = 5;
 
     public function name(): string
     {
@@ -61,7 +61,7 @@ final class InitCommand implements Command
             downstream: $downstream !== [] ? $downstream : ($existing->downstream ?? ($profile->hasDownstream() ? ['framework'] : [])),
             // ARCH-04 starts green: the Laravel packages a core package needs
             // today are recorded as exceptions, each one to remove explicitly.
-            allowLaravel: $existing->allowLaravel ?? ($profile->mustStayLaravelFree() ? self::laravelPackages($require) : []),
+            allowLaravel: $existing->allowLaravel ?? ($profile->mustStayLaravelFree() ? $this->laravelPackages($require) : []),
             ratchet: $existing->ratchet ?? Ratchet::fromArray([
                 'phpstan_level' => $level ?? self::DEFAULT_LEVEL,
                 'phpstan_baseline' => $collector->phpstanBaselineEntries(),
@@ -85,7 +85,7 @@ final class InitCommand implements Command
      * @param  array<string, string>  $require
      * @return list<string>
      */
-    private static function laravelPackages(array $require): array
+    private function laravelPackages(array $require): array
     {
         return array_values(array_filter(
             array_keys($require),

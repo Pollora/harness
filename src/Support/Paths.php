@@ -65,7 +65,7 @@ final class Paths
             fclose($pipes[2]);
             proc_close($process);
 
-            array_push($files, ...array_filter(explode("\n", $output)));
+            array_push($files, ...array_filter(explode("\n", $output), static fn (string $line): bool => $line !== ''));
         }
 
         return array_values(array_unique(array_filter(

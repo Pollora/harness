@@ -15,9 +15,9 @@ use Pollora\Harness\Rules\Catalogue;
  */
 final class AgentsFile
 {
-    public const START = '<!-- pollora-harness:start -->';
+    public const string START = '<!-- pollora-harness:start -->';
 
-    public const END = '<!-- pollora-harness:end -->';
+    public const string END = '<!-- pollora-harness:end -->';
 
     public static function block(HarnessConfig $config): string
     {

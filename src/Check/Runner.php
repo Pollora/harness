@@ -12,12 +12,12 @@ use Pollora\Harness\Console\Io;
  * A failing step does not stop the run: the report shows every gate at once,
  * so one push tells the author everything that needs fixing.
  */
-final class Runner
+final readonly class Runner
 {
     /** Lines of a failing tool's output kept in the report. */
-    private const TAIL = 30;
+    private const int TAIL = 30;
 
-    public function __construct(private readonly Io $io, private readonly string $cwd) {}
+    public function __construct(private Io $io, private string $cwd) {}
 
     /**
      * @param  list<Step>  $steps
@@ -86,7 +86,7 @@ final class Runner
      */
     private function process(array $command): array
     {
-        $this->io->line($this->io->muted('  $ '.implode(' ', array_map(self::quote(...), $command))));
+        $this->io->line($this->io->muted('  $ '.implode(' ', array_map($this->quote(...), $command))));
 
         // @phpstan-ignore argument.type (PHP accepts ['redirect', 1] since 7.4; the stub does not)
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, $this->cwd);
@@ -122,7 +122,7 @@ final class Runner
         $this->io->line(sprintf('::error title=Pollora harness · %s (%s)::%s', $step->name, implode(' ', $step->rules), $detail));
     }
 
-    private static function quote(string $argument): string
+    private function quote(string $argument): string
     {
         return preg_match('/^[\w.\/:=@%+-]+$/', $argument) === 1 ? $argument : escapeshellarg($argument);
     }

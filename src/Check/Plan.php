@@ -16,11 +16,11 @@ use Pollora\Harness\Support\Paths;
  * The fast plan (G0, agent hooks, pre-commit) only looks at what changed and
  * stays under half a minute. The full plan (G1 and G2 in CI) runs every gate.
  */
-final class Plan
+final readonly class Plan
 {
     public function __construct(
-        private readonly HarnessConfig $config,
-        private readonly string $cwd,
+        private HarnessConfig $config,
+        private string $cwd,
     ) {}
 
     /**

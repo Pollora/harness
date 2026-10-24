@@ -13,16 +13,16 @@ use Pollora\Harness\Rules\Catalogue;
  * What a check run found, for the console, for CI (JSON) and for the GitHub
  * job summary (Markdown).
  */
-final class Report
+final readonly class Report
 {
     /**
      * @param  list<array{step: Step, result: StepResult}>  $results
      */
     public function __construct(
-        private readonly Profile $profile,
-        private readonly Mode $mode,
-        private readonly bool $fast,
-        private readonly array $results,
+        private Profile $profile,
+        private Mode $mode,
+        private bool $fast,
+        private array $results,
     ) {}
 
     public function hasFailures(): bool

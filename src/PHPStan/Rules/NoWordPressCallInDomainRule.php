@@ -24,11 +24,11 @@ use Pollora\Harness\PHPStan\WordPressFunctions;
  *
  * @implements Rule<FuncCall>
  */
-final class NoWordPressCallInDomainRule implements Rule
+final readonly class NoWordPressCallInDomainRule implements Rule
 {
-    public const IDENTIFIER = 'pollora.noWordPressCallInDomain';
+    public const string IDENTIFIER = 'pollora.noWordPressCallInDomain';
 
-    public function __construct(private readonly WordPressFunctions $functions) {}
+    public function __construct(private WordPressFunctions $functions) {}
 
     public function getNodeType(): string
     {

@@ -15,11 +15,11 @@ use Composer\InstalledVersions;
  */
 final class WordPressFunctions
 {
-    private const STUBS_PACKAGE = 'php-stubs/wordpress-stubs';
+    private const string STUBS_PACKAGE = 'php-stubs/wordpress-stubs';
 
-    private const STUBS_FILE = 'wordpress-stubs.php';
+    private const string STUBS_FILE = 'wordpress-stubs.php';
 
-    private const FALLBACK = [
+    private const array FALLBACK = [
         'add_action', 'add_filter', 'apply_filters', 'do_action', 'remove_action', 'remove_filter', 'has_action', 'has_filter',
         'get_option', 'update_option', 'add_option', 'delete_option', 'get_post', 'get_posts', 'get_post_meta', 'update_post_meta',
         'get_term', 'get_terms', 'get_user_by', 'get_current_user_id', 'current_user_can', 'is_admin', 'is_user_logged_in',
@@ -47,7 +47,7 @@ final class WordPressFunctions
         }
 
         $names = self::FALLBACK;
-        $stubs = $this->stubsPath ?? self::locateStubs();
+        $stubs = $this->stubsPath ?? $this->locateStubs();
 
         if ($stubs !== null && preg_match_all('/^\s*function\s+&?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', (string) file_get_contents($stubs), $matches) > 0) {
             $names = $matches[1];
@@ -56,7 +56,7 @@ final class WordPressFunctions
         return $this->names = array_fill_keys(array_map(strtolower(...), $names), true);
     }
 
-    private static function locateStubs(): ?string
+    private function locateStubs(): ?string
     {
         if (! class_exists(InstalledVersions::class) || ! InstalledVersions::isInstalled(self::STUBS_PACKAGE)) {
             return null;

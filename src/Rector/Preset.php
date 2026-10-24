@@ -7,7 +7,6 @@ namespace Pollora\Harness\Rector;
 use Pollora\Harness\Profile;
 use Rector\Config\RectorConfig;
 use Rector\Configuration\RectorConfigBuilder;
-use Rector\Php83\Rector\ClassMethod\AddOverrideAttributeToOverriddenMethodsRector;
 
 /**
  * The Rector configuration shared by every repository, built on the one the
@@ -36,17 +35,13 @@ final class Preset
 
         $builder = RectorConfig::configure()
             ->withPaths($absolute)
-            ->withSkip([
-                // Pollora does not mark overrides; adding #[Override] everywhere is noise in review.
-                AddOverrideAttributeToOverriddenMethodsRector::class,
-            ])
             ->withPreparedSets(
                 deadCode: true,
                 codeQuality: true,
+                codingStyle: true,
                 typeDeclarations: true,
                 privatization: true,
                 earlyReturn: true,
-                codingStyle: true,
             )
             ->withPhpSets();
 
@@ -78,6 +73,12 @@ final class Preset
     {
         $constant = $class.'::'.$name;
 
-        return class_exists($class) && defined($constant) ? (string) constant($constant) : null;
+        if (! class_exists($class) || ! defined($constant)) {
+            return null;
+        }
+
+        $value = constant($constant);
+
+        return is_string($value) ? $value : null;
     }
 }

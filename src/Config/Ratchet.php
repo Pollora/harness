@@ -11,17 +11,17 @@ namespace Pollora\Harness\Config;
  * recorded, a metric may only improve: a higher PHPStan level, fewer baseline
  * entries, more coverage, a higher mutation or type coverage score.
  */
-final class Ratchet
+final readonly class Ratchet
 {
     /** Rounding noise tolerated on percentages, in points. */
-    public const TOLERANCE = 0.05;
+    public const float TOLERANCE = 0.05;
 
     /**
      * The metrics, their direction and how they are labelled.
      *
      * @var array<string, array{better: 'higher'|'lower', label: string}>
      */
-    public const METRICS = [
+    public const array METRICS = [
         'phpstan_level' => ['better' => 'higher', 'label' => 'PHPStan level'],
         'phpstan_baseline' => ['better' => 'lower', 'label' => 'PHPStan baseline entries'],
         'coverage' => ['better' => 'higher', 'label' => 'Line coverage (%)'],
@@ -30,12 +30,12 @@ final class Ratchet
     ];
 
     /** PHPStan 2 has ten levels; "max" is the highest. */
-    private const MAX_PHPSTAN_LEVEL = 10;
+    private const int MAX_PHPSTAN_LEVEL = 10;
 
     /**
      * @param  array<string, int|float|null>  $values
      */
-    public function __construct(public readonly array $values = []) {}
+    public function __construct(public array $values = []) {}
 
     /**
      * @param  array<mixed>  $data
@@ -81,7 +81,7 @@ final class Ratchet
                 'label' => $definition['label'],
                 'recorded' => $recorded,
                 'measured' => $current,
-                'verdict' => self::verdict($definition['better'], $recorded, $current),
+                'verdict' => $this->verdict($definition['better'], $recorded, $current),
             ];
         }
 
@@ -130,7 +130,7 @@ final class Ratchet
     /**
      * @return 'regressed'|'improved'|'unchanged'|'new'|'unmeasured'
      */
-    private static function verdict(string $better, int|float|null $recorded, int|float|null $measured): string
+    private function verdict(string $better, int|float|null $recorded, int|float|null $measured): string
     {
         if ($measured === null) {
             return 'unmeasured';

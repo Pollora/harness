@@ -17,9 +17,9 @@ use RecursiveIteratorIterator;
  * the root. Every directory with one of those names becomes a layer
  * namespace, wherever it sits.
  */
-final class Layers
+final readonly class Layers
 {
-    private const LAYER_DIRECTORIES = [
+    private const array LAYER_DIRECTORIES = [
         'Domain' => 'domain',
         'Application' => 'application',
         'Infrastructure' => 'infrastructure',
@@ -28,7 +28,7 @@ final class Layers
     ];
 
     /** How deep below a PSR-4 root a layer directory may sit (src/Module/Domain is 2). */
-    private const MAX_DEPTH = 3;
+    private const int MAX_DEPTH = 3;
 
     /**
      * @param  list<string>  $roots  The PSR-4 root namespaces, without trailing backslash
@@ -36,9 +36,9 @@ final class Layers
      * @param  array<string, string>  $files  Every PHP file under the PSR-4 roots, by class name
      */
     public function __construct(
-        public readonly array $roots,
-        public readonly array $layers,
-        public readonly array $files,
+        public array $roots,
+        public array $layers,
+        public array $files,
     ) {}
 
     public static function discover(string $root): self

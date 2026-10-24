@@ -35,7 +35,7 @@ final class RatchetCommand implements Command
     public function run(Io $io): int
     {
         $config = HarnessConfig::load($io->cwd);
-        $measured = (new Collector($io->cwd))->collect($io->option('coverage'), $io->option('infection'), self::overrides($io));
+        $measured = (new Collector($io->cwd))->collect($io->option('coverage'), $io->option('infection'), $this->overrides($io));
         $rows = $config->ratchet->compare($measured);
 
         $io->line(sprintf('  %-32s %-10s %-10s %s', 'Metric', 'Recorded', 'Measured', 'Verdict'));
@@ -69,7 +69,7 @@ final class RatchetCommand implements Command
     /**
      * @return array<string, float>
      */
-    private static function overrides(Io $io): array
+    private function overrides(Io $io): array
     {
         $overrides = [];
 

@@ -23,7 +23,7 @@ final class Application
      */
     public function __construct(?array $commands = null)
     {
-        foreach ($commands ?? self::defaultCommands() as $command) {
+        foreach ($commands ?? $this->defaultCommands() as $command) {
             $this->commands[$command->name()] = $command;
         }
     }
@@ -50,8 +50,8 @@ final class Application
 
         try {
             return $command->run($io);
-        } catch (InvalidConfig $exception) {
-            $io->error($exception->getMessage());
+        } catch (InvalidConfig $invalidConfig) {
+            $io->error($invalidConfig->getMessage());
 
             return Command::FAILURE;
         }
@@ -88,7 +88,7 @@ final class Application
     /**
      * @return list<Command>
      */
-    private static function defaultCommands(): array
+    private function defaultCommands(): array
     {
         return [
             new InitCommand,

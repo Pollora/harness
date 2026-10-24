@@ -10,7 +10,7 @@ use Closure;
  * One gate of `pollora-qa check`: a command to run, or a check done in
  * process, with the rules it enforces.
  */
-final class Step
+final readonly class Step
 {
     /**
      * @param  list<string>  $rules  The rule identifiers this step enforces
@@ -18,11 +18,11 @@ final class Step
      * @param  list<string>  $requires  Files that must exist for the step to run (a tool binary, a config file)
      */
     public function __construct(
-        public readonly string $name,
-        public readonly array $rules,
-        public readonly array|Closure $action,
-        public readonly array $requires = [],
-        public readonly ?string $skipReason = null,
+        public string $name,
+        public array $rules,
+        public array|Closure $action,
+        public array $requires = [],
+        public ?string $skipReason = null,
     ) {}
 
     /**

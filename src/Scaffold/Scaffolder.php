@@ -18,9 +18,9 @@ use Pollora\Harness\Support\Paths;
  */
 final class Scaffolder
 {
-    private const PHPSTAN_INCLUDE = 'vendor/pollora/harness/presets/phpstan/base.neon';
+    private const string PHPSTAN_INCLUDE = 'vendor/pollora/harness/presets/phpstan/base.neon';
 
-    private const LARAVEL_INCLUDE = 'vendor/pollora/harness/presets/phpstan/laravel.neon';
+    private const string LARAVEL_INCLUDE = 'vendor/pollora/harness/presets/phpstan/laravel.neon';
 
     /** @var list<string> */
     private array $changes = [];
@@ -95,7 +95,7 @@ final class Scaffolder
         $this->write('phpstan.neon', strtr((string) file_get_contents(Paths::stub('phpstan.neon.stub')), [
             '{{includes}}' => implode("\n", array_map(static fn (string $include): string => "    - {$include}", $includes)),
             '{{level}}' => (string) $level,
-            '{{paths}}' => implode("\n", array_map(static fn (string $path): string => "        - {$path}", $paths ?: ['src'])),
+            '{{paths}}' => implode("\n", array_map(static fn (string $path): string => "        - {$path}", $paths === [] ? ['src'] : $paths)),
         ]));
     }
 

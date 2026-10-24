@@ -21,11 +21,11 @@ use Pollora\Harness\Profile;
  * test is named after its rule identifier, which the CI output and the agent
  * instructions both quote.
  */
-final class Architecture
+final readonly class Architecture
 {
     private function __construct(
-        private readonly Layers $layers,
-        private readonly Profile $profile,
+        private Layers $layers,
+        private Profile $profile,
     ) {}
 
     public static function for(string $root, ?Profile $profile = null): self

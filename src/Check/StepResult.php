@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Check;
 
-final class StepResult
+final readonly class StepResult
 {
-    public const PASSED = 'passed';
+    public const string PASSED = 'passed';
 
-    public const FAILED = 'failed';
+    public const string FAILED = 'failed';
 
-    public const SKIPPED = 'skipped';
+    public const string SKIPPED = 'skipped';
 
     public function __construct(
-        public readonly string $status,
-        public readonly string $detail = '',
-        public readonly float $seconds = 0.0,
+        public string $status,
+        public string $detail = '',
+        public float $seconds = 0.0,
     ) {}
 
     public static function passed(string $detail = ''): self

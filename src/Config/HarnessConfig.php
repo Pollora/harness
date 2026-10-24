@@ -14,12 +14,12 @@ use Pollora\Harness\Profile;
  * block or only report (its mode), and the ratchet: the best value reached so
  * far for each tracked metric.
  */
-final class HarnessConfig
+final readonly class HarnessConfig
 {
-    public const FILE = '.harness.json';
+    public const string FILE = '.harness.json';
 
     /** The files an agent may not edit and that CODEOWNERS should protect (QA-02). */
-    public const DEFAULT_PROTECTED = [
+    public const array DEFAULT_PROTECTED = [
         '.harness.json',
         'phpstan-baseline.neon',
         'api-surface.json',
@@ -31,12 +31,12 @@ final class HarnessConfig
      * @param  list<string>  $protected  Paths an agent may not edit (QA-02)
      */
     public function __construct(
-        public readonly Profile $profile,
-        public readonly Mode $mode = Mode::Observe,
-        public readonly array $downstream = [],
-        public readonly array $allowLaravel = [],
-        public readonly Ratchet $ratchet = new Ratchet,
-        public readonly array $protected = self::DEFAULT_PROTECTED,
+        public Profile $profile,
+        public Mode $mode = Mode::Observe,
+        public array $downstream = [],
+        public array $allowLaravel = [],
+        public Ratchet $ratchet = new Ratchet,
+        public array $protected = self::DEFAULT_PROTECTED,
     ) {}
 
     public static function exists(string $root): bool
@@ -62,8 +62,8 @@ final class HarnessConfig
 
         try {
             $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
-            throw InvalidConfig::unreadable($path, $exception->getMessage());
+        } catch (JsonException $jsonException) {
+            throw InvalidConfig::unreadable($path, $jsonException->getMessage());
         }
 
         if (! is_array($data)) {

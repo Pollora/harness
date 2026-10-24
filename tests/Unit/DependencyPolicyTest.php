@@ -45,3 +45,7 @@ it('reads only the runtime requirements of composer.json', function (): void {
         'pollora/framework' => '^13.0',
     ]);
 });
+
+it('does not count a Laravel tool run as a binary as a dependency on Laravel', function (): void {
+    expect(violations(['profile' => 'core'], ['laravel/pint' => '^1.22']))->toBe([]);
+});

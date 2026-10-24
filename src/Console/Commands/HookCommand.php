@@ -42,7 +42,7 @@ final class HookCommand implements Command
 
     public function usage(): string
     {
-        return '              pre-edit | post-edit | stop    The event, with the agent\'s JSON on stdin';
+        return "              pre-edit | post-edit | stop    The event, with the agent's JSON on stdin";
     }
 
     public function run(Io $io): int
@@ -65,7 +65,7 @@ final class HookCommand implements Command
      */
     private function preEdit(Io $io, array $payload): int
     {
-        $file = self::editedFile($io, $payload);
+        $file = $this->editedFile($io, $payload);
 
         if ($file === null) {
             return self::SUCCESS;
@@ -90,7 +90,7 @@ final class HookCommand implements Command
      */
     private function postEdit(Io $io, array $payload): int
     {
-        $file = self::editedFile($io, $payload);
+        $file = $this->editedFile($io, $payload);
 
         if ($file === null || ! str_ends_with($file, '.php') || ! is_file($io->cwd.'/'.$file)) {
             return self::SUCCESS;
@@ -98,14 +98,14 @@ final class HookCommand implements Command
 
         // Style is fixed, not reported: the agent should not spend a turn on spaces.
         if (is_file($io->cwd.'/vendor/bin/pint')) {
-            self::exec($io->cwd, ['vendor/bin/pint', '--quiet', '--config', Paths::preset('pint.json'), $file]);
+            $this->exec($io->cwd, ['vendor/bin/pint', '--quiet', '--config', Paths::preset('pint.json'), $file]);
         }
 
         if (! is_file($io->cwd.'/vendor/bin/phpstan')) {
             return self::SUCCESS;
         }
 
-        [$exitCode, $output] = self::exec($io->cwd, ['vendor/bin/phpstan', 'analyse', '--no-progress', '--error-format=raw', '--memory-limit=1G', $file]);
+        [$exitCode, $output] = $this->exec($io->cwd, ['vendor/bin/phpstan', 'analyse', '--no-progress', '--error-format=raw', '--memory-limit=1G', $file]);
 
         if ($exitCode === 0) {
             return self::SUCCESS;
@@ -127,13 +127,13 @@ final class HookCommand implements Command
             return self::SUCCESS;
         }
 
-        [$exitCode, $output] = self::exec($io->cwd, [PHP_BINARY, Paths::package().'/bin/pollora-qa', 'check', '--fast', '--enforce', '--no-ansi']);
+        [$exitCode, $output] = $this->exec($io->cwd, [PHP_BINARY, Paths::package().'/bin/pollora-qa', 'check', '--fast', '--enforce', '--no-ansi']);
 
         if ($exitCode === 0) {
             return self::SUCCESS;
         }
 
-        $io->error("The fast gates fail. Fix what they report before handing back:\n".self::tail($output, 60));
+        $io->error("The fast gates fail. Fix what they report before handing back:\n".$this->tail($output, 60));
 
         return self::BLOCK;
     }
@@ -143,7 +143,7 @@ final class HookCommand implements Command
      *
      * @param  array<mixed>  $payload
      */
-    private static function editedFile(Io $io, array $payload): ?string
+    private function editedFile(Io $io, array $payload): ?string
     {
         $input = is_array($payload['tool_input'] ?? null) ? $payload['tool_input'] : [];
         $path = $input['file_path'] ?? $input['path'] ?? null;
@@ -165,7 +165,7 @@ final class HookCommand implements Command
      * @param  list<string>  $command
      * @return array{int, string}
      */
-    private static function exec(string $cwd, array $command): array
+    private function exec(string $cwd, array $command): array
     {
         // @phpstan-ignore argument.type (PHP accepts ['redirect', 1] since 7.4; the stub does not)
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, $cwd);
@@ -180,7 +180,7 @@ final class HookCommand implements Command
         return [proc_close($process), $output];
     }
 
-    private static function tail(string $output, int $lines): string
+    private function tail(string $output, int $lines): string
     {
         return implode("\n", array_slice(explode("\n", rtrim($output)), -$lines));
     }

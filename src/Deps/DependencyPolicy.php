@@ -18,11 +18,14 @@ use Pollora\Harness\Violation;
  * pollora/framework; everything else sits below it and keeps the package
  * graph acyclic.
  */
-final class DependencyPolicy
+final readonly class DependencyPolicy
 {
-    private const FRAMEWORK = 'pollora/framework';
+    private const string FRAMEWORK = 'pollora/framework';
 
-    public function __construct(private readonly HarnessConfig $config) {}
+    /** Laravel tools that run as binaries: requiring them adds no Laravel code to the package. */
+    private const array TOOLS = ['laravel/pint'];
+
+    public function __construct(private HarnessConfig $config) {}
 
     /**
      * @param  array<string, string>  $require  The "require" section of composer.json
@@ -34,7 +37,7 @@ final class DependencyPolicy
         $profile = $this->config->profile;
 
         foreach (array_keys($require) as $package) {
-            if ($profile->mustStayLaravelFree() && self::isLaravel($package) && ! in_array($package, $this->config->allowLaravel, true)) {
+            if ($profile->mustStayLaravelFree() && $this->isLaravel($package) && ! in_array($package, $this->config->allowLaravel, true)) {
                 $violations[] = new Violation(
                     'ARCH-04',
                     "{$package} is a Laravel package: a core package must stay usable without Laravel.",
@@ -76,8 +79,12 @@ final class DependencyPolicy
         return array_filter($require, static fn (mixed $constraint, mixed $name): bool => is_string($name) && is_string($constraint), ARRAY_FILTER_USE_BOTH);
     }
 
-    private static function isLaravel(string $package): bool
+    private function isLaravel(string $package): bool
     {
+        if (in_array($package, self::TOOLS, true)) {
+            return false;
+        }
+
         return str_starts_with($package, 'illuminate/') || str_starts_with($package, 'laravel/');
     }
 }

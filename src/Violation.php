@@ -7,12 +7,12 @@ namespace Pollora\Harness;
 /**
  * A broken rule, with what to do about it.
  */
-final class Violation
+final readonly class Violation implements \Stringable
 {
     public function __construct(
-        public readonly string $rule,
-        public readonly string $message,
-        public readonly string $fix,
+        public string $rule,
+        public string $message,
+        public string $fix,
     ) {}
 
     public function __toString(): string

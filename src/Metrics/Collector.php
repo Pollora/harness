@@ -12,13 +12,13 @@ use DOMDocument;
  * an Infection JSON log. A metric whose source is missing is reported as null
  * (not measured) rather than as zero.
  */
-final class Collector
+final readonly class Collector
 {
-    private const CONFIG_FILES = ['phpstan.neon', 'phpstan.neon.dist', 'phpstan.dist.neon'];
+    private const array CONFIG_FILES = ['phpstan.neon', 'phpstan.neon.dist', 'phpstan.dist.neon'];
 
-    private const BASELINE_FILES = ['phpstan-baseline.neon', 'phpstan-baseline.php'];
+    private const array BASELINE_FILES = ['phpstan-baseline.neon', 'phpstan-baseline.php'];
 
-    public function __construct(private readonly string $root) {}
+    public function __construct(private string $root) {}
 
     /**
      * @param  array<string, int|float>  $overrides  Values passed on the command line (--metric name=value)
@@ -70,7 +70,7 @@ final class Collector
             }
 
             return str_ends_with($file, '.php')
-                ? self::countPhpBaseline($path)
+                ? $this->countPhpBaseline($path)
                 : self::countNeonBaseline((string) file_get_contents($path));
         }
 
@@ -130,7 +130,7 @@ final class Collector
         return is_int($msi) || is_float($msi) ? round((float) $msi, 2) : null;
     }
 
-    private static function countPhpBaseline(string $path): int
+    private function countPhpBaseline(string $path): int
     {
         $config = (static fn (): mixed => require $path)();
         $parameters = is_array($config) && is_array($config['parameters'] ?? null) ? $config['parameters'] : [];
