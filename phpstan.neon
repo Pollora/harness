@@ -1,0 +1,16 @@
+# The harness analyses itself at the level it asks of core packages.
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+
+parameters:
+    level: max
+    paths:
+        - src
+        - resources
+        - bin/pollora-qa
+        # Pest tests are closures bound to a generated TestCase: they prove
+        # themselves by running. The PHPUnit-style rule tests are analysed.
+        - tests/PHPStan
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: true

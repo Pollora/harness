@@ -1,0 +1,14 @@
+{
+    "name": "acme/project",
+    "description": "Fixture: a hexagonal package as the harness sees it",
+    "require": {
+        "php": "^8.3",
+        "illuminate/support": "^13.0",
+        "pollora/framework": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pollora\\Harness\\Tests\\Fixtures\\Project\\": ""
+        }
+    }
+}

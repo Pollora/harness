@@ -1,0 +1,6 @@
+includes:
+{{includes}}
+parameters:
+    level: {{level}}
+    paths:
+{{paths}}

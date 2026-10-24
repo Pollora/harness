@@ -1,0 +1,30 @@
+# Pollora harness — PHPStan preset shared by every profile.
+#
+# Include it from the repository's phpstan.neon, which keeps the level and the
+# paths (the level is tracked by the ratchet and only ever goes up):
+#
+#     includes:
+#         - vendor/pollora/harness/presets/phpstan/base.neon
+#
+# Paths below are relative to this file once the harness is installed in
+# vendor/pollora/harness.
+
+includes:
+    - ../../../../szepeviktor/phpstan-wordpress/extension.neon
+    - ../../../../phpstan/phpstan-deprecation-rules/rules.neon
+
+parameters:
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: true
+    checkFunctionNameCase: true
+    checkInternalClassCaseSensitivity: true
+
+services:
+    -
+        class: Pollora\Harness\PHPStan\WordPressFunctions
+
+    # ARCH-02: the domain calls no global WordPress function.
+    -
+        class: Pollora\Harness\PHPStan\Rules\NoWordPressCallInDomainRule
+        tags:
+            - phpstan.rules.rule

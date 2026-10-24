@@ -1,0 +1,6 @@
+# Pollora harness — Larastan, for the framework and integration profiles.
+#
+# Requires larastan/larastan in the repository's require-dev.
+
+includes:
+    - ../../../../larastan/larastan/extension.neon

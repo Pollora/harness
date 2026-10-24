@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tests:
+    name: Tests PHP ${{ matrix.php }} (${{ matrix.stability }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+        stability: [prefer-lowest, prefer-stable]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install Semgrep (its rules are tested too)
+        run: pipx install semgrep
+
+      - name: Install dependencies (${{ matrix.stability }})
+        run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
+
+      - name: Run the tests
+        run: vendor/bin/pest
+
+  dogfood:
+    name: The harness passes its own gates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: pcov
+
+      - run: pipx install semgrep
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Every gate, enforced
+        run: bin/pollora-qa check --enforce --coverage=.harness/coverage.xml
+
+      - name: AGENTS.md block matches the rule catalogue
+        run: |
+          bin/pollora-qa agents
+          git diff --exit-code AGENTS.md || (echo "::error::Run bin/pollora-qa agents and commit AGENTS.md"; exit 1)
+
+  apply-to-hook:
+    name: Applied to Pollora/hook (observe mode)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Pollora/hook
+          path: hook
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - run: pipx install semgrep
+
+      - name: Require the harness from this checkout
+        working-directory: hook
+        run: |
+          composer config repositories.harness '{"type": "path", "url": "../harness", "options": {"symlink": false, "versions": {"pollora/harness": "1.0.0"}}}'
+          composer config allow-plugins.pestphp/pest-plugin true
+          composer require --dev pollora/harness:1.0.0 --with-all-dependencies --no-interaction --no-progress
+
+      - name: Apply it
+        working-directory: hook
+        run: |
+          vendor/bin/pollora-qa init --profile=core
+          git status --short
+
+      - name: The preset loads in PHPStan and ARCH-02 runs
+        working-directory: hook
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G --debug src/Domain | tail -5
+
+      - name: Every gate runs and reports (observe mode never fails)
+        working-directory: hook
+        run: vendor/bin/pollora-qa check
+
+      - name: The report lists every step
+        working-directory: hook
+        run: |
+          jq -e '.steps | length == 9' .harness/report.json
+          jq -r '.steps[] | "\(.status)\t\(.name)"' .harness/report.json
+
+      - name: Agent hooks behave
+        working-directory: hook
+        run: |
+          set +e
+          echo '{"tool_input":{"file_path":"phpstan-baseline.neon"}}' | vendor/bin/pollora-qa hook pre-edit
+          test $? -eq 2 || { echo "::error::pre-edit should block a protected file"; exit 1; }
+          echo '{"tool_input":{"file_path":"src/Hook.php"}}' | vendor/bin/pollora-qa hook pre-edit
+          test $? -eq 0 || { echo "::error::pre-edit should let the code be edited"; exit 1; }
