@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pollora\Harness\PHPStan;
 
 use Composer\InstalledVersions;
+use ReflectionFunction;
 
 /**
  * The names of WordPress's global functions.
@@ -49,9 +50,14 @@ final class WordPressFunctions
         $names = self::FALLBACK;
         $stubs = $this->stubsPath ?? $this->locateStubs();
 
-        if ($stubs !== null && preg_match_all('/^\s*function\s+&?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', (string) file_get_contents($stubs), $matches) > 0) {
+        // Global functions sit at most four spaces in (inside `namespace {`);
+        // class methods sit deeper and must not count (WP_Query::reset()).
+        if ($stubs !== null && preg_match_all('/^ {0,4}function\s+&?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/m', (string) file_get_contents($stubs), $matches) > 0) {
             $names = $matches[1];
         }
+
+        // A PHP function is never WordPress's, whatever a stub declares.
+        $names = array_filter($names, static fn (string $name): bool => ! function_exists($name) || ! (new ReflectionFunction($name))->isInternal());
 
         return $this->names = array_fill_keys(array_map(strtolower(...), $names), true);
     }

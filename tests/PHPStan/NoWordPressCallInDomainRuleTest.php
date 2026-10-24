@@ -36,6 +36,8 @@ final class NoWordPressCallInDomainRuleTest extends RuleTestCase
         self::assertTrue($functions->contains('wp_insert_post'));
         self::assertTrue($functions->contains('Register_Post_Type'));
         self::assertFalse($functions->contains('array_map'));
+        // WP_Query::reset() is a method in the stubs, and reset() a PHP function.
+        self::assertFalse($functions->contains('reset'));
         self::assertGreaterThan(1000, count($functions->names()));
     }
 
