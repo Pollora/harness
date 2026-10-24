@@ -1,0 +1,100 @@
+# Pollora harness — Semgrep rules.
+#
+# Run from the repository root:
+#     semgrep scan --config vendor/pollora/harness/presets/semgrep --error
+#
+# A deliberate exception is written on the line it concerns, with the reason:
+#     // nosemgrep -- the closure is signed with an HMAC before it is stored
+# Each exception is visible in review; none is silent. (Semgrep prefixes the
+# rule ids with the config path, so the comment names no id.)
+
+rules:
+  - id: pollora.sec-03.wpdb-unprepared-query
+    languages: [php]
+    severity: ERROR
+    message: >-
+      [SEC-03] $METHOD() receives SQL that does not come from $DB->prepare().
+      Build the query with $DB->prepare() and placeholders (%s, %d, %i), or use
+      a Colt query.
+    metadata:
+      rule: SEC-03
+      cwe: "CWE-89: SQL Injection"
+    patterns:
+      - pattern: $DB->$METHOD($SQL, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(query|get_results|get_row|get_var|get_col)$
+      - metavariable-regex:
+          metavariable: $DB
+          regex: (?i)^\$?(this->)?wpdb$
+      - pattern-not: $DB->$METHOD($DB->prepare(...), ...)
+      # A literal with nothing interpolated cannot carry input.
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: ^(?!'[^']*'$)(?!"[^"$]*"$)
+      - pattern-not-inside: |
+          $SQL = $DB->prepare(...);
+          ...
+
+  - id: pollora.sec-04.blade-raw-output
+    languages: [generic]
+    severity: ERROR
+    paths:
+      include:
+        - "*.blade.php"
+    message: >-
+      [SEC-04] {!! !!} prints without escaping. Use {{ }}; when the HTML is
+      trusted (it went through wp_kses_post() or comes from a block render), keep
+      {!! !!} with a `nosemgrep` comment that says why.
+    metadata:
+      rule: SEC-04
+      cwe: "CWE-79: Cross-site Scripting"
+    pattern-regex: '\{!!'
+
+  - id: pollora.sec-05.unsafe-functions
+    languages: [php]
+    severity: ERROR
+    message: >-
+      [SEC-05] unserialize(), maybe_unserialize(), eval() and extract() run or
+      inject whatever the input holds. Use json_decode() and explicit
+      assignments.
+    metadata:
+      rule: SEC-05
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+    pattern-either:
+      - pattern: unserialize(...)
+      - pattern: maybe_unserialize(...)
+      - pattern: eval(...)
+      - pattern: extract(...)
+
+  - id: pollora.sec-01.rest-route-without-permission
+    languages: [generic]
+    severity: WARNING
+    paths:
+      include:
+        - "*.php"
+    message: >-
+      [SEC-01] This route declares no permission, and pollora/wp-rest then
+      registers it with __return_true: anyone can call it. Pass a Permission
+      (Pollora\WpRest\Permissions\IsLoggedIn, IsAdmin, Can) on the class or on
+      each method. A route that must stay public says so with a `nosemgrep`
+      comment and the reason.
+    metadata:
+      rule: SEC-01
+      cwe: "CWE-862: Missing Authorization"
+    pattern-regex: '#\[\s*(?:\\?Pollora\\Attributes\\)?WpRestRoute\s*\((?![^)]*permission)[^)]*\)\s*\]'
+
+  - id: pollora.conv-10.bare-exception
+    languages: [php]
+    severity: ERROR
+    message: >-
+      [CONV-10] Throw a named exception for this case (for example
+      ModuleLockedException::for($module)) with a message that says how to fix
+      it, not a bare \Exception.
+    metadata:
+      rule: CONV-10
+    pattern-either:
+      - pattern: throw new \Exception(...);
+      - pattern: throw new Exception(...);
+      - pattern: throw new \RuntimeException(...);
+      - pattern: throw new RuntimeException(...);

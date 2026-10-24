@@ -1,0 +1,8 @@
+{
+    "profile": "core",
+    "mode": "enforce",
+    "ratchet": {
+        "phpstan_level": "max",
+        "phpstan_baseline": 0
+    }
+}

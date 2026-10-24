@@ -1,0 +1,42 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Pollora harness command line.
+ *
+ * Installed in a repository, the harness is loaded by that repository's
+ * autoloader (vendor/pollora/harness/bin → vendor/autoload.php). Run from
+ * the harness checkout itself, it uses its own vendor directory.
+ */
+
+$autoloaders = [
+    __DIR__.'/../../../autoload.php',
+    __DIR__.'/../vendor/autoload.php',
+];
+
+foreach ($autoloaders as $autoloader) {
+    if (is_file($autoloader)) {
+        require $autoloader;
+        break;
+    }
+}
+
+if (! class_exists(Pollora\Harness\Console\Application::class)) {
+    // Without Composer (a fresh clone, an agent hook before install), the
+    // harness still loads its own classes: it has no runtime dependency.
+    spl_autoload_register(static function (string $class): void {
+        $prefix = 'Pollora\\Harness\\';
+
+        if (str_starts_with($class, $prefix)) {
+            $file = __DIR__.'/../src/'.str_replace('\\', '/', substr($class, strlen($prefix))).'.php';
+
+            if (is_file($file)) {
+                require $file;
+            }
+        }
+    });
+}
+
+exit((new Pollora\Harness\Console\Application)->run($argv, (string) getcwd()));

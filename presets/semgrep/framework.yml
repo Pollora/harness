@@ -1,0 +1,21 @@
+# Pollora harness — Semgrep rules for the framework profile only.
+#
+# src/ThirdParty is the known exception, tracked for extraction into its own
+# packages; this rule stops new references from spreading elsewhere.
+
+rules:
+  - id: pollora.arch-05.third-party-plugin-in-core
+    languages: [generic]
+    severity: WARNING
+    paths:
+      include:
+        - "src/"
+      exclude:
+        - "src/ThirdParty/"
+    message: >-
+      [ARCH-05] The framework core references a third-party plugin. Integrations
+      with WooCommerce, ACF, Meta Box or WP Rocket live in their own package
+      (pollora/woocommerce, pollora/metabox-bridge...).
+    metadata:
+      rule: ARCH-05
+    pattern-regex: '\b(WooCommerce\\|WC_[A-Z][A-Za-z_]+|wc_get_[a-z_]+\(|WP_Rocket|rocket_[a-z_]+\(|acf_[a-z_]+\(|get_field\(|rwmb_[a-z_]+\()'

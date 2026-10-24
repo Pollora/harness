@@ -1,0 +1,38 @@
+{
+    "preset": "laravel",
+    "rules": {
+        "declare_strict_types": true,
+        "ordered_imports": {
+            "sort_algorithm": "alpha"
+        },
+        "single_quote": true,
+        "array_syntax": {
+            "syntax": "short"
+        },
+        "no_unused_imports": true,
+        "ordered_class_elements": {
+            "order": [
+                "use_trait",
+                "case",
+                "constant_public",
+                "constant_protected",
+                "constant_private",
+                "property_public",
+                "property_protected",
+                "property_private",
+                "construct",
+                "method_public",
+                "method_protected",
+                "method_private"
+            ]
+        }
+    },
+    "exclude": [
+        "vendor",
+        "node_modules",
+        "storage",
+        "bootstrap/cache",
+        "public/wp",
+        "public/content/plugins"
+    ]
+}

@@ -1,0 +1,12 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to an undefined method Foo\:\:bar\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Foo.php
+
+		-
+			rawMessage: 'Access to an undefined property Baz::$qux.'
+			identifier: property.notFound
+			path: src/Baz.php

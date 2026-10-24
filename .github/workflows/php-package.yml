@@ -1,0 +1,202 @@
+# Pollora harness — reusable workflow for every PHP repository.
+#
+# A repository calls it from .github/workflows/harness.yml (written by
+# `pollora-qa init`). Profile, mode and downstream repositories come from the
+# repository's .harness.json, so this file never needs a per-repository input.
+#
+#   jobs:
+#     harness:
+#       uses: Pollora/harness/.github/workflows/php-package.yml@main
+#       permissions:
+#         contents: read
+#
+# In observe mode every job reports and none fails the build; in enforce mode
+# the quality, tests and secrets jobs block the merge (mark them required in
+# the branch protection), and so does downstream for core packages.
+
+name: Pollora harness
+
+on:
+  workflow_call:
+    inputs:
+      php-versions:
+        description: JSON list of the PHP versions the tests run on
+        type: string
+        default: '["8.3", "8.4"]'
+      quality-php:
+        description: PHP version of the quality job
+        type: string
+        default: '8.4'
+      framework-ref:
+        description: Branch of Pollora/framework the downstream job runs
+        type: string
+        default: develop
+
+permissions: {}
+
+jobs:
+  setup:
+    name: Read .harness.json
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      profile: ${{ steps.config.outputs.profile }}
+      mode: ${{ steps.config.outputs.mode }}
+      downstream: ${{ steps.config.outputs.downstream }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: config
+        name: Read profile, mode and downstream
+        run: |
+          if [ ! -f .harness.json ]; then
+            echo "::error file=.harness.json::No .harness.json. Run vendor/bin/pollora-qa init --profile=<profile>."
+            exit 1
+          fi
+          echo "profile=$(jq -r '.profile' .harness.json)" >> "$GITHUB_OUTPUT"
+          echo "mode=$(jq -r '.mode // "observe"' .harness.json)" >> "$GITHUB_OUTPUT"
+          echo "downstream=$(jq -r '(.downstream // []) | join(",")' .harness.json)" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.quality-php }}
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite
+          coverage: pcov
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Install Semgrep
+        run: pipx install semgrep
+
+      - name: Run every gate
+        run: vendor/bin/pollora-qa check --coverage=.harness/coverage.xml
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-report
+          path: .harness/
+          if-no-files-found: ignore
+
+  tests:
+    name: Tests PHP ${{ matrix.php }} (${{ matrix.stability }})
+    needs: setup
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJSON(inputs.php-versions) }}
+        stability: [prefer-lowest, prefer-stable]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      # prefer-lowest proves the lower bounds in composer.json are real.
+      - name: Install dependencies (${{ matrix.stability }})
+        run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
+
+      - name: Run the tests
+        run: vendor/bin/pest
+
+  secrets:
+    name: Secrets (SEC-08)
+    needs: setup
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan the history with gitleaks
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --redact --no-banner
+
+  downstream:
+    name: Downstream — framework with this change (QA-03)
+    needs: setup
+    if: contains(needs.setup.outputs.downstream, 'framework')
+    runs-on: ubuntu-latest
+    # Observed in phase 1 of the rollout: it reports what it would have caught.
+    continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: package
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Pollora/framework
+          ref: ${{ inputs.framework-ref }}
+          path: framework
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.quality-php }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      # The same technique as the framework's skeleton-install job: the
+      # package is served from this checkout under a version the framework's
+      # constraint accepts, the next patch of its latest tag.
+      - name: Point the framework at this checkout
+        id: alias
+        run: |
+          name=$(jq -r '.name' package/composer.json)
+          tag=$(git -C package describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          version=$(echo "${tag#v}" | awk -F. '{ printf "%d.%d.999", $1, $2 }')
+          constraint=$(jq -r --arg n "$name" '.require[$n] // empty' framework/composer.json)
+          if [ -z "$constraint" ]; then
+            echo "::notice::pollora/framework does not require $name: nothing to run downstream."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$name served as $version (latest tag $tag, framework requires $constraint)"
+          cd framework
+          composer config repositories.subject "{\"type\": \"path\", \"url\": \"../package\", \"options\": {\"symlink\": false, \"versions\": {\"$name\": \"$version\"}}}"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Install the framework with this change
+        if: steps.alias.outputs.skip != 'true'
+        working-directory: framework
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          composer update "${{ steps.alias.outputs.name }}" --with-all-dependencies --no-interaction --no-progress
+
+      - name: Run the framework's unit tests
+        if: steps.alias.outputs.skip != 'true'
+        working-directory: framework
+        run: composer test:unit

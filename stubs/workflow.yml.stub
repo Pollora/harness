@@ -1,0 +1,20 @@
+name: Harness
+
+on:
+  push:
+    branches: [{{branches}}]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  harness:
+    uses: Pollora/harness/.github/workflows/php-package.yml@main
+    permissions:
+      contents: read
+    with:
+      profile: {{profile}}
+      downstream: '{{downstream}}'

@@ -1,0 +1,9 @@
+# Pollora harness — the stricter half of the preset.
+#
+# Opt in once the repository's baseline is empty at its current level: the
+# strict rules and bleeding edge report more, so they are a step of the
+# ratchet rather than a default.
+
+includes:
+    - ../../../../phpstan/phpstan-strict-rules/rules.neon
+    - phar://phpstan.phar/conf/bleedingEdge.neon

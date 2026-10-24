@@ -1,0 +1,67 @@
+{
+    "name": "pollora/harness",
+    "description": "Quality, testing, security and performance harness shared by every Pollora repository",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "pollora",
+        "wordpress",
+        "laravel",
+        "quality",
+        "phpstan",
+        "pest",
+        "ci"
+    ],
+    "authors": [
+        {
+            "name": "Amphibee",
+            "email": "contact@amphibee.fr"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "ext-dom": "*",
+        "ext-json": "*",
+        "laravel/pint": "^1.22",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "rector/rector": "^2.0",
+        "shipmonk/composer-dependency-analyser": "^1.8",
+        "szepeviktor/phpstan-wordpress": "^2.0"
+    },
+    "require-dev": {
+        "pestphp/pest": "^3.8 || ^4.0"
+    },
+    "suggest": {
+        "pestphp/pest": "Runs the architecture presets (tests/Arch.php) and the test suites",
+        "larastan/larastan": "Required by the framework and integration profiles",
+        "driftingly/rector-laravel": "Adds the Laravel sets to the Rector preset"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pollora\\Harness\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Pollora\\Harness\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/pollora-qa"
+    ],
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "qa": "@php bin/pollora-qa check",
+        "qa:fast": "@php bin/pollora-qa check --fast"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
