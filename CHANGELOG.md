@@ -4,6 +4,10 @@
 
 ## [0.1.4] - 2026-10-27
 
+### Fixed
+
+- `pollora-qa init` run again on a repository keeps its `observed` gates and its `protected` paths: it rewrote `.harness.json` without them, so a repository in enforce mode saw its observed gates block
+
 ### Changed
 
 - The Code style gate (and the agent's post-edit fix) uses the repository's own `pint.json` when it requires `declare_strict_types`, instead of always applying the harness preset: a package keeps the style it chose, ARCH-09 still holds, and the gate no longer fails on formatting the preset disagrees with (spacing after `!`, class element order)
