@@ -98,7 +98,7 @@ final class HookCommand implements Command
 
         // Style is fixed, not reported: the agent should not spend a turn on spaces.
         if (is_file($io->cwd.'/vendor/bin/pint')) {
-            $this->exec($io->cwd, ['vendor/bin/pint', '--quiet', '--config', Paths::preset('pint.json'), $file]);
+            $this->exec($io->cwd, ['vendor/bin/pint', '--quiet', '--config', Paths::pintConfig($io->cwd), $file]);
         }
 
         if (! is_file($io->cwd.'/vendor/bin/phpstan')) {

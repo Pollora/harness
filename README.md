@@ -58,6 +58,8 @@ composer qa
 
 The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis`, `Rector`, `Tests and architecture`, `Dependency policy`, `Dependency analysis`, `Security patterns`, `Dependency audit`, `Public surface`, `Ratchet`. Shorten the list as each gate comes clean.
 
+The **Code style** gate checks with the repository's own `pint.json` when that file already requires `declare_strict_types` (ARCH-09), so a package keeps the style it chose; without one, or with one that does not require it, the harness preset applies.
+
 ## Commands
 
 | Command | Does |
