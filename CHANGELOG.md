@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-26
+
 ### Added
 
 - `pollora-qa surface`: records the public surface (attributes and their parameters, hooks fired, configuration keys, commands) in `api-surface.json` and compares the code with it; a change needs the `api-change` or `breaking` label (QA-04)
