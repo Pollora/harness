@@ -50,7 +50,32 @@ it('never overwrites a file the repository already has', function (): void {
 
 it('adds the preset to an existing PHPStan configuration and keeps the rest', function (): void {
     $root = packageRoot();
+    file_put_contents($root.'/composer.json', '{"require-dev": {"larastan/larastan": "^3.0"}}');
     file_put_contents($root.'/phpstan.neon', "includes:\n    - phpstan-baseline.neon\n\nparameters:\n    level: 6\n");
+
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'framework'])))->apply(6);
+
+    expect((string) file_get_contents($root.'/phpstan.neon'))->toBe(
+        "includes:\n    - vendor/pollora/harness/presets/phpstan/base.neon\n    - vendor/pollora/harness/presets/phpstan/laravel.neon\n    - phpstan-baseline.neon\n\nparameters:\n    level: 6\n",
+    );
+});
+
+it('leaves the Laravel preset out where Larastan is not required', function (): void {
+    $root = packageRoot();
+    file_put_contents($root.'/composer.json', '{"require-dev": {"pestphp/pest": "^3.0"}}');
+    file_put_contents($root.'/phpstan.neon', "includes:\n    - phpstan-baseline.neon\n");
+
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'integration'])))->apply(6);
+
+    expect((string) file_get_contents($root.'/phpstan.neon'))->toBe(
+        "includes:\n    - vendor/pollora/harness/presets/phpstan/base.neon\n    - phpstan-baseline.neon\n",
+    );
+});
+
+it('drops the extensions the presets include, so PHPStan does not load them twice', function (): void {
+    $root = packageRoot();
+    file_put_contents($root.'/composer.json', '{"require-dev": {"larastan/larastan": "^3.0"}}');
+    file_put_contents($root.'/phpstan.neon', "includes:\n    - phpstan-baseline.neon\n    - vendor/larastan/larastan/extension.neon\n    - vendor/szepeviktor/phpstan-wordpress/extension.neon\n\nparameters:\n    level: 6\n");
 
     (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'framework'])))->apply(6);
 

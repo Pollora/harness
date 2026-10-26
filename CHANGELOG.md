@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `pollora-qa init` includes the Laravel preset (Larastan) only where `larastan/larastan` is required: Larastan boots the application and made PHPStan fail on integration packages that do not require it
+- `pollora-qa init` removes the Larastan and WordPress-stubs extensions from an existing `phpstan.neon` when it adds the presets that include them: PHPStan refuses a file included twice
+
 ## [0.1.1] - 2026-10-26
 
 ### Fixed

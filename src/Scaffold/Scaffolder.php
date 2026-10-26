@@ -57,7 +57,7 @@ final class Scaffolder
     {
         $includes = [self::PHPSTAN_INCLUDE];
 
-        if (in_array($this->config->profile, [Profile::Framework, Profile::Integration], true)) {
+        if (in_array($this->config->profile, [Profile::Framework, Profile::Integration], true) && $this->requiresLarastan()) {
             $includes[] = self::LARAVEL_INCLUDE;
         }
 
@@ -74,6 +74,9 @@ final class Scaffolder
             if ($missing === []) {
                 return;
             }
+
+            // The base preset already includes the WordPress stubs, and the Laravel preset Larastan: twice is an error
+            $neon = (string) preg_replace('#^[ \t]*-[ \t]*vendor/(szepeviktor/phpstan-wordpress|larastan/larastan)/extension\.neon[ \t]*\r?\n#m', '', $neon);
 
             $lines = implode('', array_map(static fn (string $include): string => "    - {$include}\n", $missing));
             $neon = preg_match('/^includes:\s*$/m', $neon) === 1
@@ -97,6 +100,34 @@ final class Scaffolder
             '{{level}}' => (string) $level,
             '{{paths}}' => implode("\n", array_map(static fn (string $path): string => "        - {$path}", $paths === [] ? ['src'] : $paths)),
         ]));
+    }
+
+    /**
+     * Larastan boots the application: the Laravel preset is only usable where the repository requires it.
+     */
+    private function requiresLarastan(): bool
+    {
+        $path = $this->root.'/composer.json';
+
+        if (! is_file($path)) {
+            return false;
+        }
+
+        $composer = json_decode((string) file_get_contents($path), true);
+
+        if (! is_array($composer)) {
+            return false;
+        }
+
+        foreach (['require', 'require-dev'] as $section) {
+            $packages = $composer[$section] ?? null;
+
+            if (is_array($packages) && array_key_exists('larastan/larastan', $packages)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function rector(): void
