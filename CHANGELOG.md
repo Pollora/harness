@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-26
+
 ### Fixed
 
 - `pollora-qa init` includes the Laravel preset (Larastan) only where `larastan/larastan` is required: Larastan boots the application and made PHPStan fail on integration packages that do not require it
