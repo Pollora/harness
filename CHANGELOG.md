@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `observed` in `.harness.json`: gates that are reported but never block, in `enforce` mode too. A repository can enforce the gates it passes (static analysis, tests and architecture, audit, public surface, ratchet) while the others (style, Rector, dependency analysis) are still being settled
+
 ### Changed
 
 - The README follows the Pollora presentation (banner, badges, "Part of Pollora" note, contributing and license footer); the license holder is RuBee group, as in every Pollora repository

@@ -29,6 +29,7 @@ final readonly class HarnessConfig
      * @param  list<string>  $downstream  Repositories run against this one by the downstream job
      * @param  list<string>  $allowLaravel  Laravel packages a core package may still require (ARCH-04 exceptions)
      * @param  list<string>  $protected  Paths an agent may not edit (QA-02)
+     * @param  list<string>  $observed  Gates (by name, e.g. "Rector") that are reported but never block, in enforce mode too
      */
     public function __construct(
         public Profile $profile,
@@ -37,6 +38,7 @@ final readonly class HarnessConfig
         public array $allowLaravel = [],
         public Ratchet $ratchet = new Ratchet,
         public array $protected = self::DEFAULT_PROTECTED,
+        public array $observed = [],
     ) {}
 
     public static function exists(string $root): bool
@@ -99,12 +101,13 @@ final readonly class HarnessConfig
             allowLaravel: self::stringList($data['allow_laravel'] ?? []),
             ratchet: Ratchet::fromArray(is_array($data['ratchet'] ?? null) ? $data['ratchet'] : []),
             protected: array_key_exists('protected', $data) ? self::stringList($data['protected']) : self::DEFAULT_PROTECTED,
+            observed: self::stringList($data['observed'] ?? []),
         );
     }
 
     public function withRatchet(Ratchet $ratchet): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed);
     }
 
     /**
@@ -118,6 +121,7 @@ final readonly class HarnessConfig
             'downstream' => $this->downstream,
             'allow_laravel' => $this->allowLaravel,
             'protected' => $this->protected === self::DEFAULT_PROTECTED ? null : $this->protected,
+            'observed' => $this->observed,
             'ratchet' => $this->ratchet->toArray(),
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }

@@ -44,6 +44,20 @@ composer qa
 | `template` | Themes, plugin and module templates, the skeleton | |
 | `project` | Client projects built on Pollora | The security rules apply to the project's code |
 
+## Observe, enforce, and gates left observed
+
+`.harness.json` sets the `mode`. In `observe` every gate runs and reports, none blocks. In `enforce` a failed gate fails the check. A repository that is ready for most gates but not all lists the others in `observed`: they are reported in the job summary and never block, in `enforce` mode too.
+
+```json
+{
+    "profile": "core",
+    "mode": "enforce",
+    "observed": ["Code style", "Rector", "Dependency analysis"]
+}
+```
+
+The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis`, `Rector`, `Tests and architecture`, `Dependency policy`, `Dependency analysis`, `Security patterns`, `Dependency audit`, `Public surface`, `Ratchet`. Shorten the list as each gate comes clean.
+
 ## Commands
 
 | Command | Does |

@@ -46,3 +46,11 @@ it('round-trips through .harness.json', function (): void {
 it('tells how to create a missing file', function (): void {
     HarnessConfig::load(harnessTempDir());
 })->throws(InvalidConfig::class, 'pollora-qa init');
+
+it('keeps the gates a repository only observes, and writes them back', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'mode' => 'enforce', 'observed' => ['Rector', 'Code style']]);
+
+    expect($config->observed)->toBe(['Rector', 'Code style'])
+        ->and($config->toArray()['observed'])->toBe(['Rector', 'Code style'])
+        ->and(HarnessConfig::fromArray(['profile' => 'core'])->toArray())->not->toHaveKey('observed');
+});
