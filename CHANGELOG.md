@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-26
+
 ### Added
 
 - `observed` in `.harness.json`: gates that are reported but never block, in `enforce` mode too. A repository can enforce the gates it passes (static analysis, tests and architecture, audit, public surface, ratchet) while the others (style, Rector, dependency analysis) are still being settled
