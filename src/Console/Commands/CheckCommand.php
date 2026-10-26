@@ -54,7 +54,7 @@ final class CheckCommand implements Command
 
         $io->line(sprintf('Pollora harness · profile %s · %s mode · %s gates', $config->profile->value, $mode->value, $fast ? 'fast' : 'full'));
 
-        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps));
+        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), $config->observed);
         $report->print($io);
         $report->writeJson($io->cwd.'/'.($io->option('report') ?? '.harness/report.json'));
 
@@ -64,6 +64,6 @@ final class CheckCommand implements Command
             file_put_contents($summary, $report->markdown(), FILE_APPEND);
         }
 
-        return $report->hasFailures() && $mode->blocks() ? self::FAILURE : self::SUCCESS;
+        return $report->hasBlockingFailures() ? self::FAILURE : self::SUCCESS;
     }
 }

@@ -17,13 +17,33 @@ final readonly class Report
 {
     /**
      * @param  list<array{step: Step, result: StepResult}>  $results
+     * @param  list<string>  $observed  Gates reported but never blocking, whatever the mode
      */
     public function __construct(
         private Profile $profile,
         private Mode $mode,
         private bool $fast,
         private array $results,
+        private array $observed = [],
     ) {}
+
+    /**
+     * Whether a failure stops the merge: the mode blocks and the failed gate is not one the repository only observes.
+     */
+    public function hasBlockingFailures(): bool
+    {
+        if (! $this->mode->blocks()) {
+            return false;
+        }
+
+        foreach ($this->results as $entry) {
+            if ($entry['result']->isFailed() && ! in_array($entry['step']->name, $this->observed, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public function hasFailures(): bool
     {
@@ -64,9 +84,9 @@ final readonly class Report
             return;
         }
 
-        $io->line($this->mode->blocks()
+        $io->line($this->hasBlockingFailures()
             ? $io->failure('Some gates failed. Fix them before merging.')
-            : $io->warning('Some gates failed. Observe mode: reported, not blocking.'));
+            : $io->warning('Some gates failed. Reported, not blocking (observe mode, or gates listed as observed).'));
     }
 
     /**
@@ -110,7 +130,7 @@ final readonly class Report
         foreach ($this->results as ['step' => $step, 'result' => $result]) {
             $lines[] = sprintf('| %s | %s | %s |', $step->name, implode(', ', $step->rules), match ($result->status) {
                 StepResult::PASSED => '✅ passed',
-                StepResult::FAILED => $this->mode->blocks() ? '❌ failed' : '⚠️ failed (observed)',
+                StepResult::FAILED => $this->mode->blocks() && ! in_array($step->name, $this->observed, true) ? '❌ failed' : '⚠️ failed (observed)',
                 default => '➖ skipped: '.str_replace('|', '\|', $result->detail),
             });
         }
