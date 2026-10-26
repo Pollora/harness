@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-26
+
 ### Fixed
 
 - The `contract` job warns instead of failing when `roave/backward-compatibility-check` cannot reflect a class whose parent no autoloader maps (`WP_CLI_Command`, `Cron_Event_Command`): the API is then not compared
