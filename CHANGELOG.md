@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `pollora-qa init` writes a workflow that passes no `with:` inputs: the reusable workflow reads `.harness.json` and declares none, so GitHub refused to start the job
+- `pollora-qa init` drops an existing include of the PHPStan WordPress extension when it adds the preset, which includes it: PHPStan refused to start with the file included twice
+
 ## [0.1.0] - 2026-10-26
 
 ### Added

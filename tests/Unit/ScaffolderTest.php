@@ -58,6 +58,26 @@ it('adds the preset to an existing PHPStan configuration and keeps the rest', fu
     );
 });
 
+it('does not include the WordPress extension twice', function (): void {
+    $root = packageRoot();
+    file_put_contents($root.'/phpstan.neon', "includes:\n    - vendor/szepeviktor/phpstan-wordpress/extension.neon\n\nparameters:\n    level: 5\n");
+
+    $changes = (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core'])))->apply(5);
+
+    expect($changes)->toContain('dropped the WordPress extension include of phpstan.neon, which the preset includes')
+        ->and((string) file_get_contents($root.'/phpstan.neon'))->toBe(
+            "includes:\n    - vendor/pollora/harness/presets/phpstan/base.neon\nparameters:\n    level: 5\n",
+        );
+});
+
+it('writes a workflow that passes no input the reusable workflow does not declare', function (): void {
+    $root = packageRoot();
+
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core', 'downstream' => ['framework']])))->apply(5);
+
+    expect((string) file_get_contents($root.'/.github/workflows/harness.yml'))->not->toContain('with:');
+});
+
 it('can run again without changing anything it already did', function (): void {
     $root = packageRoot();
     $config = HarnessConfig::fromArray(['profile' => 'core']);

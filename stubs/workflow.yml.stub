@@ -17,6 +17,3 @@ jobs:
     uses: Pollora/harness/.github/workflows/php-package.yml@main
     permissions:
       contents: read
-    with:
-      profile: {{profile}}
-      downstream: '{{downstream}}'

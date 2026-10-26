@@ -75,6 +75,15 @@ final class Scaffolder
                 return;
             }
 
+            // The preset includes the WordPress extension: a second include makes PHPStan refuse to start
+            if (in_array(self::PHPSTAN_INCLUDE, $missing, true)) {
+                $neon = (string) preg_replace('~^[ \t]*-[ \t]*\S*szepeviktor/phpstan-wordpress/extension\.neon[ \t]*\n~m', '', $neon, -1, $dropped);
+
+                if ($dropped > 0) {
+                    $this->changes[] = "dropped the WordPress extension include of {$file}, which the preset includes";
+                }
+            }
+
             $lines = implode('', array_map(static fn (string $include): string => "    - {$include}\n", $missing));
             $neon = preg_match('/^includes:\s*$/m', $neon) === 1
                 ? (string) preg_replace('/^includes:\s*$/m', "includes:\n".rtrim($lines, "\n"), $neon, 1)
