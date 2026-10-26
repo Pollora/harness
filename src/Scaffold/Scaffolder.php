@@ -112,8 +112,6 @@ final class Scaffolder
 
         $this->fromStub('.github/workflows/harness.yml', 'workflow.yml.stub', [
             '{{branches}}' => $branches,
-            '{{profile}}' => $this->config->profile->value,
-            '{{downstream}}' => implode(',', $this->config->downstream),
         ]);
     }
 
