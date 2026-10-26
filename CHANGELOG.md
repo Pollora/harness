@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- The `contract` job warns instead of failing when `roave/backward-compatibility-check` cannot reflect a class whose parent no autoloader maps (`WP_CLI_Command`, `Cron_Event_Command`): the API is then not compared
 - The workflow written by `pollora-qa init` no longer passes `profile` and `downstream` inputs, which the reusable workflow does not declare: GitHub refused to start it (`startup_failure`). The profile and the downstream repositories come from `.harness.json`
 
 ## [0.1.0] - 2026-10-26
