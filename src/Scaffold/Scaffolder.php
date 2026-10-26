@@ -115,8 +115,19 @@ final class Scaffolder
 
         $composer = json_decode((string) file_get_contents($path), true);
 
-        return is_array($composer)
-            && (isset($composer['require']['larastan/larastan']) || isset($composer['require-dev']['larastan/larastan']));
+        if (! is_array($composer)) {
+            return false;
+        }
+
+        foreach (['require', 'require-dev'] as $section) {
+            $packages = $composer[$section] ?? null;
+
+            if (is_array($packages) && array_key_exists('larastan/larastan', $packages)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function rector(): void
