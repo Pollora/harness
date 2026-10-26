@@ -1,6 +1,19 @@
-# Pollora harness
+<p align="center">
+  <a href="https://pollora.dev">
+    <img src="https://raw.githubusercontent.com/Pollora/.github/main/brand/banners/harness.png" width="100%" alt="Pollora Harness: one set of quality gates for every Pollora repository">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://packagist.org/packages/pollora/harness"><img src="https://img.shields.io/packagist/v/pollora/harness" alt="Latest version"></a>
+  <a href="https://packagist.org/packages/pollora/harness"><img src="https://img.shields.io/packagist/dt/pollora/harness" alt="Total downloads"></a>
+  <a href="https://github.com/Pollora/harness/actions/workflows/ci.yml"><img src="https://github.com/Pollora/harness/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Pollora/harness" alt="License"></a>
+</p>
 
 One set of rules, checked by machines, for every Pollora repository: code quality, tests, security, performance and the public contract. The same gates run on a developer's machine, in a coding agent's hooks and in CI, so a change that breaks something is stopped before it is merged.
+
+> Part of [Pollora](https://pollora.dev), the Laravel framework for WordPress. It is a development tool: install it with `--dev`, in a Pollora package, a plugin or a project. Nothing of it ships to the sites that run your code.
 
 The harness follows five principles:
 
@@ -10,7 +23,7 @@ The harness follows five principles:
 4. **The public contract is sacred.** Attributes, hooks fired, configuration keys and commands only break in a major version.
 5. **Developer simplicity stays the compass.** The harness constrains the framework's code, never how a Pollora project is written.
 
-## Install
+## Installation
 
 ```bash
 composer require --dev pollora/harness
@@ -18,7 +31,7 @@ vendor/bin/pollora-qa init --profile=core
 composer qa
 ```
 
-`init` never overwrites a file. It writes `.harness.json`, adds the harness preset to `phpstan.neon`, and creates what is missing: `tests/Arch.php`, `rector.php`, `.github/workflows/harness.yml`, `.claude/settings.json`, `AGENTS.md`, and the `qa` and `qa:fast` Composer scripts. Review the diff, commit, and the repository is in **observe mode**: every gate runs and reports, none blocks. Switch `.harness.json` to `"mode": "enforce"` once the reports are clean.
+`init` never overwrites a file. It writes `.harness.json`, adds the harness preset to `phpstan.neon`, and creates what is missing: `tests/Arch.php`, `rector.php`, `.github/workflows/harness.yml`, `.claude/settings.json`, `AGENTS.md`, and the `qa` and `qa:fast` Composer scripts. Review the diff, pin the workflow call to a release tag (`php-package.yml@v0.1.2`; `init` writes `@main`), commit, and the repository is in **observe mode**: every gate runs and reports, none blocks. Switch `.harness.json` to `"mode": "enforce"` once the reports are clean.
 
 ## Profiles
 
@@ -76,3 +89,11 @@ An exception to a rule is written on the line it concerns, with its reason: `// 
 ## Status
 
 This is phase 1 of the rollout: the harness measures every repository without blocking it. Integration tests against a real WordPress, adapter contract tests, mutation testing and performance budgets follow in the next phases.
+
+## Contributing
+
+Contributions are welcome: see the [contributing guide](https://github.com/Pollora/.github/blob/main/CONTRIBUTING.md). Report security issues privately, as described in the [security policy](https://github.com/Pollora/.github/blob/main/SECURITY.md).
+
+## License
+
+Pollora Harness is open-source software licensed under the [MIT license](LICENSE). © [RuBee group](https://rubee.group)

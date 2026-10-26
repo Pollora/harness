@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The README follows the Pollora presentation (banner, badges, "Part of Pollora" note, contributing and license footer); the license holder is RuBee group, as in every Pollora repository
+
 ## [0.1.2] - 2026-10-26
 
 ### Fixed
