@@ -28,7 +28,7 @@ it('applies the harness to a bare package', function (): void {
         ->and((string) file_get_contents($root.'/phpstan.neon'))->toContain('vendor/pollora/harness/presets/phpstan/base.neon', 'level: 5', '- src')
         ->and((string) file_get_contents($root.'/rector.php'))->toContain('Profile::Core')
         ->and((string) file_get_contents($root.'/.github/workflows/harness.yml'))->toContain('Pollora/harness/.github/workflows/php-package.yml')
-            ->not->toContain('with:')
+        ->not->toContain('with:')
         ->and(json_decode((string) file_get_contents($root.'/.claude/settings.json'), true))->toHaveKeys(['hooks.PreToolUse', 'hooks.PostToolUse', 'hooks.Stop'])
         ->and(json_decode((string) file_get_contents($root.'/composer.json'), true)['scripts'])->toBe([
             'test' => 'pest',
