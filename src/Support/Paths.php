@@ -6,6 +6,26 @@ namespace Pollora\Harness\Support;
 
 final class Paths
 {
+    /**
+     * The Pint configuration to check a repository with: its own pint.json when that file already requires
+     * declare(strict_types=1) (ARCH-09), so the repository keeps the style it chose; the harness preset otherwise.
+     */
+    public static function pintConfig(string $cwd): string
+    {
+        $path = rtrim($cwd, '/').'/pint.json';
+
+        if (is_file($path)) {
+            $config = json_decode((string) file_get_contents($path), true);
+            $rules = is_array($config) ? ($config['rules'] ?? null) : null;
+
+            if (is_array($rules) && ($rules['declare_strict_types'] ?? false) === true) {
+                return $path;
+            }
+        }
+
+        return self::preset('pint.json');
+    }
+
     /** The harness package directory, wherever Composer installed it. */
     public static function package(): string
     {

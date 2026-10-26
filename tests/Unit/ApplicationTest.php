@@ -93,3 +93,22 @@ it('records the public surface, then passes while it is unchanged and asks for a
         ->and($brokenOutput)->toContain('- hook:pollora/orders/placed', '+ hook:pollora/orders/shipped', 'label the pull request "breaking"')
         ->and($labelled)->toBe(0);
 });
+
+it('keeps the observed gates and the protected paths when init runs again', function (): void {
+    $cwd = harnessTempDir();
+    file_put_contents($cwd.'/composer.json', '{"name": "pollora/example", "require": {"php": "^8.3"}}');
+    file_put_contents($cwd.'/.harness.json', json_encode([
+        'profile' => 'core',
+        'mode' => 'enforce',
+        'observed' => ['Rector'],
+        'protected' => ['api-surface.json'],
+    ]));
+
+    [$code] = polloraQa($cwd, 'init');
+    $config = json_decode((string) file_get_contents($cwd.'/.harness.json'), true);
+
+    expect($code)->toBe(0)
+        ->and($config['mode'])->toBe('enforce')
+        ->and($config['observed'])->toBe(['Rector'])
+        ->and($config['protected'])->toBe(['api-surface.json']);
+});

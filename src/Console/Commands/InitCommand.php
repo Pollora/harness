@@ -66,6 +66,8 @@ final class InitCommand implements Command
                 'phpstan_level' => $level ?? self::DEFAULT_LEVEL,
                 'phpstan_baseline' => $collector->phpstanBaselineEntries(),
             ]),
+            protected: $existing->protected ?? HarnessConfig::DEFAULT_PROTECTED,
+            observed: $existing->observed ?? [],
         );
 
         $changes = (new Scaffolder($io->cwd, $config))->apply($level ?? self::DEFAULT_LEVEL);

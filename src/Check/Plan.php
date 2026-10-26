@@ -85,7 +85,7 @@ final readonly class Plan
 
     private function style(bool $dirty): Step
     {
-        $command = ['vendor/bin/pint', '--test', '--config', Paths::preset('pint.json')];
+        $command = ['vendor/bin/pint', '--test', '--config', Paths::pintConfig($this->cwd)];
 
         return new Step('Code style', ['ARCH-09'], $dirty ? [...$command, '--dirty'] : $command, requires: ['vendor/bin/pint']);
     }
