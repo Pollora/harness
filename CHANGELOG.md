@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The workflow written by `pollora-qa init` no longer passes `profile` and `downstream` inputs, which the reusable workflow does not declare: GitHub refused to start it (`startup_failure`). The profile and the downstream repositories come from `.harness.json`
+
 ## [0.1.0] - 2026-10-26
 
 ### Added
