@@ -43,9 +43,38 @@ final class Preset
                 privatization: true,
                 earlyReturn: true,
             )
-            ->withPhpSets();
+            ->withPhpSets()
+            ->withSkip(self::skips());
 
         return self::withLaravelSets($builder, $profile);
+    }
+
+    /**
+     * Rules the harness never applies, each with its reason.
+     *
+     * @var list<class-string>
+     */
+    public const array SKIPPED = [
+        // Pint writes `! $x`, these rules write `!$x` and double quotes: the two tools would undo each other
+        'Rector\\CodeQuality\\Rector\\BooleanNot\\NegatedAndsToPositiveOrsRector',
+        'Rector\\CodingStyle\\Rector\\String_\\SimplifyQuoteEscapeRector',
+        // They change the public API of classes that applications extend (ARCH-09): a readonly class cannot be extended by a
+        // mutable one, a narrower return type or a removed parameter breaks an override, a static method turned into an instance one breaks its callers
+        'Rector\\Php82\\Rector\\Class_\\ReadOnlyClassRector',
+        'Rector\\DeadCode\\Rector\\ClassMethod\\RemoveUnusedPublicMethodParameterRector',
+        'Rector\\TypeDeclaration\\Rector\\ClassMethod\\NarrowObjectReturnTypeRector',
+        'Rector\\TypeDeclaration\\Rector\\ClassMethod\\ReturnNeverTypeRector',
+        'Rector\\CodeQuality\\Rector\\ClassMethod\\LocallyCalledStaticMethodToNonStaticRector',
+    ];
+
+    /**
+     * The skipped rules the installed Rector has: another version may not ship them.
+     *
+     * @return list<class-string>
+     */
+    private static function skips(): array
+    {
+        return array_values(array_filter(self::SKIPPED, static fn (string $rule): bool => class_exists($rule)));
     }
 
     /**

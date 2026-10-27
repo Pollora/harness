@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The Rector preset skips the rules that contradict Pint (`!$x` against `! $x`, double quotes) and those that change the public API of classes applications extend (readonly classes, narrower return types, removed parameters, `never`, static methods made non-static), so a modernisation never breaks an override or a caller
+
 ## [0.1.6] - 2026-10-27
 
 ### Changed
