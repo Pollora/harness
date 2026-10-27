@@ -81,7 +81,7 @@ final class Preset
      */
     private static function skips(): array
     {
-        return array_values(array_filter(self::SKIPPED, static fn (string $rule): bool => class_exists($rule)));
+        return array_values(array_filter(self::SKIPPED, class_exists(...)));
     }
 
     /**
