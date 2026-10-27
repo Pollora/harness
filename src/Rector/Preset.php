@@ -5,8 +5,15 @@ declare(strict_types=1);
 namespace Pollora\Harness\Rector;
 
 use Pollora\Harness\Profile;
+use Rector\CodeQuality\Rector\BooleanNot\NegatedAndsToPositiveOrsRector;
+use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRector;
+use Rector\CodingStyle\Rector\String_\SimplifyQuoteEscapeRector;
 use Rector\Config\RectorConfig;
 use Rector\Configuration\RectorConfigBuilder;
+use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
+use Rector\Php82\Rector\Class_\ReadOnlyClassRector;
+use Rector\TypeDeclaration\Rector\ClassMethod\NarrowObjectReturnTypeRector;
+use Rector\TypeDeclaration\Rector\ClassMethod\ReturnNeverTypeRector;
 
 /**
  * The Rector configuration shared by every repository, built on the one the
@@ -56,15 +63,15 @@ final class Preset
      */
     public const array SKIPPED = [
         // Pint writes `! $x`, these rules write `!$x` and double quotes: the two tools would undo each other
-        'Rector\\CodeQuality\\Rector\\BooleanNot\\NegatedAndsToPositiveOrsRector',
-        'Rector\\CodingStyle\\Rector\\String_\\SimplifyQuoteEscapeRector',
+        NegatedAndsToPositiveOrsRector::class,
+        SimplifyQuoteEscapeRector::class,
         // They change the public API of classes that applications extend (ARCH-09): a readonly class cannot be extended by a
         // mutable one, a narrower return type or a removed parameter breaks an override, a static method turned into an instance one breaks its callers
-        'Rector\\Php82\\Rector\\Class_\\ReadOnlyClassRector',
-        'Rector\\DeadCode\\Rector\\ClassMethod\\RemoveUnusedPublicMethodParameterRector',
-        'Rector\\TypeDeclaration\\Rector\\ClassMethod\\NarrowObjectReturnTypeRector',
-        'Rector\\TypeDeclaration\\Rector\\ClassMethod\\ReturnNeverTypeRector',
-        'Rector\\CodeQuality\\Rector\\ClassMethod\\LocallyCalledStaticMethodToNonStaticRector',
+        ReadOnlyClassRector::class,
+        RemoveUnusedPublicMethodParameterRector::class,
+        NarrowObjectReturnTypeRector::class,
+        ReturnNeverTypeRector::class,
+        LocallyCalledStaticMethodToNonStaticRector::class,
     ];
 
     /**
