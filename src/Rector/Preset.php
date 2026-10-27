@@ -5,8 +5,18 @@ declare(strict_types=1);
 namespace Pollora\Harness\Rector;
 
 use Pollora\Harness\Profile;
+use Rector\CodeQuality\Rector\BooleanNot\NegatedAndsToPositiveOrsRector;
+use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRector;
+use Rector\CodingStyle\Rector\String_\SimplifyQuoteEscapeRector;
 use Rector\Config\RectorConfig;
 use Rector\Configuration\RectorConfigBuilder;
+use Rector\DeadCode\Rector\Cast\RecastingRemovalRector;
+use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
+use Rector\Php80\Rector\Ternary\GetDebugTypeRector;
+use Rector\Php81\Rector\Array_\ArrayToFirstClassCallableRector;
+use Rector\Php82\Rector\Class_\ReadOnlyClassRector;
+use Rector\TypeDeclaration\Rector\ClassMethod\NarrowObjectReturnTypeRector;
+use Rector\TypeDeclaration\Rector\ClassMethod\ReturnNeverTypeRector;
 
 /**
  * The Rector configuration shared by every repository, built on the one the
@@ -22,6 +32,30 @@ use Rector\Configuration\RectorConfigBuilder;
  */
 final class Preset
 {
+    /**
+     * Rules the harness never applies, each with its reason.
+     *
+     * @var list<class-string>
+     */
+    public const array SKIPPED = [
+        // They look equivalent and are not. A WordPress hook callback given as [class, method] is found again by has_action() and
+        // remove_action(), a Closure is a new object each time. get_debug_type() of a class name string answers "string". A cast on a value
+        // WordPress or a driver returns guards against stubs that are wrong: Throwable::getCode() is a string for a PDOException
+        ArrayToFirstClassCallableRector::class,
+        GetDebugTypeRector::class,
+        RecastingRemovalRector::class,
+        // Pint writes `! $x`, these rules write `!$x` and double quotes: the two tools would undo each other
+        NegatedAndsToPositiveOrsRector::class,
+        SimplifyQuoteEscapeRector::class,
+        // They change the public API of classes that applications extend (ARCH-09): a readonly class cannot be extended by a
+        // mutable one, a narrower return type or a removed parameter breaks an override, a static method turned into an instance one breaks its callers
+        ReadOnlyClassRector::class,
+        RemoveUnusedPublicMethodParameterRector::class,
+        NarrowObjectReturnTypeRector::class,
+        ReturnNeverTypeRector::class,
+        LocallyCalledStaticMethodToNonStaticRector::class,
+    ];
+
     /**
      * @param  list<string>  $paths  Relative to $root; src and tests when they exist
      */
@@ -43,9 +77,20 @@ final class Preset
                 privatization: true,
                 earlyReturn: true,
             )
-            ->withPhpSets();
+            ->withPhpSets()
+            ->withSkip(self::skips());
 
         return self::withLaravelSets($builder, $profile);
+    }
+
+    /**
+     * The skipped rules the installed Rector has: another version may not ship them.
+     *
+     * @return list<class-string>
+     */
+    private static function skips(): array
+    {
+        return array_values(array_filter(self::SKIPPED, class_exists(...)));
     }
 
     /**
