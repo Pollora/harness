@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-27
+
+### Changed
+
+- The Dependency analysis gate uses a preset (`presets/composer-dependency-analyser.php`) in a repository that has no `composer-dependency-analyser.php`: WordPress classes (`WP_*`, `wpdb`…) and the unknown classes, functions and shadow dependencies of the tests are no longer reported. A repository with its own file keeps it
+
 ## [0.1.4] - 2026-10-27
 
 ### Fixed

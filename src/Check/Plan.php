@@ -58,12 +58,24 @@ final readonly class Plan
                 requires: ['vendor/bin/pest'],
             ),
             $this->dependencyPolicy(),
-            new Step('Dependency analysis', ['ARCH-07'], ['vendor/bin/composer-dependency-analyser'], requires: ['vendor/bin/composer-dependency-analyser']),
+            $this->dependencyAnalysis(),
             $this->semgrep(),
             $this->audit(),
             $this->publicSurface(),
             $this->ratchet($coverage, $infection),
         ];
+    }
+
+    private function dependencyAnalysis(): Step
+    {
+        $command = ['vendor/bin/composer-dependency-analyser'];
+
+        // A repository with its own configuration keeps it; the others get the preset.
+        if (! is_file($this->cwd.'/composer-dependency-analyser.php')) {
+            $command[] = '--config='.Paths::preset('composer-dependency-analyser.php');
+        }
+
+        return new Step('Dependency analysis', ['ARCH-07'], $command, requires: ['vendor/bin/composer-dependency-analyser']);
     }
 
     private function publicSurface(): Step
