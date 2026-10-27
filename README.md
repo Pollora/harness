@@ -60,6 +60,8 @@ The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis
 
 The **Code style** gate checks with the repository's own `pint.json` when that file already requires `declare_strict_types` (ARCH-09), so a package keeps the style it chose; without one, or with one that does not require it, the harness preset applies.
 
+The **Dependency analysis** gate uses the repository's `composer-dependency-analyser.php` when there is one; without it, a harness preset ignores what is noise in a WordPress repository (WordPress classes, which are not Composer packages, and the classes and libraries of the tests).
+
 ## Commands
 
 | Command | Does |
