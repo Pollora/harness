@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-27
+
 ### Changed
 
 - The Rector preset runs on `src` only by default. On tests it emptied fixture methods, turned the closures a test is about into arrow functions and rewrote strings
