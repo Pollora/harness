@@ -57,11 +57,11 @@ final class Preset
     ];
 
     /**
-     * @param  list<string>  $paths  Relative to $root; src and tests when they exist
+     * @param  list<string>  $paths  Relative to $root; src by default: Rector rewrites test fixtures (empties their methods, changes the closures a test is about)
      */
     public static function configure(string $root, ?Profile $profile = null, array $paths = []): RectorConfigBuilder
     {
-        $paths = $paths === [] ? ['src', 'tests'] : $paths;
+        $paths = $paths === [] ? ['src'] : $paths;
         $absolute = array_values(array_filter(
             array_map(static fn (string $path): string => rtrim($root, '/').'/'.$path, $paths),
             file_exists(...),
