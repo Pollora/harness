@@ -30,6 +30,24 @@ use Rector\TypeDeclaration\Rector\ClassMethod\ReturnNeverTypeRector;
 final class Preset
 {
     /**
+     * Rules the harness never applies, each with its reason.
+     *
+     * @var list<class-string>
+     */
+    public const array SKIPPED = [
+        // Pint writes `! $x`, these rules write `!$x` and double quotes: the two tools would undo each other
+        NegatedAndsToPositiveOrsRector::class,
+        SimplifyQuoteEscapeRector::class,
+        // They change the public API of classes that applications extend (ARCH-09): a readonly class cannot be extended by a
+        // mutable one, a narrower return type or a removed parameter breaks an override, a static method turned into an instance one breaks its callers
+        ReadOnlyClassRector::class,
+        RemoveUnusedPublicMethodParameterRector::class,
+        NarrowObjectReturnTypeRector::class,
+        ReturnNeverTypeRector::class,
+        LocallyCalledStaticMethodToNonStaticRector::class,
+    ];
+
+    /**
      * @param  list<string>  $paths  Relative to $root; src and tests when they exist
      */
     public static function configure(string $root, ?Profile $profile = null, array $paths = []): RectorConfigBuilder
@@ -55,24 +73,6 @@ final class Preset
 
         return self::withLaravelSets($builder, $profile);
     }
-
-    /**
-     * Rules the harness never applies, each with its reason.
-     *
-     * @var list<class-string>
-     */
-    public const array SKIPPED = [
-        // Pint writes `! $x`, these rules write `!$x` and double quotes: the two tools would undo each other
-        NegatedAndsToPositiveOrsRector::class,
-        SimplifyQuoteEscapeRector::class,
-        // They change the public API of classes that applications extend (ARCH-09): a readonly class cannot be extended by a
-        // mutable one, a narrower return type or a removed parameter breaks an override, a static method turned into an instance one breaks its callers
-        ReadOnlyClassRector::class,
-        RemoveUnusedPublicMethodParameterRector::class,
-        NarrowObjectReturnTypeRector::class,
-        ReturnNeverTypeRector::class,
-        LocallyCalledStaticMethodToNonStaticRector::class,
-    ];
 
     /**
      * The skipped rules the installed Rector has: another version may not ship them.
