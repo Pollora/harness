@@ -136,4 +136,5 @@ jobs:
             echo "::notice::No composer.lock to audit."
             exit 0
           fi
-          composer audit --no-interaction
+          # --locked: nothing is installed here, the lock file is what ships
+          composer audit --locked --no-interaction
