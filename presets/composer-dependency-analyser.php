@@ -10,8 +10,10 @@ use ShipMonk\ComposerDependencyAnalyser\Config\ErrorType;
  *
  * The analyser reads the classes the code uses and compares them with composer.json.
  * Two kinds of finding are noise in a WordPress repository:
- *  - WordPress classes (WP_Post, WP_Error, WP_CLI…): WordPress is not a Composer
- *    dependency, so they never autoload;
+ *  - WordPress classes (WP_Post, WP_Error, WP_CLI…) and functions (add_action,
+ *    get_option…): WordPress is not a Composer dependency, so they never autoload;
+ *  - the PHP extensions every WordPress host provides (ctype, filter, json,
+ *    mbstring), used without a "ext-*" line in composer.json;
  *  - classes of the tests (fixtures declared in the test files, helpers the suite
  *    defines at run time) and the libraries the test runner brings.
  * A repository that needs more than this writes its own composer-dependency-analyser.php,
@@ -22,4 +24,6 @@ $root = getcwd() ?: '.';
 return (new Configuration)
     ->disableReportingUnmatchedIgnores()
     ->ignoreUnknownClassesRegex('~^(WP_|Walker_|Requests_|wpdb$)~')
+    ->ignoreUnknownFunctionsRegex('~.*~')
+    ->ignoreErrorsOnExtensions(['ext-ctype', 'ext-filter', 'ext-json', 'ext-mbstring'], [ErrorType::SHADOW_DEPENDENCY])
     ->ignoreErrorsOnPath($root.'/tests', [ErrorType::UNKNOWN_CLASS, ErrorType::UNKNOWN_FUNCTION, ErrorType::SHADOW_DEPENDENCY]);
