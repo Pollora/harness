@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-27
+
 ### Changed
 
 - The Rector preset skips the rules that contradict Pint (`!$x` against `! $x`, double quotes) and those that change the public API of classes applications extend (readonly classes, narrower return types, removed parameters, `never`, static methods made non-static), and those that look equivalent and are not: hook callbacks as first-class callables (`has_action()` and `remove_action()` no longer find them), `get_debug_type()` on a class name, removed casts on values WordPress or a driver returns, so a modernisation never breaks an override or a caller
