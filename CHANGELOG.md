@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-27
+
+### Changed
+
+- The dependency analysis preset also ignores unknown functions (WordPress functions are never autoloadable) and the shadow use of `ext-ctype`, `ext-filter`, `ext-json` and `ext-mbstring`
+
 ## [0.1.5] - 2026-10-27
 
 ### Changed
