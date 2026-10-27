@@ -10,7 +10,10 @@ use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRe
 use Rector\CodingStyle\Rector\String_\SimplifyQuoteEscapeRector;
 use Rector\Config\RectorConfig;
 use Rector\Configuration\RectorConfigBuilder;
+use Rector\DeadCode\Rector\Cast\RecastingRemovalRector;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
+use Rector\Php80\Rector\Ternary\GetDebugTypeRector;
+use Rector\Php81\Rector\Array_\ArrayToFirstClassCallableRector;
 use Rector\Php82\Rector\Class_\ReadOnlyClassRector;
 use Rector\TypeDeclaration\Rector\ClassMethod\NarrowObjectReturnTypeRector;
 use Rector\TypeDeclaration\Rector\ClassMethod\ReturnNeverTypeRector;
@@ -35,6 +38,12 @@ final class Preset
      * @var list<class-string>
      */
     public const array SKIPPED = [
+        // They look equivalent and are not. A WordPress hook callback given as [class, method] is found again by has_action() and
+        // remove_action(), a Closure is a new object each time. get_debug_type() of a class name string answers "string". A cast on a value
+        // WordPress or a driver returns guards against stubs that are wrong: Throwable::getCode() is a string for a PDOException
+        ArrayToFirstClassCallableRector::class,
+        GetDebugTypeRector::class,
+        RecastingRemovalRector::class,
         // Pint writes `! $x`, these rules write `!$x` and double quotes: the two tools would undo each other
         NegatedAndsToPositiveOrsRector::class,
         SimplifyQuoteEscapeRector::class,
