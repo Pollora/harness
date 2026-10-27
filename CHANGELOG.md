@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-10-27
+
 ### Added
 
 - `observed` input of `template.yml`: the gates (`secrets`, `style`, `security`, `audit`) reported but never blocking, in `enforce` mode too, as `observed` does in a package's `.harness.json`
