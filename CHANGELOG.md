@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Rector is pinned to `~2.8.1`. Every Rector minor adds rules to the prepared sets, so a floating version turned the Rector gate red on repositories that had not changed (2.8.1: `ExplicitNullableObjectInstanceRector`). A Rector upgrade is now a harness release, with the new rules reviewed once
+
 ## [0.1.8] - 2026-10-27
 
 ### Changed

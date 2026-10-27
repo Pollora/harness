@@ -243,7 +243,7 @@ final readonly class SurfaceExtractor
     private function describeParameter(ReflectionParameter $parameter): string
     {
         $type = $parameter->getType();
-        $description = $type === null ? 'mixed' : (string) $type;
+        $description = $type instanceof \ReflectionType ? (string) $type : 'mixed';
 
         if ($type instanceof ReflectionNamedType && $type->allowsNull() && ! str_starts_with($description, '?') && $description !== 'mixed' && $description !== 'null') {
             $description = '?'.$description;
