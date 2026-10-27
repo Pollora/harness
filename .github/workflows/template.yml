@@ -1,0 +1,139 @@
+# Pollora harness — reusable workflow for a template: the skeleton, a theme, a plugin or a module.
+#
+# A template is copied into every project built from it, so it cannot carry the harness:
+# no `pollora/harness` in its composer.json, no `.harness.json` or `AGENTS.md` at its root.
+# This workflow checks it from the outside instead. It installs what it needs in the job,
+# reads the presets from this repository, and the template only adds one file,
+# `.github/workflows/harness.yml`, which the scaffolders already strip.
+#
+#   jobs:
+#     harness:
+#       uses: Pollora/harness/.github/workflows/template.yml@v0.1.10
+#       with:
+#         mode: enforce
+#       permissions:
+#         contents: read
+#
+# The gates are the ones that need nothing but the source: secrets in the history, the code
+# style, the security patterns and the dependency audit. PHPStan, Rector, the dependency
+# analysis, the tests matrix, the API contract and the downstream run need a package, and a
+# template is not one: a template has its own tests (a sweep, a contract) in its own workflow.
+
+name: Pollora harness (template)
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: enforce blocks a merge on a failed gate; observe reports and never blocks
+        type: string
+        default: enforce
+      php-version:
+        description: PHP version of the jobs
+        type: string
+        default: '8.4'
+
+permissions: {}
+
+jobs:
+  secrets:
+    name: Secrets (SEC-08)
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan the history with gitleaks
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --redact --no-banner
+
+  style:
+    name: Code style
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+
+      # Pint is installed here, not required by the template. It reads the template's own
+      # pint.json when it has one, and falls back to the Laravel preset.
+      - name: Check the style with Pint
+        run: |
+          if [ -z "$(git ls-files '*.php')" ]; then
+            echo "::notice::No PHP file to check."
+            exit 0
+          fi
+          composer global require laravel/pint --no-interaction --no-progress
+          "$(composer global config bin-dir --absolute)/pint" --test
+
+  security:
+    name: Security patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10)
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The rules come from the version of the harness this workflow was called at.
+      - uses: actions/checkout@v7
+        with:
+          repository: Pollora/harness
+          ref: ${{ github.job_workflow_sha }}
+          path: .harness-presets
+          persist-credentials: false
+
+      - name: Install Semgrep
+        run: pipx install semgrep
+
+      - name: Scan the source
+        run: |
+          targets=""
+          for dir in src app config resources routes; do
+            [ -d "$dir" ] && targets="$targets $dir"
+          done
+          if [ -z "$targets" ]; then
+            echo "::notice::No source directory to scan."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          semgrep scan --metrics=off --disable-version-check --error --quiet \
+            --config .harness-presets/presets/semgrep/common.yml $targets
+
+  audit:
+    name: Dependency audit (SEC-09)
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+
+      - name: Audit the locked dependencies
+        run: |
+          if [ ! -f composer.lock ]; then
+            echo "::notice::No composer.lock to audit."
+            exit 0
+          fi
+          composer audit --no-interaction
