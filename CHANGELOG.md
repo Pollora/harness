@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `observed` input of `template.yml`: the gates (`secrets`, `style`, `security`, `audit`) reported but never blocking, in `enforce` mode too, as `observed` does in a package's `.harness.json`
+
+### Fixed
+
+- The style gate of `template.yml` parses a template: the placeholders the scaffolder fills in (`%theme_namespace%`) are not PHP and made Pint fail on every file that holds one, whatever its style. Pint runs on a copy where each placeholder is an identifier
+
 ## [0.1.10] - 2026-10-27
 
 ### Added

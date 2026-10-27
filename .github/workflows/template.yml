@@ -28,6 +28,10 @@ on:
         description: enforce blocks a merge on a failed gate; observe reports and never blocks
         type: string
         default: enforce
+      observed:
+        description: gates reported but never blocking even in enforce mode, among secrets, style, security and audit (space or comma separated)
+        type: string
+        default: ''
       php-version:
         description: PHP version of the jobs
         type: string
@@ -39,7 +43,7 @@ jobs:
   secrets:
     name: Secrets (SEC-08)
     runs-on: ubuntu-latest
-    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'secrets') }}
     permissions:
       contents: read
     steps:
@@ -54,7 +58,7 @@ jobs:
   style:
     name: Code style
     runs-on: ubuntu-latest
-    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'style') }}
     permissions:
       contents: read
     steps:
@@ -69,6 +73,10 @@ jobs:
 
       # Pint is installed here, not required by the template. It reads the template's own
       # pint.json when it has one, and falls back to the Laravel preset.
+      #
+      # A template holds placeholders the scaffolder fills in (%theme_namespace%,
+      # %plugin_name%). They are not PHP, so Pint fails to parse the file. It runs on a copy
+      # where each placeholder is an identifier: __PLH_theme_namespace__.
       - name: Check the style with Pint
         run: |
           if [ -z "$(git ls-files '*.php')" ]; then
@@ -76,12 +84,19 @@ jobs:
             exit 0
           fi
           composer global require laravel/pint --no-interaction --no-progress
-          "$(composer global config bin-dir --absolute)/pint" --test
+          pint="$(composer global config bin-dir --absolute)/pint"
+          copy="$RUNNER_TEMP/template-style"
+          mkdir -p "$copy"
+          rsync -a --exclude .git ./ "$copy"/
+          find "$copy" -name '*.php' -not -path '*/vendor/*' -not -path '*/node_modules/*' -print0 \
+            | xargs -0 sed -i -E 's/%([a-z][a-z0-9_]+)%/__PLH_\1__/g'
+          cd "$copy"
+          "$pint" --test
 
   security:
     name: Security patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10)
     runs-on: ubuntu-latest
-    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'security') }}
     permissions:
       contents: read
     steps:
@@ -117,7 +132,7 @@ jobs:
   audit:
     name: Dependency audit (SEC-09)
     runs-on: ubuntu-latest
-    continue-on-error: ${{ inputs.mode != 'enforce' }}
+    continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'audit') }}
     permissions:
       contents: read
     steps:
