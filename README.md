@@ -41,7 +41,7 @@ composer qa
 | `framework` | `pollora/framework` | Hexagon, Larastan, no third-party plugin in the core (ARCH-05) |
 | `integration` | Packages built on the framework (`metabox-bridge`, `debugbar`, `nectar`) | Larastan |
 | `wp-plugin` | WordPress plugins distributed on their own | PHPStan max target |
-| `template` | Themes, plugin and module templates, the skeleton | |
+| `template` | Themes, plugin and module templates, the skeleton | Checked from the outside by `template.yml`: nothing to install, see [Templates](#templates) |
 | `project` | Client projects built on Pollora | The security rules apply to the project's code |
 
 ## Observe, enforce, and gates left observed
@@ -82,8 +82,35 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 - **Presets** in `presets/`: Pint, PHPStan (`base.neon`, plus `laravel.neon` and the opt-in `strict.neon`), Semgrep rules, and the Rector preset class `Pollora\Harness\Rector\Preset`.
 - **ARCH-02 as a PHPStan rule**: code in a `Domain` namespace calls no global WordPress function (`pollora.noWordPressCallInDomain`).
 - **Architecture tests** registered by `tests/Arch.php` from the layers found under the PSR-4 roots (`Domain`, `Application`, `Infrastructure`/`Adapter`, `UI`).
+- **A second reusable workflow**, `.github/workflows/template.yml`, for templates: see [Templates](#templates).
 - **A reusable workflow**, `.github/workflows/php-package.yml`: quality gates, a test matrix (PHP × lowest/stable dependencies), a gitleaks scan, and the **downstream** job that runs the framework's tests against a changed core package.
 - **Agent hooks** for Claude Code: style fixed after each edit, PHPStan on the edited file, protected threshold files (QA-02), the fast gates before the agent hands back.
+
+## Templates
+
+A template (the skeleton, a theme, a plugin or a module) is copied into every project built from it, so it cannot carry the harness: `pollora/harness` in its `require-dev` would be installed by every `composer create-project`, and a `.harness.json` or an `AGENTS.md` at its root would land in every project. `template.yml` checks it from the outside instead. The template adds one file, `.github/workflows/harness.yml`, which the scaffolders strip:
+
+```yaml
+name: Harness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  harness:
+    uses: Pollora/harness/.github/workflows/template.yml@v0.1.10
+    with:
+      mode: enforce # observe reports and never blocks
+    permissions:
+      contents: read
+```
+
+It runs the gates that need nothing but the source: the secrets in the history (SEC-08), the code style (Pint, the template's own `pint.json` or the Laravel preset), the security patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, with the rules of the version the workflow is pinned at) and the dependency audit of a committed `composer.lock` (SEC-09). PHPStan, Rector, the dependency analysis, the tests matrix, the API contract and the downstream run need a package: a template keeps its own tests in its own workflow.
 
 ## Public surface
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `template.yml`, a reusable workflow for a template (the skeleton, a theme, a plugin, a module): secrets, code style, security patterns and dependency audit, run from the outside. The template installs nothing and carries no `.harness.json`: it only adds `.github/workflows/harness.yml`, so nothing of the harness is copied into the projects built from it. `mode: enforce` blocks a merge, `observe` reports
+
 ## [0.1.9] - 2026-10-27
 
 ### Changed
