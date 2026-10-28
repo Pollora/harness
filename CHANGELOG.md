@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-10-28
+
 ### Changed
 
+- **SEC-04 also skips three more WordPress core functions that return escaped HTML**: `get_block_wrapper_attributes()`, `get_previous_posts_link()` and `get_next_posts_link()`. With them, the Pollora theme template reports nothing for SEC-04, and its `observed: security` can go
 - ARCH-05 has no exception any more: `src/ThirdParty/` is no longer excluded from the rule, since the framework moved WooCommerce and WP Rocket to their own packages. A framework that still has code in `src/ThirdParty/` that names a plugin is now reported
 
 ## [0.1.12] - 2026-10-28
