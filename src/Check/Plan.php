@@ -20,6 +20,16 @@ use Pollora\Harness\Surface\SurfaceFile;
  */
 final readonly class Plan
 {
+    public const string NPM_AUDIT = 'Dependency audit (npm)';
+
+    /**
+     * Gates reported but never blocking, whatever `.harness.json` says: a new
+     * gate starts here so that a release does not turn a green repository red.
+     *
+     * @var list<string>
+     */
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT];
+
     public function __construct(
         private HarnessConfig $config,
         private string $cwd,
@@ -61,6 +71,7 @@ final readonly class Plan
             $this->dependencyAnalysis(),
             $this->semgrep(),
             $this->audit(),
+            $this->npmAudit(),
             $this->publicSurface(),
             $this->ratchet($coverage, $infection),
         ];
@@ -161,6 +172,58 @@ final readonly class Plan
         return $composer === null
             ? Step::skipped('Dependency audit', ['SEC-09'], 'composer is not on the PATH')
             : new Step('Dependency audit', ['SEC-09'], [$composer, 'audit', '--no-interaction']);
+    }
+
+    /**
+     * `npm audit` over every lock file of the repository (the root and the test
+     * suites that have their own). Composer's audit does not see these.
+     */
+    private function npmAudit(): Step
+    {
+        $name = self::NPM_AUDIT;
+        $npm = Paths::which('npm');
+        $directories = $this->npmLockDirectories();
+
+        if ($directories === []) {
+            return Step::skipped($name, ['SEC-09'], 'no package-lock.json to audit');
+        }
+
+        if ($npm === null) {
+            return Step::skipped($name, ['SEC-09'], 'npm is not on the PATH');
+        }
+
+        $commands = array_map(
+            static fn (string $directory): string => sprintf('%s audit --audit-level=high --prefix %s || status=1', escapeshellarg($npm), escapeshellarg($directory)),
+            $directories,
+        );
+
+        return new Step($name, ['SEC-09'], ['sh', '-c', 'status=0; '.implode('; ', $commands).'; exit $status']);
+    }
+
+    /**
+     * @return list<string> Directories (relative to the repository) that hold a package-lock.json
+     */
+    private function npmLockDirectories(): array
+    {
+        $directories = [];
+
+        foreach (['', '*/', '*/*/'] as $depth) {
+            $locks = glob($this->cwd.'/'.$depth.'package-lock.json');
+
+            if ($locks === false) {
+                continue;
+            }
+
+            foreach ($locks as $lock) {
+                $directory = ltrim(substr(dirname($lock), strlen($this->cwd)), '/');
+
+                if (preg_match('#(^|/)(node_modules|vendor|\.worktrees|\.git)(/|$)#', $directory) !== 1) {
+                    $directories[] = $directory === '' ? '.' : $directory;
+                }
+            }
+        }
+
+        return $directories;
     }
 
     private function ratchet(?string $coverage, ?string $infection): Step
