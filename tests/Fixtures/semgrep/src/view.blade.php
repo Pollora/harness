@@ -6,6 +6,7 @@
 <div>{!! $slot !!}</div>
 <a href="{!! esc_url( $url ) !!}" class="{!! esc_attr( $class ) !!}">{!! esc_html__( 'Read', 'x' ) !!} {!! wp_kses_post( $summary ) !!}</a>
 <article {!! post_class() !!}>{!! \wc_price( $total ) !!}</article>
+<div {!! get_block_wrapper_attributes(['class' => 'is-x']) !!}>{!! get_previous_posts_link('&larr;') !!}{!! get_next_posts_link('&rarr;') !!}</div>
 {!! wp_nav_menu([
     'theme_location' => 'primary',
 ]) !!}
