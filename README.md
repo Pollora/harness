@@ -66,7 +66,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 
 | Command | Does |
 | --- | --- |
-| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, ratchet |
+| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed), ratchet |
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree |
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |

@@ -153,3 +153,29 @@ jobs:
           fi
           # --locked: nothing is installed here, the lock file is what ships
           composer audit --locked --no-interaction
+
+  npm-audit:
+    name: Dependency audit (npm)
+    runs-on: ubuntu-latest
+    # Observed for now: the gate reports the alerts Composer's audit cannot see
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Audit the locked npm dependencies
+        run: |
+          status=0
+          for lock in $(find . -maxdepth 3 -name package-lock.json -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.worktrees/*'); do
+            echo "::group::npm audit $(dirname "$lock")"
+            npm audit --audit-level=high --prefix "$(dirname "$lock")" || status=1
+            echo "::endgroup::"
+          done
+          exit $status

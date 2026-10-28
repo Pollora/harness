@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Dependency audit (npm)** (SEC-09): `pollora-qa check` runs `npm audit --audit-level=high` for every `package-lock.json` of the repository (the root and up to two levels down, never `node_modules`, `vendor` or `.worktrees`), and `template.yml` has a matching `npm-audit` job. Composer's audit does not see these alerts. The gate is **observed**: it reports and never blocks, in `enforce` mode too, until a later release makes it blocking
+
 ## [0.1.11] - 2026-10-28
 
 ### Added
