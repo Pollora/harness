@@ -2,13 +2,15 @@
 
 ## [Unreleased]
 
-### Changed
-
-- **SEC-04 no longer reports the outputs that are escaped by construction**: `{!! !!}` followed by an escaping function (`esc_attr`, `esc_html`, `esc_url`, `esc_js`, `esc_textarea`, their `__`, `_e` and `_x` forms, `wp_kses`, `wp_kses_post`, `wp_kses_data`, `absint`, `wc_kses_notice`, `wp_strip_all_tags`), a component `$slot`, or one of the WordPress and WooCommerce functions that return HTML they have escaped themselves (`post_class`, `wc_price`, `wp_nav_menu`, `get_search_form`…, the list is in `presets/semgrep/common.yml`). Only the first call is looked at, so `{!! esc_html($a) . $b !!}` passes: keep the whole expression escaped. Anything else (`apply_filters()`, `do_shortcode()`, `get_option()`, a variable, a theme's own helper) is still reported and needs `{{ }}`, an escaping function, or a `nosemgrep` comment that says why. On the Apiary theme the reports go from 310 to 114
+## [0.1.12] - 2026-10-28
 
 ### Added
 
 - **Dependency audit (npm)** (SEC-09): `pollora-qa check` runs `npm audit --audit-level=high` for every `package-lock.json` of the repository (the root and up to two levels down, never `node_modules`, `vendor` or `.worktrees`), and `template.yml` has a matching `npm-audit` job. Composer's audit does not see these alerts. The gate is **observed**: it reports and never blocks, in `enforce` mode too, until a later release makes it blocking
+
+### Changed
+
+- **SEC-04 no longer reports the outputs that are escaped by construction**: `{!! !!}` followed by an escaping function (`esc_attr`, `esc_html`, `esc_url`, `esc_js`, `esc_textarea`, their `__`, `_e` and `_x` forms, `wp_kses`, `wp_kses_post`, `wp_kses_data`, `absint`, `wc_kses_notice`, `wp_strip_all_tags`), a component `$slot`, or one of the WordPress and WooCommerce functions that return HTML they have escaped themselves (`post_class`, `wc_price`, `wp_nav_menu`, `get_search_form`…, the list is in `presets/semgrep/common.yml`). Only the first call is looked at, so `{!! esc_html($a) . $b !!}` passes: keep the whole expression escaped. Anything else (`apply_filters()`, `do_shortcode()`, `get_option()`, a variable, a theme's own helper) is still reported and needs `{{ }}`, an escaping function, or a `nosemgrep` comment that says why. On the Apiary theme the reports go from 310 to 114
 
 ## [0.1.11] - 2026-10-28
 
