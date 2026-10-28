@@ -45,11 +45,17 @@ rules:
     message: >-
       [SEC-04] {!! !!} prints without escaping. Use {{ }}; when the HTML is
       trusted (it went through wp_kses_post() or comes from a block render), keep
-      {!! !!} with a `nosemgrep` comment that says why.
+      {!! !!} with a `nosemgrep` comment that says why. Not reported: an output
+      that starts with an escaping function (esc_*, wp_kses*, absint…), a
+      component `$slot`, or a WordPress or WooCommerce function that returns
+      HTML it has escaped itself. Only the first call is looked at:
+      `{!! esc_html($a) . $b !!}` passes, so keep the whole expression escaped.
     metadata:
       rule: SEC-04
       cwe: "CWE-79: Cross-site Scripting"
-    pattern-regex: '\{!!'
+    # PCRE: the lookaheads skip the outputs that are safe by construction.
+    pattern-regex: >-
+      \{!!(?!\s*\$slot\s*!!\})(?!\s*\\?(?:esc_(?:attr|html)(?:__|_[ex])?|esc_url|esc_js|esc_textarea|wp_kses(?:_post|_data)?|absint|wc_kses_notice|wp_strip_all_tags|post_class|comment_class|body_class|wc_product_class|get_language_attributes|get_search_form|get_custom_logo|get_avatar|get_the_post_thumbnail|wp_get_attachment_image|wp_nav_menu|wp_list_comments|wp_link_pages|paginate_links|get_the_comments_navigation|get_the_archive_title|get_the_archive_description|category_description|single_cat_title|comment_text|wc_price|wc_get_rating_html|wc_get_stock_html|wc_get_template|woocommerce_page_title|wc_get_notice_data_attr|wc_get_product_category_list|wc_get_product_tag_list|wc_query_string_form_fields|wc_get_formatted_cart_item_data|wc_cart_totals_taxes_total_html|wc_cart_totals_shipping_html|wc_cart_totals_order_total_html|wc_cart_totals_shipping_method_label|woocommerce_shipping_calculator|woocommerce_form_field)\s*\()
 
   - id: pollora.sec-05.unsafe-functions
     languages: [php]
