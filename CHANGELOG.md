@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-10-29
+
 ### Fixed
 
 - **A file that calls `exit()` or `die()` no longer ends a run with a pass.** A WordPress plugin starts nearly every file with `defined('ABSPATH') || exit;`. `pollora-qa surface` and the *Public surface* gate load the plugin's classes, so the first guarded file stopped the whole process with status 0, before the summary and the *Ratchet* gate, and CI read that as a pass. The run now fails with a message that says what happened
