@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A file that calls `exit()` or `die()` no longer ends a run with a pass.** A WordPress plugin starts nearly every file with `defined('ABSPATH') || exit;`. `pollora-qa surface` and the *Public surface* gate load the plugin's classes, so the first guarded file stopped the whole process with status 0, before the summary and the *Ratchet* gate, and CI read that as a pass. The run now fails with a message that says what happened
+- **The surface extractor defines `ABSPATH` and `WPINC` when WordPress is absent** (only if they are not defined), so the guarded files of a plugin load and its attributes, hooks, configuration keys and commands are recorded
+
 ## [0.1.13] - 2026-10-28
 
 ### Changed

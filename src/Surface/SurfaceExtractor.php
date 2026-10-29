@@ -8,6 +8,7 @@ use Attribute;
 use FilesystemIterator;
 use PhpToken;
 use Pollora\Harness\Architecture\Layers;
+use Pollora\Harness\Support\WordPressGuards;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionAttribute;
@@ -57,6 +58,8 @@ final readonly class SurfaceExtractor
      */
     public function extract(): array
     {
+        WordPressGuards::define($this->root);
+
         $layers = Layers::discover($this->root);
 
         $surface = [

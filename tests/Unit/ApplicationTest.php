@@ -112,3 +112,17 @@ it('keeps the observed gates and the protected paths when init runs again', func
         ->and($config['observed'])->toBe(['Rector'])
         ->and($config['protected'])->toBe(['api-surface.json']);
 });
+
+it('reads the attribute classes of a plugin whose files stop on a missing ABSPATH', function (): void {
+    [$code, $output] = polloraQa(dirname(__DIR__).'/Fixtures/Guarded', 'surface', '--print');
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('attribute:Pollora\\Harness\\Tests\\Fixtures\\Guarded\\Attributes\\GuardedAttribute');
+});
+
+it('fails, and says why, when a file the command loads ends the process', function (): void {
+    [$code, $output] = polloraQa(dirname(__DIR__).'/Fixtures/Quitting', 'surface', '--print');
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('stopped before it finished', 'exit() or die()');
+});

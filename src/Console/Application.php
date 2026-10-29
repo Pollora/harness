@@ -20,6 +20,15 @@ final class Application
     private array $commands = [];
 
     /**
+     * The command being run, until it returns.
+     *
+     * @var array{Io, string}|null
+     */
+    private static ?array $running = null;
+
+    private static bool $watching = false;
+
+    /**
      * @param  list<Command>|null  $commands
      */
     public function __construct(?array $commands = null)
@@ -49,13 +58,46 @@ final class Application
             return Command::FAILURE;
         }
 
+        // A file the command loads can end the process with exit() or die(): a WordPress
+        // plugin's `defined('ABSPATH') || exit;` does when WordPress is absent. The process
+        // would then stop with status 0, before the verdict, and read as a pass.
+        self::watchForExit();
+        self::$running = [$io, $name];
+
         try {
-            return $command->run($io);
+            $code = $command->run($io);
         } catch (InvalidConfig $invalidConfig) {
             $io->error($invalidConfig->getMessage());
-
-            return Command::FAILURE;
+            $code = Command::FAILURE;
         }
+
+        self::$running = null;
+
+        return $code;
+    }
+
+    /**
+     * Fails the run when the process ends while a command is still running.
+     */
+    private static function watchForExit(): void
+    {
+        if (self::$watching) {
+            return;
+        }
+
+        self::$watching = true;
+
+        register_shutdown_function(static function (): void {
+            if (self::$running === null || error_get_last() !== null) {
+                return;
+            }
+
+            [$io, $name] = self::$running;
+            $io->error("pollora-qa {$name} stopped before it finished: a file it loaded called exit() or die(). "
+                .'In a WordPress plugin that is usually the `defined(\'ABSPATH\') || exit;` guard of a file whose constant is not defined.');
+
+            exit(Command::FAILURE);
+        });
     }
 
     private function help(Io $io, ?string $name): int
