@@ -1,0 +1,12 @@
+{
+    "name": "acme/quitting",
+    "description": "Fixture: a file that ends the process whatever constants exist",
+    "require": {
+        "php": "^8.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pollora\\Harness\\Tests\\Fixtures\\Quitting\\": ""
+        }
+    }
+}

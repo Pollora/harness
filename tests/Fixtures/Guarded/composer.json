@@ -1,0 +1,12 @@
+{
+    "name": "acme/guarded",
+    "description": "Fixture: a WordPress plugin whose files start with defined('ABSPATH') || exit;",
+    "require": {
+        "php": "^8.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pollora\\Harness\\Tests\\Fixtures\\Guarded\\": ""
+        }
+    }
+}
