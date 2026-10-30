@@ -135,6 +135,8 @@ Composer installs a package from the archive GitHub builds with `git archive`. W
 
 A directory ignored with `/tests export-ignore` cannot be seen file by file, which is why the gate reads the archive itself. A `template` or a `project` is not checked: its archive is the product. The gate is skipped where `git archive` cannot be built (no git, no commit yet).
 
+The gate starts **observed** (reported, never blocking, whatever `.harness.json` says) so that raising the harness to this version turns no repository red: fix `.gitattributes` with `pollora-qa archive --fix` when you raise it. It will block in a later version, once the repositories are aligned.
+
 ## Rules
 
 `vendor/bin/pollora-qa rules` prints the catalogue, from `resources/rules.php`. Each rule is `enforced` (fails the gate), `observed` (reported only) or `planned` (not checked by this version yet).

@@ -23,13 +23,15 @@ final readonly class Plan
 {
     public const string NPM_AUDIT = 'Dependency audit (npm)';
 
+    public const string ARCHIVE = 'Distribution archive';
+
     /**
      * Gates reported but never blocking, whatever `.harness.json` says: a new
      * gate starts here so that a release does not turn a green repository red.
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::ARCHIVE];
 
     public function __construct(
         private HarnessConfig $config,
@@ -113,7 +115,7 @@ final readonly class Plan
      */
     private function distributionArchive(): Step
     {
-        $name = 'Distribution archive';
+        $name = self::ARCHIVE;
         $rules = ['QA-06'];
 
         if (! Archive::applies($this->config->profile)) {
