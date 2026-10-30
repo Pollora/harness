@@ -31,7 +31,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::ARCHIVE];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT];
 
     public function __construct(
         private HarnessConfig $config,
