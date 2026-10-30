@@ -6,6 +6,7 @@ namespace Pollora\Harness\Console;
 
 use Pollora\Harness\Config\InvalidConfig;
 use Pollora\Harness\Console\Commands\AgentsCommand;
+use Pollora\Harness\Console\Commands\ArchiveCommand;
 use Pollora\Harness\Console\Commands\CheckCommand;
 use Pollora\Harness\Console\Commands\DepsCommand;
 use Pollora\Harness\Console\Commands\HookCommand;
@@ -139,6 +140,7 @@ final class Application
             new RatchetCommand,
             new DepsCommand,
             new SurfaceCommand,
+            new ArchiveCommand,
             new RulesCommand,
             new AgentsCommand,
             new HookCommand,

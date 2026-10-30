@@ -71,6 +71,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
+| `pollora-qa archive [--fix]` | Checks that development files stay out of the release archive (QA-06); `--fix` writes the missing `export-ignore` lines |
 | `pollora-qa rules [ID]` | Lists the rules, or explains one |
 | `pollora-qa agents` | Regenerates the harness block of `AGENTS.md` |
 | `pollora-qa hook <event>` | Agent hooks: `pre-edit`, `post-edit`, `stop` |
@@ -127,6 +128,12 @@ Projects built on Pollora rely on more than PHP signatures: the attributes and t
 ```
 
 In CI, a pull request that changes the surface needs a label (QA-04): `api-change` when it only adds entries (a minor version), `breaking` when it removes or changes one, or adds a required parameter to an existing attribute (a major version, after a deprecation). The diff shows exactly what a release changes for its users. PHP signatures are compared with the latest tag by `roave/backward-compatibility-check` (QA-05).
+
+## Distribution archive
+
+Composer installs a package from the archive GitHub builds with `git archive`. Without `export-ignore` lines in `.gitattributes`, the tests, the CI workflows, the tool configuration and the agent files (including the ones `init` adds) travel with every install. The **Distribution archive** gate (QA-06) builds that archive and fails when a development file is in it, listing the lines to add. `pollora-qa archive --fix` writes them, and `init` adds the ones for the files it creates.
+
+A directory ignored with `/tests export-ignore` cannot be seen file by file, which is why the gate reads the archive itself. A `template` or a `project` is not checked: its archive is the product. The gate is skipped where `git archive` cannot be built (no git, no commit yet).
 
 ## Rules
 

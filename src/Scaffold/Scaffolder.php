@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pollora\Harness\Scaffold;
 
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\Paths;
 
@@ -49,6 +50,7 @@ final class Scaffolder
         $this->claude();
         $this->composerScripts();
         $this->gitignore();
+        $this->exportIgnore();
 
         return $this->changes;
     }
@@ -215,6 +217,25 @@ final class Scaffolder
 
         file_put_contents($path, rtrim($content)."\n# Pollora harness reports\n/.harness/\n");
         $this->changes[] = 'ignored .harness/ (reports) in .gitignore';
+    }
+
+    /**
+     * QA-06: the files this method and the author's own tooling add must not travel in the archive.
+     * The files init creates are named even when they do not exist yet (api-surface.json, written by `surface --update`).
+     */
+    private function exportIgnore(): void
+    {
+        if (! Archive::applies($this->config->profile)) {
+            return;
+        }
+
+        $archive = new Archive($this->root);
+        $harness = ['/.gitattributes export-ignore', '/.claude export-ignore', '/.harness.json export-ignore', '/AGENTS.md export-ignore', '/api-surface.json export-ignore', '/composer-dependency-analyser.php export-ignore', '/rector.php export-ignore'];
+        $added = $archive->ensure([...$harness, ...$archive->standardLines()]);
+
+        if ($added !== []) {
+            $this->changes[] = 'kept the development files out of the archive (.gitattributes: '.count($added).' lines)';
+        }
     }
 
     /**
