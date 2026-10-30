@@ -70,3 +70,7 @@ it('audits every package-lock.json except the vendored ones, and never blocks', 
         ->not->toContain('vendor');
     expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::NPM_AUDIT);
 });
+
+it('starts the distribution archive gate observed, so that raising the harness turns no repository red', function (): void {
+    expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::ARCHIVE);
+});
