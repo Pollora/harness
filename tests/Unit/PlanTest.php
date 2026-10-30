@@ -71,6 +71,7 @@ it('audits every package-lock.json except the vendored ones, and never blocks', 
     expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::NPM_AUDIT);
 });
 
-it('starts the distribution archive gate observed, so that raising the harness turns no repository red', function (): void {
-    expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::ARCHIVE);
+it('blocks on the distribution archive gate like on the others, unless the repository lists it as observed', function (): void {
+    expect(Plan::OBSERVED_BY_DEFAULT)->not->toContain(Plan::ARCHIVE)
+        ->and(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::NPM_AUDIT);
 });

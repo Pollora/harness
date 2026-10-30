@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-10-30
+
+### Changed
+
+- **The *Distribution archive* gate (QA-06) blocks.** It started observed in 0.1.15 so that raising the harness turned no repository red; all the Pollora packages and the framework now run `pollora-qa archive --fix` clean, so a release archive that carries a development file (tests, CI, tool configuration, agent files) fails the check in `enforce` mode. A repository that is not ready lists `Distribution archive` under `observed` in `.harness.json`
+
 ## [0.1.15] - 2026-10-30
 
 ### Added
