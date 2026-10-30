@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-30
+
 ### Added
 
 - **A *Distribution archive* gate (QA-06)**: `pollora-qa check` builds the archive `git archive` would produce and fails when a development file is in it (`tests/`, `.github/`, `.claude/`, `AGENTS.md`, `.harness.json`, `api-surface.json`, `rector.php`, `composer-dependency-analyser.php`, `phpstan*.neon`, `phpunit*.xml`, `pint.json`, `renovate.json`, `.gitignore`, `.gitattributes`…), with the `.gitattributes` lines to add. It reads the real archive, because an `export-ignore` on a directory cannot be seen file by file. It runs for the `core`, `framework`, `integration` and `wp-plugin` profiles: the archive of a `template` or a `project` is the product. It is skipped where `git archive` cannot be built. A repository that does not ignore its development files fails it, so a repository raising the harness to this version fixes `.gitattributes` in the same pull request (`pollora-qa archive --fix`), or lists the gate under `observed` for a while
