@@ -6,3 +6,6 @@
 /phpstan.neon export-ignore
 /rector.php export-ignore
 /.harness.json export-ignore
+# Pollora harness (QA-06): development files stay out of the archive Composer downloads
+/AGENTS.md export-ignore
+/composer-dependency-analyser.php export-ignore

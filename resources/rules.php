@@ -61,5 +61,6 @@ return [
     'QA-02' => ['title' => 'The harness files are protected: baseline, .harness.json and api-surface.json change only through a human', 'tool' => 'Agent hooks + CODEOWNERS', 'gate' => 'G0', 'status' => 'enforced'],
     'QA-04' => ['title' => 'The public surface (attributes, hooks fired, configuration keys, commands) changes only with a label: api-change to add, breaking to remove or change', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'enforced'],
     'QA-05' => ['title' => 'No PHP signature breaks backward compatibility outside a major version', 'tool' => 'roave/backward-compatibility-check', 'gate' => 'G2', 'status' => 'enforced'],
+    'QA-06' => ['title' => 'The archive of a tagged release carries only what runs: tests, CI workflows, tool configuration and agent files are export-ignored', 'tool' => 'pollora-qa archive', 'gate' => 'G2', 'status' => 'enforced'],
     'QA-03' => ['title' => 'A change to a core package keeps the framework green', 'tool' => 'Downstream job', 'gate' => 'G2', 'status' => 'observed'],
 ];

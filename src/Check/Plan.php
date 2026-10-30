@@ -6,6 +6,7 @@ namespace Pollora\Harness\Check;
 
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Deps\DependencyPolicy;
+use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\Paths;
@@ -73,6 +74,7 @@ final readonly class Plan
             $this->audit(),
             $this->npmAudit(),
             $this->publicSurface(),
+            $this->distributionArchive(),
             $this->ratchet($coverage, $infection),
         ];
     }
@@ -103,6 +105,43 @@ final readonly class Plan
             $detail = implode("\n", $result['lines']);
 
             return $result['passed'] ? StepResult::passed($detail) : StepResult::failed($detail);
+        });
+    }
+
+    /**
+     * QA-06: what `git archive` would hold. A template or a project is the product itself, so it is not checked.
+     */
+    private function distributionArchive(): Step
+    {
+        $name = 'Distribution archive';
+        $rules = ['QA-06'];
+
+        if (! Archive::applies($this->config->profile)) {
+            return Step::skipped($name, $rules, 'a '.$this->config->profile->value.' is its own product, not installed from an archive');
+        }
+
+        $archive = new Archive($this->cwd);
+
+        return new Step($name, $rules, static function () use ($archive): StepResult {
+            $entries = $archive->entries();
+
+            if ($entries === null) {
+                return StepResult::skipped('git archive cannot be built here (no git, or no commit yet)');
+            }
+
+            $offenders = Archive::offenders($entries);
+
+            if ($offenders === []) {
+                return StepResult::passed(count($entries).' files in the archive, none for development');
+            }
+
+            return StepResult::failed(implode("\n", [
+                '  '.count($offenders).' development files would travel in the archive Composer downloads:',
+                ...array_map(static fn (string $line): string => '    '.$line, array_slice($offenders, 0, 8)),
+                ...(count($offenders) > 8 ? ['    … and '.(count($offenders) - 8).' more'] : []),
+                '  Fix: vendor/bin/pollora-qa archive --fix, or add to .gitattributes:',
+                ...array_map(static fn (string $line): string => '    '.$line, $archive->missing(Archive::linesFor($offenders))),
+            ]));
         });
     }
 

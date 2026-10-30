@@ -52,5 +52,6 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **QA-02** The harness files are protected: baseline, .harness.json and api-surface.json change only through a human _(Agent hooks + CODEOWNERS, G0)_
 - **QA-04** The public surface (attributes, hooks fired, configuration keys, commands) changes only with a label: api-change to add, breaking to remove or change _(pollora-qa surface, G2)_
 - **QA-05** No PHP signature breaks backward compatibility outside a major version _(roave/backward-compatibility-check, G2)_
+- **QA-06** The archive of a tagged release carries only what runs: tests, CI workflows, tool configuration and agent files are export-ignored _(pollora-qa archive, G2)_
 - **QA-03** A change to a core package keeps the framework green _(Downstream job, G2)_
 <!-- pollora-harness:end -->
