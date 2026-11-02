@@ -31,7 +31,7 @@ return [
     'CONV-03' => ['title' => 'Laravel naming: ServiceProvider, Command, Exception, Repository, Factory suffixes', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-04' => ['title' => 'Hooks fired by Pollora are named pollora/<module>/<event_snake_case>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'observed'],
     'CONV-05' => ['title' => 'Configuration lives under pollora.<package>; env() is only called in config/', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
-    'CONV-06' => ['title' => 'Commands are named pollora:<verb> or pollora:make-<thing>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'observed'],
+    'CONV-06' => ['title' => 'Commands are named pollora:<verb> or pollora:<group>:<verb>, such as pollora:make:theme; the older dashed names stay as aliases', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'observed'],
     'CONV-07' => ['title' => 'Domain and Application code never calls app() or resolve(); it receives contracts', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-08' => ['title' => 'Public classes stay open (final only on attributes and internal classes); builders and facade-backed services use Macroable', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'planned'],
     'CONV-09' => ['title' => 'A facade fronts an injectable service, with a contract and a fake() for tests', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'planned'],
