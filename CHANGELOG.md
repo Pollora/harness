@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The title of CONV-06 follows the colon convention** (`pollora:make:theme`, since framework 13.32): commands are named `pollora:<verb>` or `pollora:<group>:<verb>`, and the older dashed names such as `pollora:make-theme` stay as aliases. The check is unchanged: it has only ever required the `pollora:` prefix, so no repository is affected; the generated `AGENTS.md` of a repository carries the new title the next time `pollora-qa agents` runs
+
 ## [0.1.16] - 2026-10-30
 
 ### Changed
