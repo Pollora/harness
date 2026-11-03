@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-11-03
+
 ### Fixed
 
-- **The reusable `php-package.yml` workflow now uploads its report**: `actions/upload-artifact` skips hidden files and directories by default, so the `harness-report` step reported "No files were found with the provided path: .harness/" and published nothing; it now sets `include-hidden-files: true`
+- **The reusable `php-package.yml` workflow now uploads its report**: `actions/upload-artifact` skips hidden files and directories by default, so the `harness-report` step reported "No files were found with the provided path: .harness/" and published nothing; it now sets `include-hidden-files: true`. A repository gets the fix by pointing `uses: Pollora/harness/.github/workflows/php-package.yml@` at `v0.1.17`; the Composer constraint only moves the `pollora-qa` binary, not the workflow
 
 ### Changed
 
