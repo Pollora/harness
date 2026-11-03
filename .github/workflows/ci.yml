@@ -65,6 +65,15 @@ jobs:
           bin/pollora-qa agents
           git diff --exit-code AGENTS.md || (echo "::error::Run bin/pollora-qa agents and commit AGENTS.md"; exit 1)
 
+      - name: Publish the coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: .harness/coverage.xml
+          include-hidden-files: true
+          if-no-files-found: error
+
   apply-to-hook:
     name: Applied to Pollora/hook (observe mode)
     runs-on: ubuntu-latest
