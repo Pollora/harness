@@ -96,6 +96,7 @@ jobs:
         with:
           name: harness-report
           path: .harness/
+          include-hidden-files: true
           if-no-files-found: ignore
 
   tests:
