@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-11-04
+
 ### Added
 
 - **`allow_commands` in `.harness.json` exempts a command from CONV-06** (#50): `{"command": "new", "reason": "…"}` for one name, `{"prefix": "nectar:", "reason": "…"}` for a family. The reason is required (an entry without one, or with both `command` and `prefix`, makes the file invalid). The *Public surface* gate and `pollora-qa surface` list the exempted commands as `keeps its name (allow_commands: <reason>)` rather than as a problem, so the exemption stays visible; a command that is neither exempted nor under `pollora:` is still reported. `init` and `ratchet --update` keep the list. Nothing changes for a repository that does not use it. Documented in the README
