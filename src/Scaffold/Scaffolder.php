@@ -80,7 +80,15 @@ final class Scaffolder
             }
 
             // The base preset already includes the WordPress stubs, and the Laravel preset Larastan: twice is an error
-            $neon = (string) preg_replace('#^[ \t]*-[ \t]*vendor/(szepeviktor/phpstan-wordpress|larastan/larastan)/extension\.neon[ \t]*\r?\n#m', '', $neon);
+            $neon = (string) preg_replace_callback(
+                '#^[ \t]*-[ \t]*(vendor/(?:szepeviktor/phpstan-wordpress|larastan/larastan)/extension\.neon)[ \t]*\r?\n#m',
+                function (array $match) use ($file): string {
+                    $this->changes[] = "removed {$match[1]} from the includes of {$file}: the harness preset already loads it";
+
+                    return '';
+                },
+                $neon,
+            );
 
             $lines = implode('', array_map(static fn (string $include): string => "    - {$include}\n", $missing));
             $neon = preg_match('/^includes:\s*$/m', $neon) === 1

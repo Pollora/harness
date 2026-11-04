@@ -88,6 +88,46 @@ it('drops the extensions the presets include, so PHPStan does not load them twic
     );
 });
 
+it('says which includes it removes from the PHPStan configuration', function (): void {
+    $root = packageRoot();
+    file_put_contents($root.'/phpstan.neon', "includes:\n    - vendor/szepeviktor/phpstan-wordpress/extension.neon\n\nparameters:\n    level: 6\n");
+
+    $changes = (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core'])))->apply(6);
+
+    expect($changes)->toContain('removed vendor/szepeviktor/phpstan-wordpress/extension.neon from the includes of phpstan.neon: the harness preset already loads it')
+        ->and((string) file_get_contents($root.'/phpstan.neon'))->not->toContain('szepeviktor');
+});
+
+it('says nothing about includes when it removes none', function (): void {
+    $root = packageRoot();
+    file_put_contents($root.'/phpstan.neon', "includes:\n    - phpstan-baseline.neon\n");
+
+    $changes = (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core'])))->apply(6);
+
+    expect(implode("\n", $changes))->not->toContain('removed ');
+});
+
+it('does not repeat the .gitattributes lines the repository already has, or that it would add twice', function (): void {
+    $root = packageRoot();
+    file_put_contents($root.'/.gitattributes', "* text=auto\n/tests export-ignore\n.claude/ export-ignore\n");
+    mkdir($root.'/tests', 0o755, true);
+    mkdir($root.'/.claude');
+    file_put_contents($root.'/rector.php', '<?php');
+
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core'])))->apply(5);
+    $lines = array_values(array_filter(array_map('trim', explode("\n", (string) file_get_contents($root.'/.gitattributes')))));
+    $paths = array_values(array_map(static fn (string $line): string => trim(explode(' ', $line)[0], '/'), array_filter($lines, static fn (string $line): bool => str_contains($line, 'export-ignore'))));
+
+    expect($paths)->toBe(array_values(array_unique($paths)))
+        ->and(array_count_values($lines)['/tests export-ignore'])->toBe(1)
+        ->and($lines)->not->toContain('/.claude export-ignore')
+        ->and($lines)->toContain('/.gitattributes export-ignore', '/rector.php export-ignore');
+
+    $before = (string) file_get_contents($root.'/.gitattributes');
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core'])))->apply(5);
+    expect((string) file_get_contents($root.'/.gitattributes'))->toBe($before);
+});
+
 it('can run again without changing anything it already did', function (): void {
     $root = packageRoot();
     $config = HarnessConfig::fromArray(['profile' => 'core']);

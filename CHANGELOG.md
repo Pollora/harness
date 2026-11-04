@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pollora-qa init` no longer duplicates `.gitattributes` lines and says which PHPStan includes it removes** (#54). `/.gitattributes export-ignore` was added twice in one run (once from the harness list, once from the files found at the top level), and a line already present under another spelling (`tests/`, `/tests`, `tests`) was added again; each entry is now written once. When `init` drops the `szepeviktor/phpstan-wordpress` or `larastan/larastan` include of `phpstan.neon` because the harness preset already loads it, the output now says so (`removed … from the includes of phpstan.neon: the harness preset already loads it`). Visible change: running `init` on a repository that already has some of these lines adds fewer of them, and a removed include appears in the list of changes
+
 ## [0.1.19] - 2026-11-04
 
 ### Added
