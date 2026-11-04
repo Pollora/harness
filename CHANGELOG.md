@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-11-04
+
 ### Fixed
 
 - **The *Tests and architecture* gate runs `tests/Arch.php` even when `phpunit.xml` lists no suite for it** (#53). `vendor/bin/pest` only runs the suites of `phpunit.xml(.dist)`, so a repository whose suites left out `tests/Arch.php` passed the gate while its architecture rules (ARCH-01, ARCH-03, ARCH-08, ARCH-09, CONV-03, CONV-05, CONV-07) were never evaluated. The harness now reads the suites: when `tests/Arch.php` exists and no `<file>` or `<directory>` of a suite runs it (a `<directory>` only counts when its `suffix` matches `Arch.php`, the default being `Test.php`; an `<exclude>` removes it), the gate runs `vendor/bin/pest` and then `vendor/bin/pest tests/Arch.php`, fails if either fails, and says so before it starts. With `--coverage`, the coverage report still comes from the first run. A repository that lists the file in a suite (this one, `Pollora/discovery`) runs it once, as before. Visible change: a repository whose `tests/Arch.php` was failing without anyone seeing it will now see the gate fail; fix the rules, or add the file to a suite (`<testsuite name="Architecture"><file>tests/Arch.php</file></testsuite>`) to run it with the others
