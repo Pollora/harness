@@ -60,3 +60,28 @@ it('reads only the files of the repository when a dependency maps the same names
     expect($layers->files)->not->toHaveKey('Acme\\Shared\\Interval')
         ->and(StrictTypes::violations($layers, 'Acme\\Shared'))->toBe([]);
 });
+
+it('ignores Blade templates and files that declare no type (ARCH-09)', function (): void {
+    $root = harnessTempDir();
+    mkdir($root.'/src/Prompts', 0777, true);
+    file_put_contents($root.'/composer.json', '{"autoload": {"psr-4": {"Acme\\\\Shared\\\\": "src/"}}}');
+    file_put_contents($root.'/src/Prompts/upgrade.blade.php', "<h1>{{ \$title }}</h1>\n@php(\$x = 1)\n");
+    file_put_contents($root.'/src/Prompts/php-blade.blade.php', "<?php\n\nfinal class Shown {}\n");
+    file_put_contents($root.'/src/helpers.php', "<?php\n\nfunction helper(): string\n{\n    return Foo::class.' is a class and an enum';\n}\n// class Commented {}\n\$o = new class {};\n");
+    file_put_contents($root.'/src/Loose.php', "<?php\n\nnamespace Acme\\Shared;\n\nenum Loose {}\n");
+
+    expect(StrictTypes::violations(Layers::discover($root), 'Acme\\Shared'))->toBe(['Acme\\Shared\\Loose']);
+});
+
+it('detects a type declaration from the tokens', function (string $source, bool $expected): void {
+    expect(StrictTypes::declaresType($source))->toBe($expected);
+})->with([
+    'class' => ['<?php final class A {}', true],
+    'interface' => ['<?php interface A {}', true],
+    'trait' => ['<?php trait A {}', true],
+    'enum' => ['<?php enum A: string { case B = "b"; }', true],
+    '::class' => ['<?php return A::class;', false],
+    'anonymous class' => ['<?php $a = new class {};', false],
+    'string and comment' => ['<?php /* class A */ $a = "interface B";', false],
+    'html only' => ['<p>class A {}</p>', false],
+]);
