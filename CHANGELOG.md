@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-11-04
+
 ### Fixed
 
 - **`pollora-qa init` no longer guesses** (#42). It writes `downstream` only when `--downstream=` is given or already recorded (a `core` package used to get `["framework"]` even when the framework does not require it); it pins the generated workflow to the tag of the installed harness (`php-package.yml@v0.1.17`) and keeps `@main` only when the harness runs from a branch; and it adds the `qa` and `qa:fast` scripts by editing the text of `composer.json`, so `keywords` and the indentation are no longer reformatted
