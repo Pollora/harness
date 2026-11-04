@@ -23,6 +23,7 @@ final readonly class Step
         public array|Closure $action,
         public array $requires = [],
         public ?string $skipReason = null,
+        public ?string $install = null,
     ) {}
 
     /**
@@ -31,5 +32,16 @@ final readonly class Step
     public static function skipped(string $name, array $rules, string $reason): self
     {
         return new self($name, $rules, [], skipReason: $reason);
+    }
+
+    /**
+     * A step that cannot run here because a tool is not installed.
+     *
+     * @param  list<string>  $rules
+     * @param  string  $install  The command that installs the tool, on one line
+     */
+    public static function missingTool(string $name, array $rules, string $reason, string $install): self
+    {
+        return new self($name, $rules, [], skipReason: $reason, install: $install);
     }
 }

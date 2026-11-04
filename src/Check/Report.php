@@ -18,6 +18,7 @@ final readonly class Report
     /**
      * @param  list<array{step: Step, result: StepResult}>  $results
      * @param  list<string>  $observed  Gates reported but never blocking, whatever the mode
+     * @param  bool  $strict  A gate that did not run for want of a tool fails the check, whatever the mode
      */
     public function __construct(
         private Profile $profile,
@@ -25,6 +26,7 @@ final readonly class Report
         private bool $fast,
         private array $results,
         private array $observed = [],
+        private bool $strict = false,
     ) {}
 
     /**
@@ -32,6 +34,10 @@ final readonly class Report
      */
     public function hasBlockingFailures(): bool
     {
+        if ($this->strict && $this->missingTools() !== []) {
+            return true;
+        }
+
         if (! $this->mode->blocks()) {
             return false;
         }
@@ -43,6 +49,19 @@ final readonly class Report
         }
 
         return false;
+    }
+
+    /**
+     * The gates that did not run because a tool is missing, except the ones the repository only observes.
+     *
+     * @return list<array{step: Step, result: StepResult}>
+     */
+    public function missingTools(): array
+    {
+        return array_values(array_filter(
+            $this->results,
+            fn (array $entry): bool => $entry['result']->isMissingTool() && ! in_array($entry['step']->name, $this->observed, true),
+        ));
     }
 
     public function hasFailures(): bool
@@ -64,7 +83,7 @@ final readonly class Report
             $status = match ($result->status) {
                 StepResult::PASSED => $io->success('✔ passed '),
                 StepResult::FAILED => $io->failure('✘ failed '),
-                default => $io->warning('– skipped'),
+                default => $result->isMissingTool() ? $io->warning('– no tool') : $io->warning('– skipped'),
             };
 
             $io->line(sprintf('  %s  %-24s %s', $status, $step->name, $io->muted(implode(' ', $step->rules))));
@@ -78,8 +97,25 @@ final readonly class Report
 
         $io->line();
 
+        $missing = $this->missingTools();
+
+        if ($missing !== []) {
+            $io->line($io->warning(sprintf('%d gate(s) did not run because a tool is missing. This is not a pass, CI may still fail on what they guard:', count($missing))));
+
+            foreach ($missing as ['step' => $step, 'result' => $result]) {
+                $io->line(sprintf('  %s (%s): %s', $step->name, implode(' ', $step->rules), $result->install));
+            }
+
+            $io->line($this->strict
+                ? $io->failure('Strict mode: install the missing tools, then run the check again.')
+                : $io->muted('Add --strict to fail when a tool is missing.'));
+            $io->line();
+        }
+
         if (! $this->hasFailures()) {
-            $io->line($io->success('Every gate passed.'));
+            $io->line($missing === []
+                ? $io->success('Every gate passed.')
+                : $io->warning('Every gate that ran passed, but not every gate ran.'));
 
             return;
         }
@@ -99,12 +135,14 @@ final readonly class Report
             'mode' => $this->mode->value,
             'gates' => $this->fast ? 'fast' : 'full',
             'failed' => $this->hasFailures(),
+            'strict' => $this->strict,
             'steps' => array_map(static fn (array $entry): array => [
                 'name' => $entry['step']->name,
                 'rules' => $entry['step']->rules,
                 'status' => $entry['result']->status,
                 'seconds' => round($entry['result']->seconds, 2),
                 'detail' => $entry['result']->detail,
+                ...($entry['result']->isMissingTool() ? ['missing_tool' => true, 'install' => $entry['result']->install] : []),
             ], $this->results),
         ];
     }
@@ -131,7 +169,9 @@ final readonly class Report
             $lines[] = sprintf('| %s | %s | %s |', $step->name, implode(', ', $step->rules), match ($result->status) {
                 StepResult::PASSED => '✅ passed',
                 StepResult::FAILED => $this->mode->blocks() && ! in_array($step->name, $this->observed, true) ? '❌ failed' : '⚠️ failed (observed)',
-                default => '➖ skipped: '.str_replace('|', '\|', $result->detail),
+                default => $result->isMissingTool()
+                    ? '⚠️ not run, tool missing: '.str_replace('|', '\|', $result->detail).' — install: `'.str_replace('|', '\|', (string) $result->install).'`'
+                    : '➖ skipped: '.str_replace('|', '\|', $result->detail),
             });
         }
 

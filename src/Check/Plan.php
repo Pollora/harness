@@ -205,7 +205,7 @@ final readonly class Plan
         $semgrep = Paths::which('semgrep');
 
         if ($semgrep === null) {
-            return Step::skipped('Security patterns', $rules, 'semgrep is not installed (pipx install semgrep); CI runs it');
+            return Step::missingTool('Security patterns', $rules, 'semgrep is not installed, so these rules were not checked (CI runs it)', 'pipx install semgrep');
         }
 
         $configs = ['--config', Paths::preset('semgrep/common.yml')];
@@ -229,7 +229,7 @@ final readonly class Plan
         $composer = Paths::which('composer');
 
         return $composer === null
-            ? Step::skipped('Dependency audit', ['SEC-09'], 'composer is not on the PATH')
+            ? Step::missingTool('Dependency audit', ['SEC-09'], 'composer is not on the PATH', 'https://getcomposer.org/download/')
             : new Step('Dependency audit', ['SEC-09'], [$composer, 'audit', '--no-interaction']);
     }
 
@@ -248,7 +248,7 @@ final readonly class Plan
         }
 
         if ($npm === null) {
-            return Step::skipped($name, ['SEC-09'], 'npm is not on the PATH');
+            return Step::missingTool($name, ['SEC-09'], 'npm is not on the PATH', 'install Node.js (https://nodejs.org)');
         }
 
         $commands = array_map(

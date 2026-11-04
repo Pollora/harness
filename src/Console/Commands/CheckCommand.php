@@ -34,6 +34,7 @@ final class CheckCommand implements Command
               --infection=FILE    Infection JSON log to compare with the ratchet
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
+              --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
               --report=FILE       Where to write the JSON report (default .harness/report.json)
             TXT;
     }
@@ -55,7 +56,7 @@ final class CheckCommand implements Command
 
         $io->line(sprintf('Pollora harness · profile %s · %s mode · %s gates', $config->profile->value, $mode->value, $fast ? 'fast' : 'full'));
 
-        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT]);
+        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT], $io->flag('strict'));
         $report->print($io);
         $report->writeJson($io->cwd.'/'.($io->option('report') ?? '.harness/report.json'));
 

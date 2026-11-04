@@ -153,3 +153,28 @@ it('compares the report found under .harness/ with the ratchet', function (): vo
         ->and($output)->toContain('regressed')
         ->and($output)->not->toContain('no report');
 });
+
+it('reports Semgrep missing from the PATH, and fails with --strict', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/src');
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core", "mode": "enforce"}');
+
+    $run = static function (string ...$flags) use ($cwd): array {
+        $command = [PHP_BINARY, dirname(__DIR__, 2).'/bin/pollora-qa', 'check', ...$flags, '--no-ansi'];
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $cwd, ['PATH' => '/nonexistent']);
+        $output = stream_get_contents($pipes[1]).stream_get_contents($pipes[2]);
+
+        return [proc_close($process), (string) $output];
+    };
+
+    [$code, $output] = $run();
+
+    expect($output)->toContain('pipx install semgrep')
+        ->and($output)->toContain('composer require --dev laravel/pint')
+        ->and($output)->toContain('not every gate ran');
+
+    [$strictCode, $strictOutput] = $run('--strict');
+
+    expect($strictCode)->toBe(1)
+        ->and($strictOutput)->toContain('Strict mode');
+});

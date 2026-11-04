@@ -36,7 +36,9 @@ final readonly class Runner
             $this->io->line(match ($result->status) {
                 StepResult::PASSED => $this->io->success('  passed'),
                 StepResult::FAILED => $this->io->failure('  failed'),
-                default => $this->io->warning('  skipped: '.$result->detail),
+                default => $result->isMissingTool()
+                    ? $this->io->warning('  not run, tool missing: '.$result->detail.' ('.$result->install.')')
+                    : $this->io->warning('  skipped: '.$result->detail),
             }.$this->io->muted(sprintf(' (%.1fs)', $result->seconds)));
 
             if ($result->isFailed()) {
@@ -52,12 +54,14 @@ final readonly class Runner
     private function execute(Step $step): StepResult
     {
         if ($step->skipReason !== null) {
-            return StepResult::skipped($step->skipReason);
+            return $step->install === null ? StepResult::skipped($step->skipReason) : StepResult::missingTool($step->skipReason, $step->install);
         }
 
         foreach ($step->requires as $required) {
             if (! file_exists($this->cwd.'/'.$required)) {
-                return StepResult::skipped("{$required} not found");
+                return str_starts_with($required, 'vendor/bin/')
+                    ? StepResult::missingTool("{$required} not found", self::installCommand($required))
+                    : StepResult::skipped("{$required} not found");
             }
         }
 
@@ -76,6 +80,21 @@ final readonly class Runner
         return $exitCode === 0
             ? StepResult::passed()
             : StepResult::failed(implode("\n", array_slice(explode("\n", rtrim($output)), -self::TAIL)));
+    }
+
+    /**
+     * The Composer command that installs a tool of vendor/bin/.
+     */
+    private static function installCommand(string $binary): string
+    {
+        return match (basename($binary)) {
+            'pint' => 'composer require --dev laravel/pint',
+            'phpstan' => 'composer require --dev phpstan/phpstan',
+            'rector' => 'composer require --dev rector/rector',
+            'pest' => 'composer require --dev pestphp/pest',
+            'composer-dependency-analyser' => 'composer require --dev shipmonk/composer-dependency-analyser',
+            default => 'composer install',
+        };
     }
 
     /**
