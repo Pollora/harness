@@ -140,7 +140,7 @@ final class ComposerScripts
                 continue;
             }
 
-            if ($found && $open === null && $depth === 1 && ! ctype_space($char) && $char !== ':') {
+            if ($found && $open === null && $depth === 1 && trim($char) !== '' && $char !== ':') {
                 return false;
             }
         }

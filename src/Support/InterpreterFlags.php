@@ -21,7 +21,7 @@ final class InterpreterFlags
      */
     public static function inherited(): array
     {
-        $files = array_filter([php_ini_loaded_file(), ...explode(',', (string) php_ini_scanned_files())]);
+        $files = array_filter([php_ini_loaded_file(), ...explode(',', (string) php_ini_scanned_files())], static fn (string|false $file): bool => $file !== false && trim($file) !== '');
         $ini = implode("\n", array_map(static fn (string $file): string => (string) @file_get_contents(trim($file)), $files));
 
         return self::from(
@@ -42,18 +42,20 @@ final class InterpreterFlags
         $flags = [];
 
         if ($xdebugLoaded && preg_match('/^\s*zend_extension\s*=.*xdebug/mi', $ini) !== 1) {
-            array_push($flags, '-d', 'zend_extension=xdebug');
-
+            $flags[] = '-d';
+            $flags[] = 'zend_extension=xdebug';
             if ($xdebugMode !== '') {
-                array_push($flags, '-d', 'xdebug.mode='.$xdebugMode);
+                $flags[] = '-d';
+                $flags[] = 'xdebug.mode='.$xdebugMode;
             }
         }
 
         if ($pcovLoaded && preg_match('/^\s*extension\s*=.*pcov/mi', $ini) !== 1) {
-            array_push($flags, '-d', 'extension=pcov');
-
+            $flags[] = '-d';
+            $flags[] = 'extension=pcov';
             if ($pcovEnabled !== '') {
-                array_push($flags, '-d', 'pcov.enabled='.$pcovEnabled);
+                $flags[] = '-d';
+                $flags[] = 'pcov.enabled='.$pcovEnabled;
             }
         }
 
