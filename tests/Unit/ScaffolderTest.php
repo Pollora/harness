@@ -3,8 +3,12 @@
 declare(strict_types=1);
 
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Console\Commands\InitCommand;
+use Pollora\Harness\Console\Io;
 use Pollora\Harness\Scaffold\AgentsFile;
+use Pollora\Harness\Scaffold\ComposerScripts;
 use Pollora\Harness\Scaffold\Scaffolder;
+use Pollora\Harness\Support\Release;
 
 function packageRoot(): string
 {
@@ -122,4 +126,82 @@ it('lists every enforced and observed rule in AGENTS.md, and no planned one', fu
 
     expect($block)->toContain('**ARCH-02**', '**SEC-03**', '**QA-01**')
         ->not->toContain('**PERF-01**');
+});
+
+it('pins the generated workflow to the given release tag', function (): void {
+    $root = packageRoot();
+
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core']), 'v0.1.17'))->apply(5);
+
+    expect((string) file_get_contents($root.'/.github/workflows/harness.yml'))
+        ->toContain('Pollora/harness/.github/workflows/php-package.yml@v0.1.17')
+        ->not->toContain('@main')
+        ->not->toContain('{{');
+});
+
+it('reads the tag of the installed release, and falls back to main for a branch', function (?string $version, ?string $tag): void {
+    expect(Release::tag($version))->toBe($tag);
+})->with([
+    'a tag with v' => ['v0.1.17', 'v0.1.17'],
+    'a tag without v' => ['0.2.0', 'v0.2.0'],
+    'a branch' => ['dev-main', null],
+    'a pre-release' => ['v0.2.0-beta.1', null],
+    'unknown' => [null, null],
+]);
+
+it('keeps the formatting of composer.json when it adds the scripts', function (): void {
+    $root = packageRoot();
+    $original = <<<'JSON'
+{
+  "name": "pollora/cli",
+  "keywords": ["pollora", "cli"],
+  "require": {
+    "php": "^8.3"
+  },
+  "scripts": {
+    "test": "pest"
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
+
+JSON;
+    file_put_contents($root.'/composer.json', $original);
+
+    (new Scaffolder($root, HarnessConfig::fromArray(['profile' => 'core'])))->apply(5);
+
+    $patched = (string) file_get_contents($root.'/composer.json');
+
+    expect($patched)->toContain('"keywords": ["pollora", "cli"],')
+        ->and($patched)->toContain("    \"test\": \"pest\",\n    \"qa\": \"@php vendor/bin/pollora-qa check\",\n    \"qa:fast\": \"@php vendor/bin/pollora-qa check --fast\"\n  },")
+        ->and(json_decode($patched, true)['scripts'])->toHaveKeys(['test', 'qa', 'qa:fast']);
+});
+
+it('adds a scripts block to a composer.json that has none, in its own style', function (string $json): void {
+    $patched = ComposerScripts::add($json, ['qa' => '@php vendor/bin/pollora-qa check']);
+
+    expect(json_decode((string) $patched, true))->toBe([
+        'name' => 'a/b',
+        'keywords' => ['x', 'y'],
+        'scripts' => ['qa' => '@php vendor/bin/pollora-qa check'],
+    ])->and($patched)->toContain('"keywords": ["x", "y"]');
+})->with([
+    'spaces' => ["{\n  \"name\": \"a/b\",\n  \"keywords\": [\"x\", \"y\"]\n}\n"],
+    'tabs' => ["{\n\t\"name\": \"a/b\",\n\t\"keywords\": [\"x\", \"y\"]\n}\n"],
+]);
+
+it('fills an empty scripts object and ignores a scripts key nested elsewhere', function (): void {
+    $patched = ComposerScripts::add('{"extra": {"scripts": {"a": "b"}}, "scripts": {}}', ['qa' => 'x']);
+
+    expect(json_decode((string) $patched, true))->toBe(['extra' => ['scripts' => ['a' => 'b']], 'scripts' => ['qa' => 'x']]);
+});
+
+it('does not write a downstream repository the user did not ask for', function (): void {
+    $root = packageRoot();
+    $stream = fopen('php://memory', 'w+');
+    $io = new Io($root, [], ['profile' => 'core'], $stream, $stream);
+
+    expect((new InitCommand)->run($io))->toBe(0)
+        ->and(json_decode((string) file_get_contents($root.'/.harness.json'), true))->not->toHaveKey('downstream');
 });

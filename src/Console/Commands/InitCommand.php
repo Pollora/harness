@@ -34,7 +34,7 @@ final class InitCommand implements Command
         return <<<'TXT'
               --profile=PROFILE   core, framework, integration, wp-plugin, template or project
               --mode=MODE         observe (default) or enforce
-              --downstream=LIST   Repositories to run against this one (core default: framework)
+              --downstream=LIST   Repositories to run against this one (none by default, for instance framework)
             TXT;
     }
 
@@ -58,7 +58,7 @@ final class InitCommand implements Command
         $config = new HarnessConfig(
             profile: $profile,
             mode: Mode::tryFrom($io->option('mode') ?? '') ?? $existing->mode ?? Mode::Observe,
-            downstream: $downstream !== [] ? $downstream : ($existing->downstream ?? ($profile->hasDownstream() ? ['framework'] : [])),
+            downstream: $downstream !== [] ? $downstream : ($existing->downstream ?? []),
             // ARCH-04 starts green: the Laravel packages a core package needs
             // today are recorded as exceptions, each one to remove explicitly.
             allowLaravel: $existing->allowLaravel ?? ($profile->mustStayLaravelFree() ? $this->laravelPackages($require) : []),

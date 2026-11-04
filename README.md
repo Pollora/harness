@@ -31,7 +31,7 @@ vendor/bin/pollora-qa init --profile=core
 composer qa
 ```
 
-`init` never overwrites a file. It writes `.harness.json`, adds the harness preset to `phpstan.neon`, and creates what is missing: `tests/Arch.php`, `rector.php`, `.github/workflows/harness.yml`, `.claude/settings.json`, `AGENTS.md`, and the `qa` and `qa:fast` Composer scripts. Review the diff, pin the workflow call to a release tag (`php-package.yml@v0.1.2`; `init` writes `@main`), commit, and the repository is in **observe mode**: every gate runs and reports, none blocks. Switch `.harness.json` to `"mode": "enforce"` once the reports are clean.
+`init` never overwrites a file. It writes `.harness.json`, adds the harness preset to `phpstan.neon`, and creates what is missing: `tests/Arch.php`, `rector.php`, `.github/workflows/harness.yml`, `.claude/settings.json`, `AGENTS.md`, and the `qa` and `qa:fast` Composer scripts. Review the diff, review the workflow call (`init` pins it to the release tag of the installed harness, such as `php-package.yml@v0.1.17`, and to `@main` only when the harness runs from a branch), commit, and the repository is in **observe mode**: every gate runs and reports, none blocks. Switch `.harness.json` to `"mode": "enforce"` once the reports are clean.
 
 ## Profiles
 
