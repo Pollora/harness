@@ -16,6 +16,8 @@ function archRun(array $allowRules): array
     mkdir($root.'/tests');
     mkdir($root.'/vendor');
     file_put_contents($root.'/vendor/autoload.php', "<?php\n\n\$loader = require '".dirname(__DIR__, 2)."/vendor/autoload.php';\n\$loader->addPsr4('Acme\\\\Shared\\\\', __DIR__.'/../src');\n\nreturn \$loader;\n");
+    // a cacheDirectory keeps Pest from looking for its own .temp folder, which a fresh install may not have
+    file_put_contents($root.'/phpunit.xml', '<phpunit cacheDirectory=".phpunit.cache"><testsuites><testsuite name="Arch"><file>tests/Arch.php</file></testsuite></testsuites></phpunit>');
     file_put_contents($root.'/composer.json', '{"autoload": {"psr-4": {"Acme\\\\Shared\\\\": "src/"}}}');
     file_put_contents($root.'/.harness.json', json_encode(['profile' => 'core', 'allow_rules' => $allowRules]));
     file_put_contents($root.'/src/Open.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Acme\\Shared;\n\nuse Attribute;\n\n#[Attribute]\nclass Open {}\n");
