@@ -143,3 +143,90 @@ it('knows when git cannot be used', function (): void {
         ->and(Paths::gitUsable($healthy))->toBeTrue()
         ->and(Paths::changedPhpFiles($healthy))->toBe(['Foo.php']);
 });
+
+/**
+ * @return Step The 'Tests and architecture' step of a repository whose phpunit.xml holds $suites
+ */
+function testsStepWith(string $suites, bool $arch = true, ?string $coverage = null): Step
+{
+    $root = harnessTempDir();
+    mkdir($root.'/tests/Unit', 0o755, true);
+    mkdir($root.'/tests/Architecture', 0o755, true);
+
+    if ($arch) {
+        file_put_contents($root.'/tests/Arch.php', '<?php');
+    }
+
+    file_put_contents($root.'/phpunit.xml', "<phpunit><testsuites>{$suites}</testsuites></phpunit>");
+
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), $root))->full($coverage, null);
+
+    return array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Tests and architecture'))[0];
+}
+
+it('runs tests/Arch.php explicitly, and says so, when no suite of phpunit.xml holds it', function (): void {
+    $step = testsStepWith('<testsuite name="Unit"><directory>tests/Unit</directory></testsuite>');
+
+    expect($step->action)->toBe(['sh', '-c', "status=0; 'vendor/bin/pest' || status=1; 'vendor/bin/pest' 'tests/Arch.php' || status=1; exit \$status"])
+        ->and($step->note)->toBe(Plan::ARCH_OUTSIDE_SUITES);
+});
+
+it('fails the gate when only the explicit architecture run fails', function (): void {
+    $root = harnessTempDir();
+    mkdir($root.'/vendor/bin', 0o755, true);
+    mkdir($root.'/tests');
+    file_put_contents($root.'/tests/Arch.php', '<?php');
+    file_put_contents($root.'/phpunit.xml', '<phpunit><testsuites><testsuite name="Unit"><directory>tests/Unit</directory></testsuite></testsuites></phpunit>');
+    file_put_contents($root.'/vendor/bin/pest', "#!/bin/sh\n[ \"\$1\" = tests/Arch.php ] && exit 1\nexit 0\n");
+    chmod($root.'/vendor/bin/pest', 0o755);
+
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), $root))->full(null, null);
+    $command = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Tests and architecture'))[0]->action;
+    exec('cd '.escapeshellarg($root).' && '.implode(' ', array_map('escapeshellarg', $command)), result_code: $exitCode);
+
+    expect($exitCode)->toBe(1);
+});
+
+it('keeps the coverage run for the suites and adds the architecture run without it', function (): void {
+    $step = testsStepWith('<testsuite name="Unit"><directory>tests/Unit</directory></testsuite>', coverage: 'clover.xml');
+
+    expect($step->action[2])->toContain("'--coverage-clover' 'clover.xml' || status=1; 'vendor/bin/pest' 'tests/Arch.php'");
+});
+
+it('runs tests/Arch.php once when a suite already holds it', function (string $suites): void {
+    $step = testsStepWith($suites);
+
+    expect($step->action)->toBe(['vendor/bin/pest'])
+        ->and($step->note)->toBeNull();
+})->with([
+    'listed as a file' => ['<testsuite name="Architecture"><file>tests/Arch.php</file></testsuite>'],
+    'a directory with the suffix' => ['<testsuite name="Architecture"><directory suffix="Arch.php">tests</directory></testsuite>'],
+    'a file next to the unit suite' => ['<testsuite name="Unit"><directory>tests/Unit</directory></testsuite><testsuite name="Arch"><file>./tests/Arch.php</file></testsuite>'],
+]);
+
+it('still runs tests/Arch.php when a directory suite does not match its name or excludes it', function (string $suites): void {
+    expect(testsStepWith($suites)->action[0])->toBe('sh');
+})->with([
+    'the default suffix is Test.php' => ['<testsuite name="All"><directory>tests</directory></testsuite>'],
+    'excluded' => ['<testsuite name="All"><directory suffix=".php">tests</directory><exclude>tests/Arch.php</exclude></testsuite>'],
+]);
+
+it('has nothing to add where there is no tests/Arch.php', function (): void {
+    expect(testsStepWith('<testsuite name="Unit"><directory>tests/Unit</directory></testsuite>', arch: false)->action)->toBe(['vendor/bin/pest']);
+});
+
+it('runs tests/Arch.php explicitly where there is no phpunit.xml at all', function (): void {
+    $root = harnessTempDir();
+    mkdir($root.'/tests');
+    file_put_contents($root.'/tests/Arch.php', '<?php');
+
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), $root))->full(null, null);
+
+    expect(array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Tests and architecture'))[0]->action[0])->toBe('sh');
+});
+
+it('finds tests/Arch.php in the suites of this repository', function (): void {
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), dirname(__DIR__, 2)))->full(null, null);
+
+    expect(array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Tests and architecture'))[0]->action)->toBe(['vendor/bin/pest']);
+});
