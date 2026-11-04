@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-11-04
+
 ### Fixed
 
 - **ARCH-09 only checks files that declare a class, interface, trait or enum** (#59). Since 0.1.20 the rule read every `.php` file under the PSR-4 roots, so the Blade templates kept under `src/` in `Pollora/nectar` (`src/Mcp/Prompts/*/*.blade.php`) were reported as classes without `declare(strict_types=1)` and the *Tests and architecture* gate failed. A file is now checked only when its tokens contain a type declaration (`Foo::class`, `new class` and the words in strings or comments do not count); `*.blade.php` files and files without a type, such as helper scripts, are ignored, as they were before 0.1.20. Visible change: a repository that 0.1.20 turned red for such a file turns green again; a class file without strict types is still listed
