@@ -8,6 +8,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
+use Pollora\Harness\Metrics\MissingReports;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
@@ -290,15 +291,23 @@ final readonly class Plan
         $cwd = $this->cwd;
 
         return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection): StepResult {
-            $rows = $config->ratchet->compare((new Collector($cwd))->collect($coverage, $infection));
+            $collector = new Collector($cwd);
+            $rows = $config->ratchet->compare($collector->collect($coverage, $infection));
+            $source = $coverage === null ? $collector->findClover() : null;
             $regressions = array_filter($rows, static fn (array $row): bool => $row['verdict'] === 'regressed');
             $lines = array_map(static fn (array $row): string => sprintf(
                 '  %-30s recorded %-8s measured %-8s %s',
                 $row['label'],
                 $row['recorded'] ?? '-',
                 $row['measured'] ?? '-',
-                $row['verdict'],
+                MissingReports::verdict($row),
             ), $rows);
+
+            if ($source !== null) {
+                $lines[] = sprintf('  Line coverage read from %s (no --coverage given); run `check --coverage` to refresh it.', $source);
+            }
+
+            array_push($lines, ...MissingReports::notes($rows));
 
             return $regressions === []
                 ? StepResult::passed(implode("\n", $lines))

@@ -31,3 +31,22 @@ it('reports a missing source as not measured rather than as zero', function (): 
         ->and($metrics['msi'])->toBeNull()
         ->and($metrics['phpstan_level'])->toBeNull();
 });
+
+it('finds the Clover report at a conventional location when none is given', function (string $location): void {
+    $cwd = harnessTempDir();
+    mkdir(dirname($cwd.'/'.$location), 0o755, true);
+    copy(fixtureProject().'/coverage.xml', $cwd.'/'.$location);
+
+    $collector = new Collector($cwd);
+
+    expect($collector->findClover())->toBe($location)
+        ->and($collector->collect()['coverage'])->toBe(75.0);
+})->with(Collector::CLOVER_LOCATIONS);
+
+it('prefers the report it is given over the conventional one', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/.harness');
+    copy(fixtureProject().'/coverage.xml', $cwd.'/.harness/coverage.xml');
+
+    expect((new Collector($cwd))->collect('missing.xml')['coverage'])->toBeNull();
+});

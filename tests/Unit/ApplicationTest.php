@@ -126,3 +126,30 @@ it('fails, and says why, when a file the command loads ends the process', functi
     expect($code)->toBe(1)
         ->and($output)->toContain('stopped before it finished', 'exit() or die()');
 });
+
+it('says the coverage report is missing instead of printing a bare "unmeasured"', function (): void {
+    $cwd = harnessTempDir();
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core", "ratchet": {"coverage": 70}}');
+
+    [$code, $output] = polloraQa($cwd, 'ratchet');
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('no report')
+        ->and($output)->toContain('no Clover report found')
+        ->and($output)->toContain('.harness/coverage.xml')
+        ->and($output)->toContain('check --coverage')
+        ->and($output)->not->toMatch('/Line coverage \(%\)\s+70\s+-\s+unmeasured/');
+});
+
+it('compares the report found under .harness/ with the ratchet', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/.harness');
+    copy(fixtureProject().'/coverage.xml', $cwd.'/.harness/coverage.xml');
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core", "ratchet": {"coverage": 90}}');
+
+    [$code, $output] = polloraQa($cwd, 'ratchet');
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('regressed')
+        ->and($output)->not->toContain('no report');
+});

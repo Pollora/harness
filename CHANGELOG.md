@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A missing coverage report is no longer shown as "unmeasured"** (#47). `pollora-qa ratchet` and `pollora-qa check` now look for a Clover report at `.harness/coverage.xml` (where CI writes it), `.harness/clover.xml` or `build/logs/clover.xml` when `--coverage=FILE` is not given, and say which one they read. When a coverage or mutation score is recorded in `.harness.json` and no report is found, the verdict reads `no report` (not `unmeasured`) and a note says where it looked and how to produce one; the ratchet still does not fail for it. `check --coverage` without a value now writes and reads `.harness/coverage.xml`. Visible change: a local `ratchet` or `check` run that used to ignore a report lying under `.harness/` now compares with it, so a regression it hid shows up
+
 ## [0.1.18] - 2026-11-04
 
 ### Fixed
