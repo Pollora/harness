@@ -14,6 +14,9 @@ use DOMDocument;
  */
 final readonly class Collector
 {
+    /** Where a Clover report is looked for when no --coverage=FILE is given; the first is where `check --coverage` writes it. */
+    public const array CLOVER_LOCATIONS = ['.harness/coverage.xml', '.harness/clover.xml', 'build/logs/clover.xml'];
+
     private const array CONFIG_FILES = ['phpstan.neon', 'phpstan.neon.dist', 'phpstan.dist.neon'];
 
     private const array BASELINE_FILES = ['phpstan-baseline.neon', 'phpstan-baseline.php'];
@@ -26,6 +29,8 @@ final readonly class Collector
      */
     public function collect(?string $cloverPath = null, ?string $infectionPath = null, array $overrides = []): array
     {
+        $cloverPath ??= $this->findClover();
+
         return array_merge([
             'phpstan_level' => $this->phpstanLevel(),
             'phpstan_baseline' => $this->phpstanBaselineEntries(),
@@ -33,6 +38,20 @@ final readonly class Collector
             'type_coverage' => null,
             'msi' => $infectionPath !== null ? self::infectionMsi($this->resolve($infectionPath)) : null,
         ], $overrides);
+    }
+
+    /**
+     * The Clover report at a conventional location, relative to the root, or null when there is none.
+     */
+    public function findClover(): ?string
+    {
+        foreach (self::CLOVER_LOCATIONS as $location) {
+            if (is_file($this->resolve($location))) {
+                return $location;
+            }
+        }
+
+        return null;
     }
 
     /**

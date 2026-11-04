@@ -59,13 +59,36 @@ final class Paths
     }
 
     /**
-     * PHP files changed in the working tree (staged, unstaged or untracked),
-     * relative to the repository root.
-     *
-     * @return list<string>
+     * Whether git can answer in this directory: a worktree created on the host whose `.git` file points outside
+     * the container (DDEV), a missing binary or a directory git refuses to trust all say no.
      */
-    public static function changedPhpFiles(string $cwd): array
+    public static function gitUsable(string $cwd): bool
     {
+        $process = proc_open(['git', 'rev-parse', '--is-inside-work-tree'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $cwd);
+
+        if (! is_resource($process)) {
+            return false;
+        }
+
+        $output = trim((string) stream_get_contents($pipes[1]));
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        return proc_close($process) === 0 && $output === 'true';
+    }
+
+    /**
+     * PHP files changed in the working tree (staged, unstaged or untracked),
+     * relative to the repository root; null when git cannot say.
+     *
+     * @return list<string>|null
+     */
+    public static function changedPhpFiles(string $cwd): ?array
+    {
+        if (! self::gitUsable($cwd)) {
+            return null;
+        }
+
         $commands = [
             ['git', 'diff', '--name-only', '--diff-filter=ACMR', 'HEAD'],
             ['git', 'ls-files', '--others', '--exclude-standard'],

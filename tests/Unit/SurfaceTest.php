@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Pollora\Harness\Config\CommandExemption;
 use Pollora\Harness\Surface\NamingConventions;
 use Pollora\Harness\Surface\SurfaceDiff;
 use Pollora\Harness\Surface\SurfaceExtractor;
@@ -105,4 +106,30 @@ it('records the Symfony Console commands of a package, however they are named', 
     $listed = array_keys(array_filter((new SurfaceExtractor($root))->extract(), static fn (string $key): bool => str_starts_with($key, 'command:'), ARRAY_FILTER_USE_KEY));
 
     expect($listed)->toBe(['command:new', 'command:pollora:attr', 'command:pollora:typed', 'command:self-update', 'command:version']);
+});
+
+it('lets a command keep its name when .harness.json says why, and still flags another (CONV-06)', function (): void {
+    $surface = fixtureSurface() + ['command:new' => 'command', 'command:nectar:mcp' => 'command'];
+    $exemptions = [
+        new CommandExemption('orders:export', false, 'named for the tool'),
+        new CommandExemption('nectar:', true, 'the MCP server is the product name'),
+    ];
+
+    expect(NamingConventions::problems($surface, $exemptions))->toBe([
+        '[CONV-04] The hook pollora/order_placed should read pollora/<module>/<event_snake_case>.',
+        '[CONV-06] The command new should start with pollora:.',
+    ])->and(NamingConventions::exempted($surface, $exemptions))->toBe([
+        '[CONV-06] The command orders:export keeps its name (allow_commands: named for the tool).',
+        '[CONV-06] The command nectar:mcp keeps its name (allow_commands: the MCP server is the product name).',
+    ]);
+});
+
+it('matches a command exactly, and a prefix at the start only', function (): void {
+    $exact = new CommandExemption('new', false, 'x');
+    $prefix = new CommandExemption('nectar:', true, 'x');
+
+    expect($exact->matches('new'))->toBeTrue()
+        ->and($exact->matches('new:thing'))->toBeFalse()
+        ->and($prefix->matches('nectar:mcp'))->toBeTrue()
+        ->and($prefix->matches('my-nectar:mcp'))->toBeFalse();
 });

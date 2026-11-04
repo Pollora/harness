@@ -8,6 +8,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
+use Pollora\Harness\Metrics\MissingReports;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
@@ -26,6 +27,8 @@ final readonly class Plan
 
     public const string ARCHIVE = 'Distribution archive';
 
+    public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
+
     /**
      * Gates reported but never blocking, whatever `.harness.json` says: a new
      * gate starts here so that a release does not turn a green repository red.
@@ -40,16 +43,18 @@ final readonly class Plan
     ) {}
 
     /**
-     * @param  list<string>  $changedFiles  PHP files changed in the working tree, relative to $cwd
+     * @param  list<string>|null  $changedFiles  PHP files changed in the working tree, relative to $cwd; null when git cannot say, and the whole tree is checked
      * @return list<Step>
      */
-    public function fast(array $changedFiles): array
+    public function fast(?array $changedFiles): array
     {
+        $note = self::GIT_UNUSABLE;
+
         return [
-            $this->style(dirty: true),
-            $changedFiles === []
+            $changedFiles === null ? $this->style(dirty: false, note: $note) : $this->style(dirty: true),
+            $changedFiles === null ? $this->staticAnalysis([], $note) : ($changedFiles === []
                 ? Step::skipped('Static analysis', ['ARCH-02', 'CONV-11'], 'no PHP file changed')
-                : $this->staticAnalysis($changedFiles),
+                : $this->staticAnalysis($changedFiles)),
             new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest']),
             $this->dependencyPolicy(),
         ];
@@ -114,13 +119,14 @@ final readonly class Plan
     {
         $rules = ['QA-04', 'CONV-04', 'CONV-06'];
         $cwd = $this->cwd;
+        $exemptions = $this->config->allowCommands;
 
         if (! SurfaceFile::exists($cwd)) {
             return Step::skipped('Public surface', $rules, SurfaceFile::FILE.' not recorded yet (vendor/bin/pollora-qa surface --update)');
         }
 
-        return new Step('Public surface', $rules, static function () use ($cwd): StepResult {
-            $result = (new SurfaceCheck($cwd))->run(SurfaceCheck::allowance(null));
+        return new Step('Public surface', $rules, static function () use ($cwd, $exemptions): StepResult {
+            $result = (new SurfaceCheck($cwd, $exemptions))->run(SurfaceCheck::allowance(null));
             $detail = implode("\n", $result['lines']);
 
             return $result['passed'] ? StepResult::passed($detail) : StepResult::failed($detail);
@@ -164,23 +170,24 @@ final readonly class Plan
         });
     }
 
-    private function style(bool $dirty): Step
+    private function style(bool $dirty, ?string $note = null): Step
     {
         $command = ['vendor/bin/pint', '--test', '--config', Paths::pintConfig($this->cwd)];
 
-        return new Step('Code style', ['ARCH-09'], $dirty ? [...$command, '--dirty'] : $command, requires: ['vendor/bin/pint']);
+        return new Step('Code style', ['ARCH-09'], $dirty ? [...$command, '--dirty'] : $command, requires: ['vendor/bin/pint'], note: $note);
     }
 
     /**
      * @param  list<string>  $files  Analyse only these files; all configured paths when empty
      */
-    private function staticAnalysis(array $files): Step
+    private function staticAnalysis(array $files, ?string $note = null): Step
     {
         return new Step(
             'Static analysis',
             ['ARCH-02', 'CONV-11'],
             ['vendor/bin/phpstan', 'analyse', '--no-progress', '--memory-limit=1G', ...$files],
             requires: ['vendor/bin/phpstan'],
+            note: $note,
         );
     }
 
@@ -204,7 +211,7 @@ final readonly class Plan
         $semgrep = Paths::which('semgrep');
 
         if ($semgrep === null) {
-            return Step::skipped('Security patterns', $rules, 'semgrep is not installed (pipx install semgrep); CI runs it');
+            return Step::missingTool('Security patterns', $rules, 'semgrep is not installed, so these rules were not checked (CI runs it)', 'pipx install semgrep');
         }
 
         $configs = ['--config', Paths::preset('semgrep/common.yml')];
@@ -228,7 +235,7 @@ final readonly class Plan
         $composer = Paths::which('composer');
 
         return $composer === null
-            ? Step::skipped('Dependency audit', ['SEC-09'], 'composer is not on the PATH')
+            ? Step::missingTool('Dependency audit', ['SEC-09'], 'composer is not on the PATH', 'https://getcomposer.org/download/')
             : new Step('Dependency audit', ['SEC-09'], [$composer, 'audit', '--no-interaction']);
     }
 
@@ -247,7 +254,7 @@ final readonly class Plan
         }
 
         if ($npm === null) {
-            return Step::skipped($name, ['SEC-09'], 'npm is not on the PATH');
+            return Step::missingTool($name, ['SEC-09'], 'npm is not on the PATH', 'install Node.js (https://nodejs.org)');
         }
 
         $commands = array_map(
@@ -290,15 +297,23 @@ final readonly class Plan
         $cwd = $this->cwd;
 
         return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection): StepResult {
-            $rows = $config->ratchet->compare((new Collector($cwd))->collect($coverage, $infection));
+            $collector = new Collector($cwd);
+            $rows = $config->ratchet->compare($collector->collect($coverage, $infection));
+            $source = $coverage === null ? $collector->findClover() : null;
             $regressions = array_filter($rows, static fn (array $row): bool => $row['verdict'] === 'regressed');
             $lines = array_map(static fn (array $row): string => sprintf(
                 '  %-30s recorded %-8s measured %-8s %s',
                 $row['label'],
                 $row['recorded'] ?? '-',
                 $row['measured'] ?? '-',
-                $row['verdict'],
+                MissingReports::verdict($row),
             ), $rows);
+
+            if ($source !== null) {
+                $lines[] = sprintf('  Line coverage read from %s (no --coverage given); run `check --coverage` to refresh it.', $source);
+            }
+
+            array_push($lines, ...MissingReports::notes($rows));
 
             return $regressions === []
                 ? StepResult::passed(implode("\n", $lines))

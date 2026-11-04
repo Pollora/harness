@@ -11,6 +11,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\Mode;
 use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
+use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Support\Paths;
 
 final class CheckCommand implements Command
@@ -29,10 +30,11 @@ final class CheckCommand implements Command
     {
         return <<<'TXT'
               --fast              Only the fast gates, on the files changed in the working tree
-              --coverage=FILE     Clover report to compare with the ratchet
+              --coverage[=FILE]   Run the tests with coverage and compare the Clover report with the ratchet (default file .harness/coverage.xml)
               --infection=FILE    Infection JSON log to compare with the ratchet
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
+              --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
               --report=FILE       Where to write the JSON report (default .harness/report.json)
             TXT;
     }
@@ -50,11 +52,11 @@ final class CheckCommand implements Command
         $fast = $io->flag('fast');
         $steps = $fast
             ? $plan->fast(Paths::changedPhpFiles($io->cwd))
-            : $plan->full($io->option('coverage'), $io->option('infection'));
+            : $plan->full($this->coverageReport($io), $io->option('infection'));
 
         $io->line(sprintf('Pollora harness · profile %s · %s mode · %s gates', $config->profile->value, $mode->value, $fast ? 'fast' : 'full'));
 
-        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT]);
+        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT], $io->flag('strict'));
         $report->print($io);
         $report->writeJson($io->cwd.'/'.($io->option('report') ?? '.harness/report.json'));
 
@@ -65,5 +67,13 @@ final class CheckCommand implements Command
         }
 
         return $report->hasBlockingFailures() ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * The Clover report to write and read: the file given, or the conventional one for a bare --coverage.
+     */
+    private function coverageReport(Io $io): ?string
+    {
+        return $io->option('coverage') ?? ($io->flag('coverage') ? Collector::CLOVER_LOCATIONS[0] : null);
     }
 }

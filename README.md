@@ -60,6 +60,21 @@ The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis
 
 The **Code style** gate checks with the repository's own `pint.json` when that file already requires `declare_strict_types` (ARCH-09), so a package keeps the style it chose; without one, or with one that does not require it, the harness preset applies.
 
+### Commands that keep their name (CONV-06)
+
+A package whose console commands are named for the tool itself (`new`, `self-update`, `nectar:mcp`) cannot take the `pollora:` prefix without breaking its public API. List them under `allow_commands` in `.harness.json`, one entry per command (`command`) or per family of names (`prefix`), each with the reason it keeps its name:
+
+```json
+{
+    "allow_commands": [
+        { "command": "new", "reason": "the installer is named for the tool, like laravel new" },
+        { "prefix": "nectar:", "reason": "nectar:* is the name of the MCP server" }
+    ]
+}
+```
+
+`reason` is required, and an entry gives either `command` (the exact name) or `prefix` (the start of names), not both; anything else makes `.harness.json` invalid. The *Public surface* gate then prints these commands as `keeps its name (allow_commands: …)` instead of as a problem, so the exemption stays visible, and any other command that does not start with `pollora:` is still reported. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
+
 The **Dependency analysis** gate uses the repository's `composer-dependency-analyser.php` when there is one; without it, a harness preset ignores what is noise in a WordPress repository (WordPress classes and functions, which are not Composer packages, the usual PHP extensions, and the classes and libraries of the tests); a repository that needs more writes its own file and can start from the preset with `require`.
 
 ## Commands
@@ -67,7 +82,9 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | Command | Does |
 | --- | --- |
 | `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed), ratchet |
-| `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree |
+| `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree; the whole tree where git is not usable |
+| `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
+| `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
@@ -77,6 +94,18 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa hook <event>` | Agent hooks: `pre-edit`, `post-edit`, `stop` |
 
 `check` writes `.harness/report.json` and, in GitHub Actions, a table in the job summary.
+
+### Missing tools
+
+A gate whose tool is not installed does not run, and is not a pass: the summary marks it `– no tool`, prints the command that installs the tool (`pipx install semgrep`, `composer require --dev laravel/pint`…), and ends with "Every gate that ran passed, but not every gate ran." instead of "Every gate passed."; the job summary and `report.json` say the same (`missing_tool`, `install`). Locally this is how Semgrep, which guards SEC-01, SEC-03, SEC-04, SEC-05 and CONV-10, goes unnoticed; CI installs it. `check --strict` makes the missing tool fail the check, in `observe` mode too; a gate listed under `observed` is left out.
+
+### Without git
+
+`check --fast` takes the changed files from git. Where git cannot answer (a worktree created on the host and opened from DDEV, whose `.git` points outside the container; no git binary; a directory git does not trust), it says so and checks the whole tree: Pint without `--dirty`, PHPStan on every configured path. It is slower, and may report a file you did not touch, but the style gate no longer fails for a reason that is not style.
+
+### Coverage and the ratchet
+
+`ratchet` and `check` compare the line coverage with `.harness.json` when they find a Clover report: the one given by `--coverage=FILE`, otherwise `.harness/coverage.xml` (what `check --coverage` writes), `.harness/clover.xml` or `build/logs/clover.xml`, and they print which one they read. Without a report, a recorded coverage reads `no report` and a note says where the harness looked and how to produce one; nothing is compared, and the ratchet does not fail for it. Produce a report with `vendor/bin/pollora-qa check --coverage` (or `vendor/bin/pest --coverage-clover .harness/coverage.xml`), and refresh it before trusting the comparison: an old file is read as it is.
 
 ## What is in the box
 

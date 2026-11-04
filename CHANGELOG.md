@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`allow_commands` in `.harness.json` exempts a command from CONV-06** (#50): `{"command": "new", "reason": "…"}` for one name, `{"prefix": "nectar:", "reason": "…"}` for a family. The reason is required (an entry without one, or with both `command` and `prefix`, makes the file invalid). The *Public surface* gate and `pollora-qa surface` list the exempted commands as `keeps its name (allow_commands: <reason>)` rather than as a problem, so the exemption stays visible; a command that is neither exempted nor under `pollora:` is still reported. `init` and `ratchet --update` keep the list. Nothing changes for a repository that does not use it. Documented in the README
+
+### Fixed
+
+- **`pollora-qa check --fast` no longer fails the style gate where git does not work** (#49). In a git worktree opened from DDEV, `.git` points to a directory outside the container; Pint's `--dirty` then stopped with "The [--dirty] option is only available when using Git" and the gate failed for a reason that had nothing to do with style. The harness now asks git first (`git rev-parse --is-inside-work-tree`): when it cannot answer (broken worktree, no git binary, untrusted directory), the fast plan checks the whole tree with Pint, and runs PHPStan on all the configured paths rather than skipping it for lack of a changed file, and says so ("git is not usable here… checking the whole tree instead of the changed files"). Visible change: in that situation the fast gates are slower and may report a file you did not touch
+- **A gate that could not run for want of a tool is no longer read as a pass** (#48). When Semgrep (security patterns SEC-01, SEC-03, SEC-04, SEC-05, CONV-10), Composer, npm or a `vendor/bin/` tool (Pint, PHPStan, Rector, Pest, composer-dependency-analyser) is missing, the summary marks the gate `– no tool` instead of `– skipped`, lists each one with the command that installs it (`pipx install semgrep`, `composer require --dev laravel/pint`…) and ends with "Every gate that ran passed, but not every gate ran." rather than "Every gate passed."; the job summary and `.harness/report.json` carry the same (`missing_tool: true` and `install`, the status stays `skipped`). A gate skipped for another reason (no `rector.php`, no source directory) is unchanged
+- **`pollora-qa check --strict`** fails when such a gate did not run, in `observe` as in `enforce` mode, except for the gates the repository lists under `observed`. Without `--strict` the exit code is unchanged
+- **A missing coverage report is no longer shown as "unmeasured"** (#47). `pollora-qa ratchet` and `pollora-qa check` now look for a Clover report at `.harness/coverage.xml` (where CI writes it), `.harness/clover.xml` or `build/logs/clover.xml` when `--coverage=FILE` is not given, and say which one they read. When a coverage or mutation score is recorded in `.harness.json` and no report is found, the verdict reads `no report` (not `unmeasured`) and a note says where it looked and how to produce one; the ratchet still does not fail for it. `check --coverage` without a value now writes and reads `.harness/coverage.xml`. Visible change: a local `ratchet` or `check` run that used to ignore a report lying under `.harness/` now compares with it, so a regression it hid shows up
+
 ## [0.1.18] - 2026-11-04
 
 ### Fixed

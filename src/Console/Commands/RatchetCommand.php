@@ -9,6 +9,7 @@ use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
 use Pollora\Harness\Metrics\Collector;
+use Pollora\Harness\Metrics\MissingReports;
 
 final class RatchetCommand implements Command
 {
@@ -26,7 +27,7 @@ final class RatchetCommand implements Command
     {
         return <<<'TXT'
               --update            Record every improved metric in .harness.json (never loosens it)
-              --coverage=FILE     Clover coverage report
+              --coverage=FILE     Clover coverage report (default: .harness/coverage.xml, .harness/clover.xml or build/logs/clover.xml, when one exists)
               --infection=FILE    Infection JSON log
               --metric=NAME:VALUE Any other measured value, e.g. --metric=type_coverage:98.4
             TXT;
@@ -35,7 +36,8 @@ final class RatchetCommand implements Command
     public function run(Io $io): int
     {
         $config = HarnessConfig::load($io->cwd);
-        $measured = (new Collector($io->cwd))->collect($io->option('coverage'), $io->option('infection'), $this->overrides($io));
+        $collector = new Collector($io->cwd);
+        $measured = $collector->collect($io->option('coverage'), $io->option('infection'), $this->overrides($io));
         $rows = $config->ratchet->compare($measured);
 
         $io->line(sprintf('  %-32s %-10s %-10s %s', 'Metric', 'Recorded', 'Measured', 'Verdict'));
@@ -45,10 +47,15 @@ final class RatchetCommand implements Command
                 'regressed' => $io->failure('regressed'),
                 'improved' => $io->success('improved'),
                 'new' => $io->success('new'),
-                default => $io->muted($row['verdict']),
+                default => MissingReports::isMissing($row) ? $io->warning(MissingReports::verdict($row)) : $io->muted($row['verdict']),
             };
 
             $io->line(sprintf('  %-32s %-10s %-10s %s', $row['label'], $row['recorded'] ?? '-', $row['measured'] ?? '-', $verdict));
+        }
+
+        foreach (MissingReports::notes($rows) as $note) {
+            $io->line();
+            $io->line($io->warning($note));
         }
 
         if ($io->flag('update')) {
