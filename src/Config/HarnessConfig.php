@@ -31,6 +31,7 @@ final readonly class HarnessConfig
      * @param  list<string>  $protected  Paths an agent may not edit (QA-02)
      * @param  list<string>  $observed  Gates (by name, e.g. "Rector") that are reported but never block, in enforce mode too
      * @param  list<CommandExemption>  $allowCommands  Commands that keep a name without the pollora: prefix, each with its reason (CONV-06)
+     * @param  list<RuleExemption>  $allowRules  Architecture rules of tests/Arch.php that are skipped, each with its reason
      */
     public function __construct(
         public Profile $profile,
@@ -41,6 +42,7 @@ final readonly class HarnessConfig
         public array $protected = self::DEFAULT_PROTECTED,
         public array $observed = [],
         public array $allowCommands = [],
+        public array $allowRules = [],
     ) {}
 
     public static function exists(string $root): bool
@@ -105,12 +107,13 @@ final readonly class HarnessConfig
             protected: array_key_exists('protected', $data) ? self::stringList($data['protected']) : self::DEFAULT_PROTECTED,
             observed: self::stringList($data['observed'] ?? []),
             allowCommands: self::commandExemptions($data['allow_commands'] ?? [], $path),
+            allowRules: self::ruleExemptions($data['allow_rules'] ?? [], $path),
         );
     }
 
     public function withRatchet(Ratchet $ratchet): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules);
     }
 
     /**
@@ -126,6 +129,7 @@ final readonly class HarnessConfig
             'protected' => $this->protected === self::DEFAULT_PROTECTED ? null : $this->protected,
             'observed' => $this->observed,
             'allow_commands' => array_map(static fn (CommandExemption $exemption): array => $exemption->toArray(), $this->allowCommands),
+            'allow_rules' => array_map(static fn (RuleExemption $exemption): array => $exemption->toArray(), $this->allowRules),
             'ratchet' => $this->ratchet->toArray(),
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
@@ -153,6 +157,32 @@ final readonly class HarnessConfig
             static fn (mixed $entry): CommandExemption => CommandExemption::fromArray(is_array($entry) ? $entry : [], $path),
             $value,
         ));
+    }
+
+    /**
+     * @return list<RuleExemption>
+     *
+     * @throws InvalidConfig
+     */
+    private static function ruleExemptions(mixed $value, string $path): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $exemptions = [];
+
+        foreach ($value as $entry) {
+            $exemption = RuleExemption::fromArray(is_array($entry) ? $entry : [], $path);
+
+            if (array_key_exists($exemption->rule, $exemptions)) {
+                throw InvalidConfig::duplicateRuleExemption($path, $exemption->rule);
+            }
+
+            $exemptions[$exemption->rule] = $exemption;
+        }
+
+        return array_values($exemptions);
     }
 
     /**

@@ -83,3 +83,41 @@ it('refuses an allowed command that names neither a command nor a prefix, or bot
     'both' => [['command' => 'new', 'prefix' => 'n', 'reason' => 'x']],
     'an empty prefix' => [['prefix' => '', 'reason' => 'x']],
 ])->throws(InvalidConfig::class, 'needs either');
+
+it('keeps the architecture rules exempted, with their reason, and writes them back', function (): void {
+    $exempted = [['rule' => 'ARCH-08', 'reason' => 'published attribute classes cannot become final']];
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'allow_rules' => $exempted]);
+
+    expect($config->allowRules)->toHaveCount(1)
+        ->and($config->allowRules[0]->message())->toBe('exempted: ARCH-08 — published attribute classes cannot become final')
+        ->and($config->toArray()['allow_rules'])->toBe($exempted)
+        ->and($config->withRatchet(new Ratchet)->toArray()['allow_rules'])->toBe($exempted)
+        ->and(HarnessConfig::fromArray(['profile' => 'core'])->toArray())->not->toHaveKey('allow_rules');
+});
+
+it('refuses an exempted rule that gives no reason, no rule, or an unusable one', function (array $entries, string $message): void {
+    HarnessConfig::fromArray(['profile' => 'core', 'allow_rules' => $entries]);
+})->with([
+    'no reason' => [[['rule' => 'ARCH-08']], 'without a reason'],
+    'an empty reason' => [[['rule' => 'ARCH-08', 'reason' => ' ']], 'without a reason'],
+    'no rule' => [[['reason' => 'x']], 'needs a "rule"'],
+    'an unknown rule' => [[['rule' => 'ARCH-99', 'reason' => 'x']], 'not a rule of the catalogue'],
+    'a rule tests/Arch.php does not evaluate' => [[['rule' => 'ARCH-04', 'reason' => 'x']], 'does not evaluate'],
+    'the same rule twice' => [[['rule' => 'ARCH-08', 'reason' => 'x'], ['rule' => 'ARCH-08', 'reason' => 'y']], 'twice'],
+])->throws(InvalidConfig::class);
+
+it('names what is wrong with an exempted rule', function (array $entries, string $message): void {
+    try {
+        HarnessConfig::fromArray(['profile' => 'core', 'allow_rules' => $entries]);
+    } catch (InvalidConfig $invalidConfig) {
+        expect($invalidConfig->getMessage())->toContain($message);
+
+        return;
+    }
+
+    $this->fail('The configuration should have been refused.');
+})->with([
+    'no reason' => [[['rule' => 'ARCH-08']], 'allow_rules exempts "ARCH-08" without a reason'],
+    'an unknown rule' => [[['rule' => 'ARCH-99', 'reason' => 'x']], '"ARCH-99", which is not a rule of the catalogue'],
+    'a rule tests/Arch.php does not evaluate' => [[['rule' => 'ARCH-04', 'reason' => 'x']], '"ARCH-04", which tests/Arch.php does not evaluate'],
+]);

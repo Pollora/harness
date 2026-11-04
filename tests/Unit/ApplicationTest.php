@@ -226,3 +226,27 @@ it('reports a command outside pollora: until .harness.json allows it, and keeps 
     polloraQa($cwd, 'init');
     expect(json_decode((string) file_get_contents($cwd.'/.harness.json'), true)['allow_commands'])->toBe($allowed);
 });
+
+it('keeps the exempted architecture rules on init and on ratchet --update', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/src');
+    file_put_contents($cwd.'/composer.json', '{"name": "pollora/example", "require": {"php": "^8.3"}, "autoload": {"psr-4": {"Example\\\\": "src/"}}}');
+    $exempted = [['rule' => 'ARCH-08', 'reason' => 'published attribute classes cannot become final']];
+    file_put_contents($cwd.'/.harness.json', json_encode(['profile' => 'core', 'allow_rules' => $exempted]));
+
+    polloraQa($cwd, 'ratchet', '--update', '--metric=coverage:50');
+    expect(json_decode((string) file_get_contents($cwd.'/.harness.json'), true)['allow_rules'])->toBe($exempted);
+
+    polloraQa($cwd, 'init');
+    expect(json_decode((string) file_get_contents($cwd.'/.harness.json'), true)['allow_rules'])->toBe($exempted);
+});
+
+it('refuses a .harness.json that exempts a rule without a reason', function (): void {
+    $cwd = harnessTempDir();
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core", "allow_rules": [{"rule": "ARCH-08"}]}');
+
+    [$code, $output] = polloraQa($cwd, 'ratchet');
+
+    expect($code)->not->toBe(0)
+        ->and($output)->toContain('allow_rules exempts "ARCH-08" without a reason');
+});

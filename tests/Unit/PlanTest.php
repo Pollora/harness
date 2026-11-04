@@ -230,3 +230,17 @@ it('finds tests/Arch.php in the suites of this repository', function (): void {
 
     expect(array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Tests and architecture'))[0]->action)->toBe(['vendor/bin/pest']);
 });
+
+it('says which architecture rules the repository exempts, before the gate runs', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'allow_rules' => [['rule' => 'ARCH-08', 'reason' => 'published classes']]]);
+    $steps = [...(new Plan($config, harnessTempDir()))->fast([]), ...(new Plan($config, harnessTempDir()))->full(null, null)];
+    $notes = array_values(array_filter(array_map(
+        static fn (Step $step): ?string => in_array($step->name, ['Architecture', 'Tests and architecture'], true) ? $step->note : null,
+        $steps,
+    )));
+
+    expect($notes)->toBe([
+        'exempted: ARCH-08 — published classes (allow_rules)',
+        'exempted: ARCH-08 — published classes (allow_rules)',
+    ]);
+});

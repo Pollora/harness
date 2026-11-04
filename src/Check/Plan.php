@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pollora\Harness\Check;
 
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Config\RuleExemption;
 use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
@@ -57,7 +58,7 @@ final readonly class Plan
             $changedFiles === null ? $this->staticAnalysis([], $note) : ($changedFiles === []
                 ? Step::skipped('Static analysis', ['ARCH-02', 'CONV-11'], 'no PHP file changed')
                 : $this->staticAnalysis($changedFiles)),
-            new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest']),
+            new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest'], note: $this->exemptedRules()),
             $this->dependencyPolicy(),
         ];
     }
@@ -76,7 +77,7 @@ final readonly class Plan
                 ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'],
                 $this->tests($coverage),
                 requires: ['vendor/bin/pest'],
-                note: $this->architectureOutsideSuites() ? self::ARCH_OUTSIDE_SUITES : null,
+                note: $this->joinNotes($this->architectureOutsideSuites() ? self::ARCH_OUTSIDE_SUITES : null, $this->exemptedRules()),
             ),
             $this->dependencyPolicy(),
             $this->dependencyAnalysis(),
@@ -87,6 +88,25 @@ final readonly class Plan
             $this->distributionArchive(),
             $this->ratchet($coverage, $infection),
         ];
+    }
+
+    /**
+     * The rules `.harness.json` exempts (allow_rules), one line each, so the gate says what it does not evaluate.
+     */
+    private function exemptedRules(): ?string
+    {
+        if ($this->config->allowRules === []) {
+            return null;
+        }
+
+        return implode("\n  ", array_map(static fn (RuleExemption $exemption): string => $exemption->message().' (allow_rules)', $this->config->allowRules));
+    }
+
+    private function joinNotes(?string ...$notes): ?string
+    {
+        $notes = array_values(array_filter($notes, static fn (?string $note): bool => $note !== null));
+
+        return $notes === [] ? null : implode("\n  ", $notes);
     }
 
     /**

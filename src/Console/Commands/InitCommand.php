@@ -69,6 +69,7 @@ final class InitCommand implements Command
             protected: $existing->protected ?? HarnessConfig::DEFAULT_PROTECTED,
             observed: $existing->observed ?? [],
             allowCommands: $existing->allowCommands ?? [],
+            allowRules: $existing->allowRules ?? [],
         );
 
         $changes = (new Scaffolder($io->cwd, $config))->apply($level ?? self::DEFAULT_LEVEL);
