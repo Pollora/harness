@@ -27,6 +27,8 @@ final readonly class Plan
 
     public const string ARCHIVE = 'Distribution archive';
 
+    public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
+
     /**
      * Gates reported but never blocking, whatever `.harness.json` says: a new
      * gate starts here so that a release does not turn a green repository red.
@@ -41,16 +43,18 @@ final readonly class Plan
     ) {}
 
     /**
-     * @param  list<string>  $changedFiles  PHP files changed in the working tree, relative to $cwd
+     * @param  list<string>|null  $changedFiles  PHP files changed in the working tree, relative to $cwd; null when git cannot say, and the whole tree is checked
      * @return list<Step>
      */
-    public function fast(array $changedFiles): array
+    public function fast(?array $changedFiles): array
     {
+        $note = self::GIT_UNUSABLE;
+
         return [
-            $this->style(dirty: true),
-            $changedFiles === []
+            $changedFiles === null ? $this->style(dirty: false, note: $note) : $this->style(dirty: true),
+            $changedFiles === null ? $this->staticAnalysis([], $note) : ($changedFiles === []
                 ? Step::skipped('Static analysis', ['ARCH-02', 'CONV-11'], 'no PHP file changed')
-                : $this->staticAnalysis($changedFiles),
+                : $this->staticAnalysis($changedFiles)),
             new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest']),
             $this->dependencyPolicy(),
         ];
@@ -165,23 +169,24 @@ final readonly class Plan
         });
     }
 
-    private function style(bool $dirty): Step
+    private function style(bool $dirty, ?string $note = null): Step
     {
         $command = ['vendor/bin/pint', '--test', '--config', Paths::pintConfig($this->cwd)];
 
-        return new Step('Code style', ['ARCH-09'], $dirty ? [...$command, '--dirty'] : $command, requires: ['vendor/bin/pint']);
+        return new Step('Code style', ['ARCH-09'], $dirty ? [...$command, '--dirty'] : $command, requires: ['vendor/bin/pint'], note: $note);
     }
 
     /**
      * @param  list<string>  $files  Analyse only these files; all configured paths when empty
      */
-    private function staticAnalysis(array $files): Step
+    private function staticAnalysis(array $files, ?string $note = null): Step
     {
         return new Step(
             'Static analysis',
             ['ARCH-02', 'CONV-11'],
             ['vendor/bin/phpstan', 'analyse', '--no-progress', '--memory-limit=1G', ...$files],
             requires: ['vendor/bin/phpstan'],
+            note: $note,
         );
     }
 

@@ -178,3 +178,19 @@ it('reports Semgrep missing from the PATH, and fails with --strict', function ()
     expect($strictCode)->toBe(1)
         ->and($strictOutput)->toContain('Strict mode');
 });
+
+it('runs the fast style gate on the whole tree, not on --dirty, where git does not work', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/vendor/bin', 0o755, true);
+    file_put_contents($cwd.'/vendor/bin/pint', "#!/bin/sh\necho \"pint called with: \$*\"\nexit 0\n");
+    chmod($cwd.'/vendor/bin/pint', 0o755);
+    file_put_contents($cwd.'/.git', 'gitdir: /nonexistent/.git/worktrees/x');
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core", "mode": "enforce"}');
+
+    [, $output] = polloraQa($cwd, 'check', '--fast');
+
+    expect($output)->toContain('git is not usable here')
+        ->and($output)->toContain('pint called with: --test --config')
+        ->and($output)->not->toContain('--dirty')
+        ->and($output)->toMatch('/✔ passed\s+Code style/');
+});

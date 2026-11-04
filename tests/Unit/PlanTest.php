@@ -103,3 +103,43 @@ it('runs the tests as they are without --coverage', function (): void {
 
     expect($tests->action)->toBe(['vendor/bin/pest']);
 });
+
+function fastStep(?array $changed, string $name): Step
+{
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), harnessTempDir()))->fast($changed);
+
+    return array_values(array_filter($steps, static fn (Step $step): bool => $step->name === $name))[0];
+}
+
+it('checks the style of the changed files only where git can say which they are', function (): void {
+    expect(fastStep([], 'Code style')->action)->toContain('--dirty')
+        ->and(fastStep([], 'Code style')->note)->toBeNull()
+        ->and(fastStep([], 'Static analysis')->skipReason)->toBe('no PHP file changed');
+});
+
+it('falls back to the whole tree, and says so, where git cannot say which files changed', function (): void {
+    $style = fastStep(null, 'Code style');
+    $analysis = fastStep(null, 'Static analysis');
+
+    expect($style->action)->not->toContain('--dirty')
+        ->and($style->note)->toBe(Plan::GIT_UNUSABLE)
+        ->and($analysis->skipReason)->toBeNull()
+        ->and($analysis->action)->toBe(['vendor/bin/phpstan', 'analyse', '--no-progress', '--memory-limit=1G'])
+        ->and($analysis->note)->toBe(Plan::GIT_UNUSABLE);
+});
+
+it('knows when git cannot be used', function (): void {
+    $broken = harnessTempDir();
+    file_put_contents($broken.'/.git', 'gitdir: /nonexistent/.git/worktrees/x');
+    file_put_contents($broken.'/Foo.php', '<?php');
+
+    $healthy = harnessTempDir();
+    exec('git init -q '.escapeshellarg($healthy).' 2>&1', $ignored, $status);
+    file_put_contents($healthy.'/Foo.php', '<?php');
+
+    expect(Paths::gitUsable($broken))->toBeFalse()
+        ->and(Paths::changedPhpFiles($broken))->toBeNull()
+        ->and($status)->toBe(0)
+        ->and(Paths::gitUsable($healthy))->toBeTrue()
+        ->and(Paths::changedPhpFiles($healthy))->toBe(['Foo.php']);
+});

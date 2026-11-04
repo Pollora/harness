@@ -30,6 +30,10 @@ final readonly class Runner
         foreach ($steps as $step) {
             $this->io->title("▸ {$step->name}  ".$this->io->muted(implode(' ', $step->rules)));
 
+            if ($step->note !== null) {
+                $this->io->line($this->io->warning('  '.$step->note));
+            }
+
             $started = microtime(true);
             $result = $this->execute($step)->withSeconds(microtime(true) - $started);
 
