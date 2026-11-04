@@ -6,6 +6,7 @@ namespace Pollora\Harness\Pest;
 
 use Pollora\Harness\Architecture\AttributeClasses;
 use Pollora\Harness\Architecture\Layers;
+use Pollora\Harness\Architecture\StrictTypes;
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Profile;
 
@@ -47,10 +48,14 @@ final readonly class Architecture
     /** ARCH-09 */
     private function strictTypes(): void
     {
-        foreach ($this->layers->roots as $root) {
-            arch("ARCH-09 {$root} declares strict types")
-                ->expect($root)
-                ->toUseStrictTypes();
+        $layers = $this->layers;
+
+        foreach ($layers->roots as $root) {
+            test("ARCH-09 {$root} declares strict types", function () use ($layers, $root): void {
+                $violations = StrictTypes::violations($layers, $root);
+
+                expect($violations)->toBeEmpty("ARCH-09\n".implode("\n", $violations));
+            })->group('arch');
         }
     }
 
