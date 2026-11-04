@@ -29,6 +29,8 @@ final readonly class Plan
 
     public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
 
+    public const string ARCH_OUTSIDE_SUITES = 'tests/Arch.php is in no test suite of phpunit.xml, so vendor/bin/pest alone would skip the architecture rules: running it explicitly too (add it to a suite to run it once).';
+
     /**
      * Gates reported but never blocking, whatever `.harness.json` says: a new
      * gate starts here so that a release does not turn a green repository red.
@@ -74,6 +76,7 @@ final readonly class Plan
                 ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'],
                 $this->tests($coverage),
                 requires: ['vendor/bin/pest'],
+                note: $this->architectureOutsideSuites() ? self::ARCH_OUTSIDE_SUITES : null,
             ),
             $this->dependencyPolicy(),
             $this->dependencyAnalysis(),
@@ -94,13 +97,40 @@ final readonly class Plan
      */
     private function tests(?string $coverage): array
     {
-        if ($coverage === null) {
-            return ['vendor/bin/pest'];
+        $flags = InterpreterFlags::inherited();
+        $command = $coverage === null
+            ? ['vendor/bin/pest']
+            : [...($flags === [] ? [] : [PHP_BINARY, ...$flags]), 'vendor/bin/pest', '--coverage-clover', $coverage];
+
+        if (! $this->architectureOutsideSuites()) {
+            return $command;
         }
 
-        $flags = InterpreterFlags::inherited();
+        // `pest tests/Arch.php` replaces the suites, so it is a second run: both must pass, whatever the first says
 
-        return [...($flags === [] ? [] : [PHP_BINARY, ...$flags]), 'vendor/bin/pest', '--coverage-clover', $coverage];
+        return ['sh', '-c', sprintf('status=0; %s || status=1; %s || status=1; exit $status', self::shellLine($command), self::shellLine(['vendor/bin/pest', 'tests/Arch.php']))];
+    }
+
+    /**
+     * @param  list<string>  $words
+     */
+    private static function shellLine(array $words): string
+    {
+        $escaped = [];
+
+        foreach ($words as $word) {
+            $escaped[] = escapeshellarg($word);
+        }
+
+        return implode(' ', $escaped);
+    }
+
+    /**
+     * tests/Arch.php exists but no suite of phpunit.xml runs it: `vendor/bin/pest` would never evaluate the architecture rules.
+     */
+    private function architectureOutsideSuites(): bool
+    {
+        return is_file($this->cwd.'/tests/Arch.php') && ! (new PhpUnitSuites($this->cwd))->runs('tests/Arch.php');
     }
 
     private function dependencyAnalysis(): Step

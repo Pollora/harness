@@ -170,11 +170,22 @@ final readonly class Archive
             $line = trim($line);
 
             if ($line !== '' && ! str_starts_with($line, '#') && preg_match('~^(\S+)\s+.*\bexport-ignore\b~', $line, $matches) === 1) {
-                $present[$matches[1]] = true;
+                $present[self::patternKey($matches[1])] = true;
             }
         }
 
-        return array_values(array_filter($lines, static fn (string $line): bool => ! isset($present[explode(' ', $line)[0]])));
+        $missing = [];
+
+        foreach ($lines as $line) {
+            $key = self::patternKey(explode(' ', $line)[0]);
+
+            if (! isset($present[$key])) {
+                $present[$key] = true;
+                $missing[] = $line;
+            }
+        }
+
+        return $missing;
     }
 
     /**
@@ -197,6 +208,14 @@ final readonly class Archive
         file_put_contents($path, ($content === '' ? '' : rtrim($content)."\n").$block);
 
         return $added;
+    }
+
+    /**
+     * `/tests`, `tests` and `/tests/` name the same entry.
+     */
+    private static function patternKey(string $pattern): string
+    {
+        return trim($pattern, '/');
     }
 
     private static function isDevelopment(string $entry): bool

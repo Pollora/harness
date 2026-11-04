@@ -111,7 +111,7 @@ A gate whose tool is not installed does not run, and is not a pass: the summary 
 
 - **Presets** in `presets/`: Pint, PHPStan (`base.neon`, plus `laravel.neon` and the opt-in `strict.neon`), Semgrep rules, and the Rector preset class `Pollora\Harness\Rector\Preset`.
 - **ARCH-02 as a PHPStan rule**: code in a `Domain` namespace calls no global WordPress function (`pollora.noWordPressCallInDomain`).
-- **Architecture tests** registered by `tests/Arch.php` from the layers found under the PSR-4 roots (`Domain`, `Application`, `Infrastructure`/`Adapter`, `UI`).
+- **Architecture tests** registered by `tests/Arch.php` from the layers found under the PSR-4 roots (`Domain`, `Application`, `Infrastructure`/`Adapter`, `UI`). The *Tests and architecture* gate runs `vendor/bin/pest`, which only runs the suites of `phpunit.xml`: when `tests/Arch.php` exists and no suite holds it, the gate also runs `vendor/bin/pest tests/Arch.php` and says so, so the rules cannot be skipped. Add `<testsuite name="Architecture"><file>tests/Arch.php</file></testsuite>` to `phpunit.xml` to run it with the others.
 - **A second reusable workflow**, `.github/workflows/template.yml`, for templates: see [Templates](#templates).
 - **A reusable workflow**, `.github/workflows/php-package.yml`: quality gates, a test matrix (PHP × lowest/stable dependencies), a gitleaks scan, and the **downstream** job that runs the framework's tests against a changed core package.
 - **Agent hooks** for Claude Code: style fixed after each edit, PHPStan on the edited file, protected threshold files (QA-02), the fast gates before the agent hands back.
