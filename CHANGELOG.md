@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pollora-qa init` no longer guesses** (#42). It writes `downstream` only when `--downstream=` is given or already recorded (a `core` package used to get `["framework"]` even when the framework does not require it); it pins the generated workflow to the tag of the installed harness (`php-package.yml@v0.1.17`) and keeps `@main` only when the harness runs from a branch; and it adds the `qa` and `qa:fast` scripts by editing the text of `composer.json`, so `keywords` and the indentation are no longer reformatted
+- **`pollora-qa check --coverage` produces the Clover report when the coverage driver comes from `php -d`** (#43). Pest runs in a child process, which now starts with the same `zend_extension=xdebug` (and `xdebug.mode`) or `extension=pcov` flags as the parent, unless the ini files already load the driver. `XDEBUG_MODE` is inherited as before
+- **`pollora-qa surface --update` records Symfony Console commands** (#44): `#[AsCommand]` with a named `name:` argument, a static `$defaultName`, and `setName()` in a class extending `Command`, besides what it already read. A repository whose commands were missing sees them as additions (label `api-change`) the next time it runs `surface`; CONV-06 reports the ones that do not start with `pollora:`
+
 ## [0.1.17] - 2026-11-03
 
 ### Fixed
