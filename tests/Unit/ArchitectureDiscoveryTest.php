@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Pollora\Harness\Architecture\AttributeClasses;
 use Pollora\Harness\Architecture\Layers;
+use Pollora\Harness\Architecture\StrictTypes;
 
 it('finds the layers from the PSR-4 map', function (): void {
     $layers = Layers::discover(fixtureProject());
@@ -34,4 +35,28 @@ it('reports every way an attribute class breaks ARCH-08, and nothing for a good 
         "{$open}::\$name is public and not readonly.",
         "{$open} does not declare its targets: use #[Attribute(Attribute::TARGET_CLASS)] or the targets it supports.",
     ]);
+});
+
+it('names the classes whose file does not declare strict types (ARCH-09)', function (): void {
+    $root = harnessTempDir();
+    mkdir($root.'/src');
+    file_put_contents($root.'/composer.json', '{"autoload": {"psr-4": {"Acme\\\\Shared\\\\": "src/"}}}');
+    file_put_contents($root.'/src/Strict.php', "<?php\n\n/** Header. */\n\ndeclare(strict_types=1);\n\nnamespace Acme\\Shared;\n\nfinal class Strict {}\n");
+    file_put_contents($root.'/src/Loose.php', "<?php\n\nnamespace Acme\\Shared;\n\nfinal class Loose {}\n");
+
+    expect(StrictTypes::violations(Layers::discover($root), 'Acme\\Shared'))->toBe(['Acme\\Shared\\Loose']);
+});
+
+it('reads only the files of the repository when a dependency maps the same namespace (ARCH-09)', function (): void {
+    $root = harnessTempDir();
+    mkdir($root.'/src');
+    mkdir($root.'/vendor/acme/vocabulary/Shared', 0777, true);
+    file_put_contents($root.'/composer.json', '{"autoload": {"psr-4": {"Acme\\\\Shared\\\\": "src/"}}}');
+    file_put_contents($root.'/src/Strict.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Acme\\Shared;\n\nfinal class Strict {}\n");
+    file_put_contents($root.'/vendor/acme/vocabulary/Shared/Interval.php', "<?php\n\nnamespace Acme\\Shared;\n\nenum Interval {}\n");
+
+    $layers = Layers::discover($root);
+
+    expect($layers->files)->not->toHaveKey('Acme\\Shared\\Interval')
+        ->and(StrictTypes::violations($layers, 'Acme\\Shared'))->toBe([]);
 });
