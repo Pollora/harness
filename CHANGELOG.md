@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`allow_commands` in `.harness.json` exempts a command from CONV-06** (#50): `{"command": "new", "reason": "…"}` for one name, `{"prefix": "nectar:", "reason": "…"}` for a family. The reason is required (an entry without one, or with both `command` and `prefix`, makes the file invalid). The *Public surface* gate and `pollora-qa surface` list the exempted commands as `keeps its name (allow_commands: <reason>)` rather than as a problem, so the exemption stays visible; a command that is neither exempted nor under `pollora:` is still reported. `init` and `ratchet --update` keep the list. Nothing changes for a repository that does not use it. Documented in the README
+
 ### Fixed
 
 - **`pollora-qa check --fast` no longer fails the style gate where git does not work** (#49). In a git worktree opened from DDEV, `.git` points to a directory outside the container; Pint's `--dirty` then stopped with "The [--dirty] option is only available when using Git" and the gate failed for a reason that had nothing to do with style. The harness now asks git first (`git rev-parse --is-inside-work-tree`): when it cannot answer (broken worktree, no git binary, untrusted directory), the fast plan checks the whole tree with Pint, and runs PHPStan on all the configured paths rather than skipping it for lack of a changed file, and says so ("git is not usable here… checking the whole tree instead of the changed files"). Visible change: in that situation the fast gates are slower and may report a file you did not touch

@@ -194,3 +194,35 @@ it('runs the fast style gate on the whole tree, not on --dirty, where git does n
         ->and($output)->not->toContain('--dirty')
         ->and($output)->toMatch('/✔ passed\s+Code style/');
 });
+
+it('reports a command outside pollora: until .harness.json allows it, and keeps the allowance on init and on ratchet --update', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/src');
+    file_put_contents($cwd.'/composer.json', '{"name": "pollora/example", "require": {"php": "^8.3"}, "autoload": {"psr-4": {"Example\\\\": "src/"}}}');
+    foreach (['New' => 'new', 'Mcp' => 'nectar:mcp'] as $class => $name) {
+        file_put_contents($cwd.'/src/'.$class.'Command.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Example;\n\n#[AsCommand(name: '{$name}')]\nfinal class {$class}Command {}\n");
+    }
+
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core"}');
+    polloraQa($cwd, 'surface', '--update');
+
+    [, $before] = polloraQa($cwd, 'surface');
+    expect($before)->toContain('The command new should start with pollora:')
+        ->and($before)->toContain('The command nectar:mcp should start with pollora:');
+
+    $allowed = [['command' => 'new', 'reason' => 'named for the tool'], ['prefix' => 'nectar:', 'reason' => 'the product name']];
+    file_put_contents($cwd.'/.harness.json', json_encode(['profile' => 'core', 'allow_commands' => $allowed]));
+
+    [$code, $after] = polloraQa($cwd, 'surface');
+    expect($code)->toBe(0)
+        ->and($after)->not->toContain('should start with pollora:')
+        ->and($after)->toContain('The command new keeps its name (allow_commands: named for the tool)');
+
+    file_put_contents($cwd.'/src/SyncCommand.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Example;\n\n#[AsCommand(name: 'sync')]\nfinal class SyncCommand {}\n");
+    [, $new] = polloraQa($cwd, 'surface');
+    expect($new)->toContain('The command sync should start with pollora:');
+
+    polloraQa($cwd, 'ratchet', '--update', '--metric=coverage:50');
+    polloraQa($cwd, 'init');
+    expect(json_decode((string) file_get_contents($cwd.'/.harness.json'), true)['allow_commands'])->toBe($allowed);
+});

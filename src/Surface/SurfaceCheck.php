@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Surface;
 
+use Pollora\Harness\Config\CommandExemption;
+
 /**
  * Compares the code with api-surface.json, for `pollora-qa surface` and for
  * the public surface gate of `pollora-qa check`.
@@ -13,7 +15,10 @@ final readonly class SurfaceCheck
     /** What a pull request may change when nothing says otherwise. */
     public const string ENVIRONMENT = 'HARNESS_SURFACE_ALLOW';
 
-    public function __construct(private string $root) {}
+    /**
+     * @param  list<CommandExemption>  $commandExemptions  Commands that keep a name without the pollora: prefix (CONV-06)
+     */
+    public function __construct(private string $root, private array $commandExemptions = []) {}
 
     /**
      * The changes a pull request declares, from its labels in CI:
@@ -35,7 +40,7 @@ final readonly class SurfaceCheck
         $diff = SurfaceDiff::between(SurfaceFile::read($this->root), $current);
         $lines = array_map(static fn (string $line): string => '  '.$line, $diff->lines());
 
-        foreach (NamingConventions::problems($current) as $problem) {
+        foreach ([...NamingConventions::problems($current, $this->commandExemptions), ...NamingConventions::exempted($current, $this->commandExemptions)] as $problem) {
             $lines[] = '  '.$problem;
         }
 

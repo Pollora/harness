@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\InvalidConfig;
 use Pollora\Harness\Config\Mode;
+use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Profile;
 
 it('starts in observe mode with the default protected files', function (): void {
@@ -54,3 +55,31 @@ it('keeps the gates a repository only observes, and writes them back', function 
         ->and($config->toArray()['observed'])->toBe(['Rector', 'Code style'])
         ->and(HarnessConfig::fromArray(['profile' => 'core'])->toArray())->not->toHaveKey('observed');
 });
+
+it('keeps the commands allowed to keep their name, with their reason, and writes them back', function (): void {
+    $allowed = [
+        ['command' => 'new', 'reason' => 'named for the tool'],
+        ['prefix' => 'nectar:', 'reason' => 'the product name'],
+    ];
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'allow_commands' => $allowed]);
+
+    expect($config->allowCommands)->toHaveCount(2)
+        ->and($config->toArray()['allow_commands'])->toBe($allowed)
+        ->and($config->withRatchet(new Ratchet)->toArray()['allow_commands'])->toBe($allowed)
+        ->and(HarnessConfig::fromArray(['profile' => 'core'])->toArray())->not->toHaveKey('allow_commands');
+});
+
+it('refuses an allowed command that gives no reason', function (array $entry): void {
+    HarnessConfig::fromArray(['profile' => 'core', 'allow_commands' => [$entry]]);
+})->with([
+    'no reason' => [['command' => 'new']],
+    'an empty reason' => [['command' => 'new', 'reason' => ' ']],
+])->throws(InvalidConfig::class, 'without a reason');
+
+it('refuses an allowed command that names neither a command nor a prefix, or both', function (array $entry): void {
+    HarnessConfig::fromArray(['profile' => 'core', 'allow_commands' => [$entry]]);
+})->with([
+    'neither' => [['reason' => 'x']],
+    'both' => [['command' => 'new', 'prefix' => 'n', 'reason' => 'x']],
+    'an empty prefix' => [['prefix' => '', 'reason' => 'x']],
+])->throws(InvalidConfig::class, 'needs either');

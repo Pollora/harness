@@ -37,4 +37,16 @@ final class InvalidConfig extends RuntimeException
 
         return new self("{$path} declares the mode \"{$given}\". Use \"observe\" or \"enforce\".");
     }
+
+    public static function exemptionWithoutReason(string $path, mixed $target): self
+    {
+        $name = is_string($target) ? "\"{$target}\"" : 'an entry';
+
+        return new self("{$path}: allow_commands lists {$name} without a reason. Say why the command keeps its name.");
+    }
+
+    public static function exemptionWithoutTarget(string $path): self
+    {
+        return new self("{$path}: each allow_commands entry needs either \"command\" (a name) or \"prefix\" (the start of names), not both, and a \"reason\".");
+    }
 }

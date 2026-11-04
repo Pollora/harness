@@ -119,13 +119,14 @@ final readonly class Plan
     {
         $rules = ['QA-04', 'CONV-04', 'CONV-06'];
         $cwd = $this->cwd;
+        $exemptions = $this->config->allowCommands;
 
         if (! SurfaceFile::exists($cwd)) {
             return Step::skipped('Public surface', $rules, SurfaceFile::FILE.' not recorded yet (vendor/bin/pollora-qa surface --update)');
         }
 
-        return new Step('Public surface', $rules, static function () use ($cwd): StepResult {
-            $result = (new SurfaceCheck($cwd))->run(SurfaceCheck::allowance(null));
+        return new Step('Public surface', $rules, static function () use ($cwd, $exemptions): StepResult {
+            $result = (new SurfaceCheck($cwd, $exemptions))->run(SurfaceCheck::allowance(null));
             $detail = implode("\n", $result['lines']);
 
             return $result['passed'] ? StepResult::passed($detail) : StepResult::failed($detail);

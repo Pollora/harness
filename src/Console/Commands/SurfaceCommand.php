@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Console\Commands;
 
+use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
 use Pollora\Harness\Surface\SurfaceCheck;
@@ -55,7 +56,7 @@ final class SurfaceCommand implements Command
             return self::FAILURE;
         }
 
-        $result = (new SurfaceCheck($io->cwd))->run(SurfaceCheck::allowance($io->option('allow')));
+        $result = (new SurfaceCheck($io->cwd, HarnessConfig::exists($io->cwd) ? HarnessConfig::load($io->cwd)->allowCommands : []))->run(SurfaceCheck::allowance($io->option('allow')));
 
         foreach ($result['lines'] as $line) {
             $io->line($line);
