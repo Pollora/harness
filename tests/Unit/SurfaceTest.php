@@ -83,3 +83,26 @@ it('lets a pull request through only with the label its change needs', function 
     ['breaking', 'additions', false],
     ['breaking', 'all', true],
 ]);
+
+it('records the Symfony Console commands of a package, however they are named', function (): void {
+    $root = harnessTempDir();
+    mkdir($root.'/src/Commands', 0o755, true);
+    file_put_contents($root.'/composer.json', '{"name": "pollora/cli", "autoload": {"psr-4": {"Pollora\\\\Cli\\\\": "src/"}}}');
+
+    $commands = [
+        'New' => "use Symfony\\Component\\Console\\Command\\Command;\nclass NewCommand extends Command\n{\n    protected function configure(): void\n    {\n        \$this\n            ->setName('new')\n            ->setDescription('Create');\n    }\n}",
+        'Legacy' => "use Symfony\\Component\\Console\\Command\\Command;\nclass LegacyCommand extends Command\n{\n    protected static \$defaultName = 'self-update';\n}",
+        'Typed' => "use Symfony\\Component\\Console\\Command\\Command;\nclass TypedCommand extends Command\n{\n    protected static ?string \$defaultName = 'pollora:typed';\n}",
+        'Attribute' => "use Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand(description: 'Does it', name: 'pollora:attr')]\nclass AttributeCommand {}",
+        'Positional' => "use Symfony\\Component\\Console\\Attribute\\AsCommand;\n#[AsCommand('version')]\nclass PositionalCommand {}",
+        'Other' => "class Theme\n{\n    public function build(): void\n    {\n        \$this->builder->setName('not-a-command');\n    }\n}",
+    ];
+
+    foreach ($commands as $name => $body) {
+        file_put_contents("{$root}/src/Commands/{$name}.php", "<?php\n\nnamespace Pollora\\Cli\\Commands;\n\n{$body}\n");
+    }
+
+    $listed = array_keys(array_filter((new SurfaceExtractor($root))->extract(), static fn (string $key): bool => str_starts_with($key, 'command:'), ARRAY_FILTER_USE_KEY));
+
+    expect($listed)->toBe(['command:new', 'command:pollora:attr', 'command:pollora:typed', 'command:self-update', 'command:version']);
+});
