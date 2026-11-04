@@ -75,6 +75,22 @@ A package whose console commands are named for the tool itself (`new`, `self-upd
 
 `reason` is required, and an entry gives either `command` (the exact name) or `prefix` (the start of names), not both; anything else makes `.harness.json` invalid. The *Public surface* gate then prints these commands as `keeps its name (allow_commands: …)` instead of as a problem, so the exemption stays visible, and any other command that does not start with `pollora:` is still reported. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
 
+### Architecture rules a repository cannot satisfy yet (`allow_rules`)
+
+A repository can hold a rule it cannot satisfy without a breaking change: `Pollora/attributes` cannot make its published attribute classes final and readonly (ARCH-08). Instead of skipping the test by hand from `tests/Arch.php`, which also suspends the checks the rule still does well, list the rule under `allow_rules` in `.harness.json`, with the reason:
+
+```json
+{
+    "allow_rules": [
+        { "rule": "ARCH-08", "reason": "the attribute classes are published; making them final is a breaking change" }
+    ]
+}
+```
+
+`tests/Arch.php` keeps its one `Architecture::for(dirname(__DIR__))->register()` line. The tests of the exempted rule are registered as skipped, with `exempted: ARCH-08 — <reason>` as the reason Pest prints, and the *Architecture* and *Tests and architecture* gates say `exempted: ARCH-08 — <reason> (allow_rules)` before they run; every other rule runs as usual, so a new violation of it still fails. The exemption covers the whole rule, not one class or namespace.
+
+`rule` must be a rule that `tests/Arch.php` evaluates (ARCH-01, ARCH-03, ARCH-08, ARCH-09, CONV-03, CONV-05, CONV-07) and `reason` is required: an unknown rule, a rule checked by another gate, a rule listed twice or an entry without a reason makes `.harness.json` invalid, with a message that names the entry. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
+
 The **Dependency analysis** gate uses the repository's `composer-dependency-analyser.php` when there is one; without it, a harness preset ignores what is noise in a WordPress repository (WordPress classes and functions, which are not Composer packages, the usual PHP extensions, and the classes and libraries of the tests); a repository that needs more writes its own file and can start from the preset with `require`.
 
 ## Commands

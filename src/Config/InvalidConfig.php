@@ -49,4 +49,34 @@ final class InvalidConfig extends RuntimeException
     {
         return new self("{$path}: each allow_commands entry needs either \"command\" (a name) or \"prefix\" (the start of names), not both, and a \"reason\".");
     }
+
+    public static function ruleExemptionWithoutRule(string $path): self
+    {
+        return new self("{$path}: each allow_rules entry needs a \"rule\" (such as \"ARCH-08\") and a \"reason\".");
+    }
+
+    public static function unknownRule(string $path, string $rule): self
+    {
+        return new self("{$path}: allow_rules lists \"{$rule}\", which is not a rule of the catalogue. List them with `vendor/bin/pollora-qa rules`.");
+    }
+
+    public static function ruleNotExemptible(string $path, string $rule): self
+    {
+        return new self(sprintf(
+            '%s: allow_rules lists "%s", which tests/Arch.php does not evaluate. Only %s can be exempted there.',
+            $path,
+            $rule,
+            implode(', ', RuleExemption::EXEMPTIBLE),
+        ));
+    }
+
+    public static function ruleExemptionWithoutReason(string $path, string $rule): self
+    {
+        return new self("{$path}: allow_rules exempts \"{$rule}\" without a reason. Say why the rule cannot hold.");
+    }
+
+    public static function duplicateRuleExemption(string $path, string $rule): self
+    {
+        return new self("{$path}: allow_rules lists \"{$rule}\" twice. Keep one entry and its reason.");
+    }
 }
