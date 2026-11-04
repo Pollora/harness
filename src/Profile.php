@@ -61,12 +61,6 @@ enum Profile: string
         return in_array($this, [self::Core, self::Framework], true);
     }
 
-    /** Whether the downstream job should run the framework against this repository. */
-    public function hasDownstream(): bool
-    {
-        return $this === self::Core;
-    }
-
     /**
      * @return list<string>
      */

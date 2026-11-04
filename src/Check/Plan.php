@@ -9,6 +9,7 @@ use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Profile;
+use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
 use Pollora\Harness\Surface\SurfaceCheck;
 use Pollora\Harness\Surface\SurfaceFile;
@@ -66,8 +67,7 @@ final readonly class Plan
             new Step(
                 'Tests and architecture',
                 ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'],
-                // With --coverage, the suite writes the report the ratchet reads.
-                ['vendor/bin/pest', ...($coverage !== null ? ['--coverage-clover', $coverage] : [])],
+                $this->tests($coverage),
                 requires: ['vendor/bin/pest'],
             ),
             $this->dependencyPolicy(),
@@ -79,6 +79,23 @@ final readonly class Plan
             $this->distributionArchive(),
             $this->ratchet($coverage, $infection),
         ];
+    }
+
+    /**
+     * With --coverage, the suite writes the report the ratchet reads, in a
+     * process that has the coverage driver this one was started with.
+     *
+     * @return list<string>
+     */
+    private function tests(?string $coverage): array
+    {
+        if ($coverage === null) {
+            return ['vendor/bin/pest'];
+        }
+
+        $flags = InterpreterFlags::inherited();
+
+        return [...($flags === [] ? [] : [PHP_BINARY, ...$flags]), 'vendor/bin/pest', '--coverage-clover', $coverage];
     }
 
     private function dependencyAnalysis(): Step

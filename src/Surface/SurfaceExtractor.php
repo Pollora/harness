@@ -176,6 +176,10 @@ final readonly class SurfaceExtractor
     }
 
     /**
+     * Console commands, named the way Laravel and Symfony name them: the
+     * #[AsCommand] attribute, a $defaultName property, a $signature or $name
+     * property, or a setName() call in configure().
+     *
      * @return array<string, string>
      */
     private function commands(Layers $layers): array
@@ -185,13 +189,35 @@ final readonly class SurfaceExtractor
         foreach ($layers->files as $path) {
             $source = (string) file_get_contents($path);
 
-            if (preg_match('/#\[AsCommand\(\s*(?:name:\s*)?[\'"]([^\'"]+)[\'"]/', $source, $match) === 1
-                || preg_match('/protected\s+(?:\?string\s+|string\s+)?\$(?:signature|name)\s*=\s*[\'"]([a-z][a-z0-9-]*:[^\s\'"{]+)/', $source, $match) === 1) {
-                $entries["command:{$match[1]}"] = 'command';
+            foreach ($this->commandNames($source) as $name) {
+                $entries["command:{$name}"] = 'command';
             }
         }
 
         return $entries;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function commandNames(string $source): array
+    {
+        $names = [];
+
+        if (preg_match('/#\[AsCommand\(\s*(?:name:\s*)?[\'"]([^\'"]+)[\'"]/', $source, $match) === 1
+            || preg_match('/#\[AsCommand\([^\]]*?\bname:\s*[\'"]([^\'"]+)[\'"]/s', $source, $match) === 1
+            || preg_match('/protected\s+(?:\?string\s+|string\s+)?\$(?:signature|name)\s*=\s*[\'"]([a-z][a-z0-9-]*:[^\s\'"{]+)/', $source, $match) === 1
+            || preg_match('/(?:public|protected|private)?\s*static\s+(?:\?string\s+|string\s+)?\$defaultName\s*=\s*[\'"]([^\'"|]+)[\'"]/', $source, $match) === 1) {
+            $names[] = $match[1];
+        }
+
+        // setName() belongs to many classes: only a console command is read.
+        if (preg_match('/\bextends\s+\\\\?(?:[\w\\\\]*\\\\)?\w*Command\b|Symfony\\\\Component\\\\Console\\\\Command/', $source) === 1
+            && preg_match_all('/->setName\(\s*[\'"]([^\'"]+)[\'"]\s*\)/', $source, $matches) > 0) {
+            array_push($names, ...$matches[1]);
+        }
+
+        return array_values(array_unique($names));
     }
 
     /**

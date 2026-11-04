@@ -8,6 +8,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\Paths;
+use Pollora\Harness\Support\Release;
 
 /**
  * Applies the harness to a repository, without overwriting what it has.
@@ -29,6 +30,7 @@ final class Scaffolder
     public function __construct(
         private readonly string $root,
         private readonly HarnessConfig $config,
+        private readonly ?string $workflowRef = null,
     ) {}
 
     /**
@@ -145,6 +147,7 @@ final class Scaffolder
 
         $this->fromStub('.github/workflows/harness.yml', 'workflow.yml.stub', [
             '{{branches}}' => $branches,
+            '{{ref}}' => $this->workflowRef ?? Release::workflowRef(),
         ]);
     }
 
@@ -201,8 +204,15 @@ final class Scaffolder
             return;
         }
 
-        $composer['scripts'] = $scripts + $added;
-        file_put_contents($path, json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)."\n");
+        // The file is patched as text so that its formatting stays the author's; re-encoding is the fallback.
+        $patched = ComposerScripts::add((string) file_get_contents($path), $added);
+
+        if ($patched === null) {
+            $composer['scripts'] = $scripts + $added;
+            $patched = json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)."\n";
+        }
+
+        file_put_contents($path, $patched);
         $this->changes[] = 'added the composer scripts '.implode(' and ', array_keys($added));
     }
 
