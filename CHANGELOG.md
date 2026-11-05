@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-11-05
+
 ### Added
 
 - **The summary shows an exempted rule, and the ratchet counts exemptions** (#62). Two limits noted in 0.1.22 are lifted. (a) The summary of `pollora-qa check` no longer lists a gate that skipped a rule of `allow_rules` as a plain pass: the console prints `✔ passed  Tests and architecture … (1 rule exempted: ARCH-08)` (and the same on *Architecture* in the fast plan), the GitHub job summary reads `✅ passed (1 rule exempted: ARCH-08)`, and the step of `.harness/report.json` gains `"exempted": ["ARCH-08"]`; its `status` stays `passed`. (b) A new ratchet metric, `exempted_rules` ("Architecture rules exempted", lower is better, like `phpstan_baseline`), counts the exemptions: more than the recorded ceiling is `regressed` and fails QA-01 in enforce mode, so a new exemption cannot slip in; fewer is `improved`, and `ratchet --update` lowers the ceiling, down to `0`, and never raises it. `--metric=exempted_rules:N` works like the other metrics. Compatibility: the metric is only measured in a repository that lists `allow_rules` or already records the key, so an existing `.harness.json` without it reads `unmeasured` and passes unchanged; in a repository that uses `allow_rules`, the first `ratchet --update` records the count (`Pollora/attributes` goes to `1`), and until then the metric reads `new`, which does not fail. Visible change: the ratchet table of such a repository has an extra row, and an unchanged run no longer hides the exemption in the summary. `allow_commands` is not tracked by the ratchet yet; that is a possible follow-up
