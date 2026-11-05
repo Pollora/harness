@@ -250,3 +250,75 @@ it('refuses a .harness.json that exempts a rule without a reason', function (): 
     expect($code)->not->toBe(0)
         ->and($output)->toContain('allow_rules exempts "ARCH-08" without a reason');
 });
+
+/**
+ * @param  list<array{rule: string, reason: string}>  $exempted
+ */
+function exemptedProject(array $exempted, array $ratchet = []): string
+{
+    $cwd = harnessTempDir();
+    file_put_contents($cwd.'/.harness.json', json_encode(['profile' => 'core', 'mode' => 'enforce', 'ratchet' => ['phpstan_level' => 5, ...$ratchet], 'allow_rules' => $exempted]));
+    file_put_contents($cwd.'/phpstan.neon', "parameters:\n    level: 5\n");
+
+    return $cwd;
+}
+
+function recordedRatchet(string $cwd): array
+{
+    return json_decode((string) file_get_contents($cwd.'/.harness.json'), true)['ratchet'];
+}
+
+it('records the number of exempted rules with ratchet --update, and starts checking it', function (): void {
+    $cwd = exemptedProject([['rule' => 'ARCH-08', 'reason' => 'published classes']]);
+
+    [$before, $beforeOutput] = polloraQa($cwd, 'ratchet');
+    polloraQa($cwd, 'ratchet', '--update');
+
+    expect($before)->toBe(0)
+        ->and($beforeOutput)->toContain('Architecture rules exempted')
+        ->and(recordedRatchet($cwd)['exempted_rules'])->toBe(1);
+});
+
+it('fails the ratchet when more rules are exempted than the recorded ceiling', function (): void {
+    $cwd = exemptedProject([['rule' => 'ARCH-08', 'reason' => 'a'], ['rule' => 'CONV-05', 'reason' => 'b']], ['exempted_rules' => 1]);
+
+    [$code, $output] = polloraQa($cwd, 'ratchet', '--update');
+
+    expect($code)->toBe(1)
+        ->and($output)->toContain('regressed')
+        ->and(recordedRatchet($cwd)['exempted_rules'])->toBe(1);
+});
+
+it('lowers the ceiling with ratchet --update when an exemption is removed, down to zero', function (): void {
+    $cwd = exemptedProject([['rule' => 'ARCH-08', 'reason' => 'a']], ['exempted_rules' => 2]);
+
+    [$code] = polloraQa($cwd, 'ratchet', '--update');
+    expect($code)->toBe(0)->and(recordedRatchet($cwd)['exempted_rules'])->toBe(1);
+
+    file_put_contents($cwd.'/.harness.json', json_encode(['profile' => 'core', 'ratchet' => ['phpstan_level' => 5, 'exempted_rules' => 1]]));
+    polloraQa($cwd, 'ratchet', '--update');
+
+    expect(recordedRatchet($cwd)['exempted_rules'])->toBe(0);
+});
+
+it('leaves a .harness.json without exemptions and without the metric untouched by the ratchet', function (): void {
+    $cwd = harnessTempDir();
+    file_put_contents($cwd.'/.harness.json', '{"profile": "core", "ratchet": {"phpstan_level": 5}}');
+    file_put_contents($cwd.'/phpstan.neon', "parameters:\n    level: 5\n");
+
+    [$code, $output] = polloraQa($cwd, 'ratchet', '--update');
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('Architecture rules exempted')
+        ->and(recordedRatchet($cwd))->not->toHaveKey('exempted_rules');
+});
+
+it('keeps the recorded number of exempted rules on init', function (): void {
+    $cwd = exemptedProject([['rule' => 'ARCH-08', 'reason' => 'a']], ['exempted_rules' => 1]);
+    mkdir($cwd.'/src');
+    file_put_contents($cwd.'/composer.json', '{"name": "pollora/example", "require": {"php": "^8.3"}, "autoload": {"psr-4": {"Example\\\\": "src/"}}}');
+
+    polloraQa($cwd, 'init');
+
+    expect(recordedRatchet($cwd)['exempted_rules'])->toBe(1);
+});

@@ -94,3 +94,17 @@ it('fails on a missing tool with --strict, in any mode', function (Mode $mode): 
 it('does not hold a missing tool against a gate the repository only observes', function (): void {
     expect(reportOf([semgrepMissing()], strict: true, observed: ['Security patterns'])->hasBlockingFailures())->toBeFalse();
 });
+
+it('says in the summary that a passed gate did not evaluate an exempted rule', function (): void {
+    $step = new Step('Tests and architecture', ['ARCH-08', 'ARCH-09'], [], exempted: ['ARCH-08']);
+    $report = reportOf([['step' => $step, 'result' => StepResult::passed()], ['step' => new Step('Code style', ['ARCH-09'], []), 'result' => StepResult::passed()]]);
+
+    $lines = array_values(array_filter(explode("\n", consoleOutput($report)), static fn (string $line): bool => str_contains($line, 'Tests and architecture')));
+
+    expect($lines[0])->toContain('passed')->toContain('(1 rule exempted: ARCH-08)')
+        ->and(consoleOutput($report))->not->toContain('Code style  ARCH-09 (')
+        ->and($report->markdown())->toContain('| Tests and architecture | ARCH-08, ARCH-09 | ✅ passed (1 rule exempted: ARCH-08) |')
+        ->and($report->markdown())->toContain('| Code style | ARCH-09 | ✅ passed |')
+        ->and($report->toArray()['steps'][0]['exempted'])->toBe(['ARCH-08'])
+        ->and($report->toArray()['steps'][1])->not->toHaveKey('exempted');
+});

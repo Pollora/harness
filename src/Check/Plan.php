@@ -58,7 +58,7 @@ final readonly class Plan
             $changedFiles === null ? $this->staticAnalysis([], $note) : ($changedFiles === []
                 ? Step::skipped('Static analysis', ['ARCH-02', 'CONV-11'], 'no PHP file changed')
                 : $this->staticAnalysis($changedFiles)),
-            new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest'], note: $this->exemptedRules()),
+            new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest'], note: $this->exemptedRules(), exempted: $this->exemptedRuleIds()),
             $this->dependencyPolicy(),
         ];
     }
@@ -78,6 +78,7 @@ final readonly class Plan
                 $this->tests($coverage),
                 requires: ['vendor/bin/pest'],
                 note: $this->joinNotes($this->architectureOutsideSuites() ? self::ARCH_OUTSIDE_SUITES : null, $this->exemptedRules()),
+                exempted: $this->exemptedRuleIds(),
             ),
             $this->dependencyPolicy(),
             $this->dependencyAnalysis(),
@@ -100,6 +101,14 @@ final readonly class Plan
         }
 
         return implode("\n  ", array_map(static fn (RuleExemption $exemption): string => $exemption->message().' (allow_rules)', $this->config->allowRules));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function exemptedRuleIds(): array
+    {
+        return array_map(static fn (RuleExemption $exemption): string => $exemption->rule, $this->config->allowRules);
     }
 
     private function joinNotes(?string ...$notes): ?string
@@ -348,7 +357,7 @@ final readonly class Plan
 
         return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection): StepResult {
             $collector = new Collector($cwd);
-            $rows = $config->ratchet->compare($collector->collect($coverage, $infection));
+            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, [], Collector::exemptedRules($config)));
             $source = $coverage === null ? $collector->findClover() : null;
             $regressions = array_filter($rows, static fn (array $row): bool => $row['verdict'] === 'regressed');
             $lines = array_map(static fn (array $row): string => sprintf(

@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Pollora\Harness\Metrics;
 
 use DOMDocument;
+use Pollora\Harness\Config\HarnessConfig;
 
 /**
  * Measures the metrics the ratchet tracks, from the files the tools already
- * write: the PHPStan configuration and baseline, a Clover coverage report and
- * an Infection JSON log. A metric whose source is missing is reported as null
+ * write: the PHPStan configuration and baseline, a Clover coverage report, an
+ * Infection JSON log and the architecture rules `.harness.json` exempts. A metric whose source is missing is reported as null
  * (not measured) rather than as zero.
  */
 final readonly class Collector
@@ -27,7 +28,7 @@ final readonly class Collector
      * @param  array<string, int|float>  $overrides  Values passed on the command line (--metric name=value)
      * @return array<string, int|float|null>
      */
-    public function collect(?string $cloverPath = null, ?string $infectionPath = null, array $overrides = []): array
+    public function collect(?string $cloverPath = null, ?string $infectionPath = null, array $overrides = [], ?int $exemptedRules = null): array
     {
         $cloverPath ??= $this->findClover();
 
@@ -37,7 +38,21 @@ final readonly class Collector
             'coverage' => $cloverPath !== null ? self::cloverCoverage($this->resolve($cloverPath)) : null,
             'type_coverage' => null,
             'msi' => $infectionPath !== null ? self::infectionMsi($this->resolve($infectionPath)) : null,
+            'exempted_rules' => $exemptedRules,
         ], $overrides);
+    }
+
+    /**
+     * The number of architecture rules `allow_rules` exempts. Null (not
+     * measured) for a repository that has none and never recorded any, so the
+     * metric only exists where the feature is used; once recorded, it is
+     * measured even at zero, so that removing the last exemption lowers it.
+     */
+    public static function exemptedRules(HarnessConfig $config): ?int
+    {
+        $count = count($config->allowRules);
+
+        return $count > 0 || $config->ratchet->get('exempted_rules') !== null ? $count : null;
     }
 
     /**

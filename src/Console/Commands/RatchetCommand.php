@@ -37,7 +37,7 @@ final class RatchetCommand implements Command
     {
         $config = HarnessConfig::load($io->cwd);
         $collector = new Collector($io->cwd);
-        $measured = $collector->collect($io->option('coverage'), $io->option('infection'), $this->overrides($io));
+        $measured = $collector->collect($io->option('coverage'), $io->option('infection'), $this->overrides($io), Collector::exemptedRules($config));
         $rows = $config->ratchet->compare($measured);
 
         $io->line(sprintf('  %-32s %-10s %-10s %s', 'Metric', 'Recorded', 'Measured', 'Verdict'));

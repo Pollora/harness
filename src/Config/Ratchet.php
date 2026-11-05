@@ -9,7 +9,8 @@ namespace Pollora\Harness\Config;
  *
  * A metric that has never been measured is null and is not compared. Once
  * recorded, a metric may only improve: a higher PHPStan level, fewer baseline
- * entries, more coverage, a higher mutation or type coverage score.
+ * entries, fewer exempted architecture rules, more coverage, a higher
+ * mutation or type coverage score.
  */
 final readonly class Ratchet
 {
@@ -27,6 +28,7 @@ final readonly class Ratchet
         'coverage' => ['better' => 'higher', 'label' => 'Line coverage (%)'],
         'type_coverage' => ['better' => 'higher', 'label' => 'Type coverage (%)'],
         'msi' => ['better' => 'higher', 'label' => 'Mutation score indicator (%)'],
+        'exempted_rules' => ['better' => 'lower', 'label' => 'Architecture rules exempted'],
     ];
 
     /** PHPStan 2 has ten levels; "max" is the highest. */
