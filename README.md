@@ -89,6 +89,8 @@ A repository can hold a rule it cannot satisfy without a breaking change: `Pollo
 
 `tests/Arch.php` keeps its one `Architecture::for(dirname(__DIR__))->register()` line. The tests of the exempted rule are registered as skipped, with `exempted: ARCH-08 — <reason>` as the reason Pest prints, and the *Architecture* and *Tests and architecture* gates say `exempted: ARCH-08 — <reason> (allow_rules)` before they run; every other rule runs as usual, so a new violation of it still fails. The exemption covers the whole rule, not one class or namespace.
 
+The summary of `pollora-qa check` (console, job summary, `.harness/report.json`) does not read such a gate as a plain pass: it prints `✔ passed  Tests and architecture … (1 rule exempted: ARCH-08)`, and the JSON step carries `"exempted": ["ARCH-08"]`. The number of exemptions is also a metric of the ratchet, `exempted_rules` (see below): adding an exemption, or having more than the recorded ceiling, fails QA-01 in enforce mode; removing one lowers the ceiling with `ratchet --update`.
+
 `rule` must be a rule that `tests/Arch.php` evaluates (ARCH-01, ARCH-03, ARCH-08, ARCH-09, CONV-03, CONV-05, CONV-07) and `reason` is required: an unknown rule, a rule checked by another gate, a rule listed twice or an entry without a reason makes `.harness.json` invalid, with a message that names the entry. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
 
 The **Dependency analysis** gate uses the repository's `composer-dependency-analyser.php` when there is one; without it, a harness preset ignores what is noise in a WordPress repository (WordPress classes and functions, which are not Composer packages, the usual PHP extensions, and the classes and libraries of the tests); a repository that needs more writes its own file and can start from the preset with `require`.
@@ -118,6 +120,10 @@ A gate whose tool is not installed does not run, and is not a pass: the summary 
 ### Without git
 
 `check --fast` takes the changed files from git. Where git cannot answer (a worktree created on the host and opened from DDEV, whose `.git` points outside the container; no git binary; a directory git does not trust), it says so and checks the whole tree: Pint without `--dirty`, PHPStan on every configured path. It is slower, and may report a file you did not touch, but the style gate no longer fails for a reason that is not style.
+
+### Exempted rules in the ratchet
+
+`exempted_rules` counts the architecture rules `allow_rules` exempts, and lower is better, like `phpstan_baseline`. It is only measured where it matters: a repository without `allow_rules` and without the key in `ratchet` shows it as `unmeasured` and nothing is recorded, so an existing `.harness.json` keeps passing as it is. In a repository that uses `allow_rules`, the first `pollora-qa ratchet --update` records the current count; from then on a count above the recorded one is `regressed` (QA-01 fails in enforce mode), and `ratchet --update` lowers the ceiling when an exemption is removed, down to `0`, never raises it. To exempt one more rule on purpose, a person raises the number by hand in `.harness.json`, a protected file (QA-02). `allow_commands` is not tracked by the ratchet.
 
 ### Coverage and the ratchet
 

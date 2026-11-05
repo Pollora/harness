@@ -244,3 +244,24 @@ it('says which architecture rules the repository exempts, before the gate runs',
         'exempted: ARCH-08 — published classes (allow_rules)',
     ]);
 });
+
+it('lists the exempted rules on the steps that run the architecture tests, and on no other', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'allow_rules' => [['rule' => 'ARCH-08', 'reason' => 'published classes'], ['rule' => 'CONV-05', 'reason' => 'legacy']]]);
+    $steps = [...(new Plan($config, harnessTempDir()))->fast([]), ...(new Plan($config, harnessTempDir()))->full(null, null)];
+    $exempted = [];
+
+    foreach ($steps as $step) {
+        if ($step->exempted !== []) {
+            $exempted[$step->name] = $step->exempted;
+        }
+    }
+
+    expect($exempted)->toBe(['Architecture' => ['ARCH-08', 'CONV-05'], 'Tests and architecture' => ['ARCH-08', 'CONV-05']])
+        ->and(array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Architecture'))[0]->exemptionSummary())->toBe('2 rules exempted: ARCH-08, CONV-05');
+});
+
+it('exempts nothing on a repository without allow_rules', function (): void {
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), harnessTempDir()))->full(null, null);
+
+    expect(array_filter($steps, static fn (Step $step): bool => $step->exempted !== [] || $step->exemptionSummary() !== null))->toBe([]);
+});

@@ -17,6 +17,7 @@ final readonly class Step
      * @param  list<string>|Closure(): StepResult  $action  A command line, or an in-process check
      * @param  list<string>  $requires  Files that must exist for the step to run (a tool binary, a config file)
      * @param  string|null  $note  Said before the step runs, when it does not run the way it usually does
+     * @param  list<string>  $exempted  The rules of this step that `.harness.json` exempts: the step can pass without having evaluated them
      */
     public function __construct(
         public string $name,
@@ -26,7 +27,20 @@ final readonly class Step
         public ?string $skipReason = null,
         public ?string $install = null,
         public ?string $note = null,
+        public array $exempted = [],
     ) {}
+
+    /**
+     * "1 rule exempted: ARCH-08", or null when the step exempts nothing.
+     */
+    public function exemptionSummary(): ?string
+    {
+        if ($this->exempted === []) {
+            return null;
+        }
+
+        return sprintf('%d %s exempted: %s', count($this->exempted), count($this->exempted) === 1 ? 'rule' : 'rules', implode(', ', $this->exempted));
+    }
 
     /**
      * @param  list<string>  $rules

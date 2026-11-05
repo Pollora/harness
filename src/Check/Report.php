@@ -86,7 +86,9 @@ final readonly class Report
                 default => $result->isMissingTool() ? $io->warning('– no tool') : $io->warning('– skipped'),
             };
 
-            $io->line(sprintf('  %s  %-24s %s', $status, $step->name, $io->muted(implode(' ', $step->rules))));
+            $exempted = $result->status === StepResult::PASSED ? $step->exemptionSummary() : null;
+
+            $io->line(sprintf('  %s  %-24s %s', $status, $step->name, $io->muted(implode(' ', $step->rules))).($exempted === null ? '' : ' '.$io->warning('('.$exempted.')')));
 
             if ($result->isFailed()) {
                 foreach ($step->rules as $rule) {
@@ -142,6 +144,7 @@ final readonly class Report
                 'status' => $entry['result']->status,
                 'seconds' => round($entry['result']->seconds, 2),
                 'detail' => $entry['result']->detail,
+                ...($entry['step']->exempted === [] ? [] : ['exempted' => $entry['step']->exempted]),
                 ...($entry['result']->isMissingTool() ? ['missing_tool' => true, 'install' => $entry['result']->install] : []),
             ], $this->results),
         ];
@@ -167,7 +170,7 @@ final readonly class Report
 
         foreach ($this->results as ['step' => $step, 'result' => $result]) {
             $lines[] = sprintf('| %s | %s | %s |', $step->name, implode(', ', $step->rules), match ($result->status) {
-                StepResult::PASSED => '✅ passed',
+                StepResult::PASSED => '✅ passed'.($step->exemptionSummary() === null ? '' : ' ('.$step->exemptionSummary().')'),
                 StepResult::FAILED => $this->mode->blocks() && ! in_array($step->name, $this->observed, true) ? '❌ failed' : '⚠️ failed (observed)',
                 default => $result->isMissingTool()
                     ? '⚠️ not run, tool missing: '.str_replace('|', '\|', $result->detail).' — install: `'.str_replace('|', '\|', (string) $result->install).'`'

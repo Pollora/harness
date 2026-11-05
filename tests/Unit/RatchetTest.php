@@ -44,3 +44,27 @@ it('only ever tightens', function (): void {
         'msi' => 55.0,
     ]);
 });
+
+it('treats a growing number of exempted rules as a regression and a smaller one as an improvement', function (string $metric, int $recorded, int $measured, string $verdict): void {
+    $row = array_values(array_filter(
+        (new Ratchet([$metric => $recorded]))->compare([$metric => $measured]),
+        static fn (array $row): bool => $row['metric'] === $metric,
+    ))[0];
+
+    expect($row['verdict'])->toBe($verdict);
+})->with([
+    'one more exemption regresses' => ['exempted_rules', 1, 2, 'regressed'],
+    'one less improves' => ['exempted_rules', 2, 1, 'improved'],
+    'the same is unchanged' => ['exempted_rules', 1, 1, 'unchanged'],
+]);
+
+it('lowers the ceiling of exempted rules and never raises it', function (): void {
+    expect((new Ratchet(['exempted_rules' => 2]))->tighten(['exempted_rules' => 1])->toArray())->toBe(['exempted_rules' => 1])
+        ->and((new Ratchet(['exempted_rules' => 1]))->tighten(['exempted_rules' => 3])->toArray())->toBe(['exempted_rules' => 1]);
+});
+
+it('does not check exempted rules when no ceiling was recorded', function (): void {
+    $verdicts = array_column((new Ratchet(['phpstan_level' => 5]))->compare(['phpstan_level' => 5, 'exempted_rules' => null]), 'verdict', 'metric');
+
+    expect($verdicts['exempted_rules'])->toBe('unmeasured');
+});
