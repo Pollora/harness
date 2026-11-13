@@ -79,7 +79,10 @@ it('registers one test per rule and layer, and registers an exempted rule as a s
         ->and($text)->toContain('ARCH-08 attribute classes are final')
         ->and($text)->toContain('CONV-03 Cov\\One\\Domain\\Exceptions names its classes')
         ->and($text)->toContain('CONV-05 Cov\\One reads configuration');
-});
+})->skip(
+    version_compare(\Pest\version(), '4.0.0', '<'),
+    'Registering tests while a test runs is refused by Pest 3 (it asserts on the call trace); Pest 4 accepts it.'
+);
 
 it('registers no hexagonal rule for a profile that is not hexagonal', function (): void {
     $architecture = Architecture::for(covHexagon('Cov\\Three'), Profile::Integration, []);
