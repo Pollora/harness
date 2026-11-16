@@ -28,6 +28,8 @@ final readonly class Plan
 
     public const string ARCHIVE = 'Distribution archive';
 
+    public const string MUTATION = 'Mutation testing';
+
     public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
 
     public const string ARCH_OUTSIDE_SUITES = 'tests/Arch.php is in no test suite of phpunit.xml, so vendor/bin/pest alone would skip the architecture rules: running it explicitly too (add it to a suite to run it once).';
@@ -38,7 +40,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION];
 
     public function __construct(
         private HarnessConfig $config,
@@ -66,8 +68,10 @@ final readonly class Plan
     /**
      * @return list<Step>
      */
-    public function full(?string $coverage = null, ?string $infection = null): array
+    public function full(?string $coverage = null, ?string $infection = null, bool $mutation = false): array
     {
+        $score = new MutationScore;
+
         return [
             $this->style(dirty: false),
             $this->staticAnalysis([]),
@@ -87,7 +91,8 @@ final readonly class Plan
             $this->npmAudit(),
             $this->publicSurface(),
             $this->distributionArchive(),
-            $this->ratchet($coverage, $infection),
+            ...($mutation ? [$this->mutation($score)] : []),
+            $this->ratchet($coverage, $infection, $score),
         ];
     }
 
@@ -350,14 +355,38 @@ final readonly class Plan
         return $directories;
     }
 
-    private function ratchet(?string $coverage, ?string $infection): Step
+    /**
+     * Mutation testing with Pest. Reported, not enforced: it feeds the `msi` metric of the ratchet, which only
+     * fails a repository that recorded a score and let it drop.
+     */
+    private function mutation(MutationScore $score): Step
+    {
+        $cwd = $this->cwd;
+
+        return new Step(
+            self::MUTATION,
+            ['QA-01'],
+            static function () use ($cwd, $score): StepResult {
+                $run = MutationRun::run($cwd);
+                $score->value = $run['score'];
+
+                return $run['score'] === null
+                    ? StepResult::failed("Pest printed no mutation score: the tests must pass first.\n".trim(substr($run['output'], -600)))
+                    : StepResult::passed(sprintf('  Mutation score %s %% (%s)', $run['score'], $run['summary']));
+            },
+            requires: ['vendor/pestphp/pest-plugin-mutate'],
+        );
+    }
+
+    private function ratchet(?string $coverage, ?string $infection, ?MutationScore $mutation = null): Step
     {
         $config = $this->config;
         $cwd = $this->cwd;
 
-        return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection): StepResult {
+        return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection, $mutation): StepResult {
             $collector = new Collector($cwd);
-            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, [], Collector::exemptedRules($config)));
+            $measured = $mutation?->value;
+            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, $measured === null ? [] : ['msi' => $measured], Collector::exemptedRules($config)));
             $source = $coverage === null ? $collector->findClover() : null;
             $regressions = array_filter($rows, static fn (array $row): bool => $row['verdict'] === 'regressed');
             $lines = array_map(static fn (array $row): string => sprintf(

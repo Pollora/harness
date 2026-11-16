@@ -266,3 +266,23 @@ it('exempts nothing on a repository without allow_rules', function (): void {
 
     expect(array_filter($steps, static fn (Step $step): bool => $step->exempted !== [] || $step->exemptionSummary() !== null))->toBe([]);
 });
+
+it('adds the mutation step before the ratchet only when --mutation is given', function (): void {
+    $names = static fn (bool $mutation): array => array_map(
+        static fn (Step $step): string => $step->name,
+        (new Plan(HarnessConfig::fromArray(['profile' => 'core']), harnessTempDir()))->full(null, null, $mutation),
+    );
+
+    expect($names(false))->not->toContain(Plan::MUTATION)
+        ->and($names(true))->toContain(Plan::MUTATION)
+        ->and(array_search(Plan::MUTATION, $names(true), true))->toBeLessThan(array_search('Ratchet', $names(true), true));
+});
+
+it('reports the mutation step without blocking, and skips it where Pest has no mutation plugin', function (): void {
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), harnessTempDir()))->full(null, null, true);
+    $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION))[0];
+
+    expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::MUTATION)
+        ->and($step->requires)->toBe(['vendor/pestphp/pest-plugin-mutate'])
+        ->and($step->rules)->toBe(['QA-01']);
+});
