@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-11-16
+
 ### Added
 
 - **`check --mutation` runs Pest's mutation testing and feeds the ratchet's `msi`.** The *Mutation testing* gate runs `pest --mutate --everything --covered-only` (no `covers()` needed, only the code the tests reach), reads the score Pest prints and compares it with the recorded `msi`. It runs in parallel and repeats once in a single process when that prints no score, since a suite that shares global state fails in parallel. The gate is observed by default and skipped without `pestphp/pest-plugin-mutate`. Infection's JSON log (`--infection=FILE`) is still read; Infection 0.35 does not find the tests Pest 3 generates, which is why Pest's own runner is used.
