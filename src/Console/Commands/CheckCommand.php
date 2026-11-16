@@ -32,6 +32,7 @@ final class CheckCommand implements Command
               --fast              Only the fast gates, on the files changed in the working tree
               --coverage[=FILE]   Run the tests with coverage and compare the Clover report with the ratchet (default file .harness/coverage.xml)
               --infection=FILE    Infection JSON log to compare with the ratchet
+              --mutation          Run Pest's mutation testing (pest --mutate) and compare its score with the ratchet's msi
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
               --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
@@ -52,7 +53,7 @@ final class CheckCommand implements Command
         $fast = $io->flag('fast');
         $steps = $fast
             ? $plan->fast(Paths::changedPhpFiles($io->cwd))
-            : $plan->full($this->coverageReport($io), $io->option('infection'));
+            : $plan->full($this->coverageReport($io), $io->option('infection'), $io->flag('mutation'));
 
         $io->line(sprintf('Pollora harness · profile %s · %s mode · %s gates', $config->profile->value, $mode->value, $fast ? 'fast' : 'full'));
 

@@ -103,6 +103,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree; the whole tree where git is not usable |
 | `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
+| `pollora-qa check --mutation` | Also runs Pest's mutation testing (`pest --mutate --everything --covered-only`) and compares its score with the ratchet's `msi`; reported, never blocking by itself |
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
@@ -128,6 +129,12 @@ A gate whose tool is not installed does not run, and is not a pass: the summary 
 ### Coverage and the ratchet
 
 `ratchet` and `check` compare the line coverage with `.harness.json` when they find a Clover report: the one given by `--coverage=FILE`, otherwise `.harness/coverage.xml` (what `check --coverage` writes), `.harness/clover.xml` or `build/logs/clover.xml`, and they print which one they read. Without a report, a recorded coverage reads `no report` and a note says where the harness looked and how to produce one; nothing is compared, and the ratchet does not fail for it. Produce a report with `vendor/bin/pollora-qa check --coverage` (or `vendor/bin/pest --coverage-clover .harness/coverage.xml`), and refresh it before trusting the comparison: an old file is read as it is.
+
+### Mutation score and the ratchet
+
+Line coverage says which lines the tests run, not whether they would notice a change. `check --mutation` runs `pest --mutate --everything --covered-only` (Pest 3.8 and later, with `pestphp/pest-plugin-mutate`; the step is skipped without it), reads the `Score:` line it prints and gives it to the ratchet as `msi`, in percent, higher is better. No `covers()` declaration is needed, and code no test reaches is left to the coverage gate.
+
+The run is parallel. A suite that fails that way (a global function a helper declares, a test that depends on the order) prints no score, so the step repeats it once in a single process; when the tests themselves fail, there is no score and the step says so. The *Mutation testing* gate is observed by default: it reports the score and never fails a build. The ratchet fails only a repository that recorded an `msi` and let it drop. Record the first value with `pollora-qa ratchet --update --metric=msi:79.17`, using the score `check --mutation` printed.
 
 ## What is in the box
 
