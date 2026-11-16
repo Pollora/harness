@@ -126,7 +126,7 @@ final readonly class Plan
      */
     private function tests(?string $coverage): array
     {
-        $flags = InterpreterFlags::inherited();
+        $flags = $coverage === null ? [] : [...InterpreterFlags::inherited(), ...InterpreterFlags::coverageScope($this->cwd)];
         $command = $coverage === null
             ? ['vendor/bin/pest']
             : [...($flags === [] ? [] : [PHP_BINARY, ...$flags]), 'vendor/bin/pest', '--coverage-clover', $coverage];
