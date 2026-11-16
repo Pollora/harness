@@ -90,9 +90,10 @@ it('hands the coverage driver of the parent process to the child', function (arr
 ]);
 
 it('runs the tests with the flags of the parent when --coverage is given', function (): void {
-    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), harnessTempDir()))->full('clover.xml', null);
+    $root = harnessTempDir();
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), $root))->full('clover.xml', null);
     $tests = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === 'Tests and architecture'))[0];
-    $flags = InterpreterFlags::inherited();
+    $flags = [...InterpreterFlags::inherited(), ...InterpreterFlags::coverageScope($root)];
 
     expect($tests->action)->toBe([...($flags === [] ? [] : [PHP_BINARY, ...$flags]), 'vendor/bin/pest', '--coverage-clover', 'clover.xml']);
 });
