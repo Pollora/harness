@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-11-16
+
 ### Fixed
 
-- **`check --coverage` measures every directory `phpunit.xml` lists in `<source>`, not just the one pcov guesses.** With pcov, pcov instruments a single directory it picks by itself (`src`, `lib` or `app` under the working directory). A repository that lists another directory in `<source>` (`vocabulary/`, `support/`, `cli/`…) had those lines counted in the total and never instrumented, so a fully tested folder read as 0 % covered: `pollora/attributes` measured 91.07 % and measures 100 % with the same tests. The suite is now started with `-d pcov.directory=<project root>` and `-d pcov.exclude` for `vendor`, `node_modules`, `.git` and `.harness`. A `pcov.directory` the project chose itself (anything but the guessed `src`, `lib`, `app` or the root) is left alone, Xdebug is not affected, and the reported figure can only go up. The recorded `line_coverage` floors do not move on their own: raise them with `ratchet --update`.
+- **`check --coverage` measures every directory `phpunit.xml` lists in `<source>`, not just the one pcov guesses.** With pcov, pcov instruments a single directory it picks by itself (`src`, `lib` or `app` under the working directory). A repository that lists another directory in `<source>` (`vocabulary/`, `support/`, `cli/`…) (#69) had those lines counted in the total and never instrumented, so a fully tested folder read as 0 % covered: `pollora/attributes` measured 91.07 % and measures 100 % with the same tests. The suite is now started with `-d pcov.directory=<project root>` and `-d pcov.exclude` for `vendor`, `node_modules`, `.git` and `.harness`. A `pcov.directory` the project chose itself (anything but the guessed `src`, `lib`, `app` or the root) is left alone, Xdebug is not affected, and the reported figure can only go up. The recorded `line_coverage` floors do not move on their own: raise them with `ratchet --update`.
 
 ## [0.1.23] - 2026-11-05
 
