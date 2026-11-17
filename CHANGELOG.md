@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The reusable workflow checks the mutation score of a repository that recorded one.** `php-package.yml` reads `ratchet.msi` in `.harness.json` and, when it is there, runs `pollora-qa check --mutation` in the *Quality gates* job; a repository without it is untouched. The *Mutation testing* gate stays observed by default and only the ratchet fails a repository whose score dropped below what it recorded. The README says how to record a floor (a couple of points under the measured score, since the figure moves with the load of the machine) and describes two traps of Pest's runner: a `--filter` regex that can exceed the PCRE limit on heavily covered lines (adding tests can then lower the score), and classes Composer loads from `files` that are never mutated.
+
 ## [0.1.25] - 2026-11-16
 
 ### Added

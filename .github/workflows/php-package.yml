@@ -44,6 +44,7 @@ jobs:
       profile: ${{ steps.config.outputs.profile }}
       mode: ${{ steps.config.outputs.mode }}
       downstream: ${{ steps.config.outputs.downstream }}
+      mutation: ${{ steps.config.outputs.mutation }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,6 +60,8 @@ jobs:
           echo "profile=$(jq -r '.profile' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mode=$(jq -r '.mode // "observe"' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "downstream=$(jq -r '(.downstream // []) | join(",")' .harness.json)" >> "$GITHUB_OUTPUT"
+          # A repository that recorded a mutation score (ratchet.msi) gets it checked; the others are untouched.
+          echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
 
   quality:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
@@ -88,7 +91,11 @@ jobs:
         # declares: api-change (additions) or breaking (anything).
         env:
           HARNESS_SURFACE_ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') && 'all' || (contains(github.event.pull_request.labels.*.name, 'api-change') && 'additions' || 'none') }}
-        run: vendor/bin/pollora-qa check --coverage=.harness/coverage.xml
+          MUTATION: ${{ needs.setup.outputs.mutation }}
+        run: |
+          flags=""
+          if [ "$MUTATION" = "true" ]; then flags="--mutation"; fi
+          vendor/bin/pollora-qa check --coverage=.harness/coverage.xml $flags
 
       - name: Keep the report
         if: always()

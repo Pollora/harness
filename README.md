@@ -136,6 +136,14 @@ Line coverage says which lines the tests run, not whether they would notice a ch
 
 The run is parallel. A suite that fails that way (a global function a helper declares, a test that depends on the order) prints no score, so the step repeats it once in a single process; when the tests themselves fail, there is no score and the step says so. The *Mutation testing* gate is observed by default: it reports the score and never fails a build. The ratchet fails only a repository that recorded an `msi` and let it drop. Record the first value with `pollora-qa ratchet --update --metric=msi:79.17`, using the score `check --mutation` printed.
 
+**In CI.** The reusable workflow reads `.harness.json`: a repository that recorded `ratchet.msi` gets `check --mutation` in its *Quality gates* job, and one that did not is untouched. So adopting the gate is one commit: run `check --mutation` once, record the score, push. A mutation run takes from seconds to ten minutes or more, depending on the number of mutants.
+
+**Record a floor below the score you measured.** The figure moves from a run to the next: a mutant that loops until Pest's timeout counts as killed or not depending on the load of the machine (89.18 % and 90.53 % on the same code), and the parallel and single-process runs do not give exactly the same count. Record about two points under what you measured, and raise it by hand when the score has stayed higher for a while (`ratchet --update` only raises, never lowers).
+
+**Two traps of Pest's mutation runner.**
+- Pest builds its `--filter` as regex alternatives, one per test that covers the mutated line. Past the PCRE compilation limit (about 64 KB) the filter is invalid, no test runs and the mutant is counted as surviving. The lines covered by almost the whole suite are the ones concerned, and adding tests can lower the score there: fewer, broader tests (datasets folded into loops) beat more of them.
+- A class Composer loads from `files` (a `register.php`, a helper) is loaded before Pest mutates anything, so its mutants always survive. `--class=` does not narrow the run, and a test file edited during a run makes it die silently.
+
 ## What is in the box
 
 - **Presets** in `presets/`: Pint, PHPStan (`base.neon`, plus `laravel.neon` and the opt-in `strict.neon`), Semgrep rules, and the Rector preset class `Pollora\Harness\Rector\Preset`.
