@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-11-17
+
 ### Fixed
 
 - **SEC-01 and ARCH-05 are enforced, as they already behaved.** The catalogue (`resources/rules.php`) listed the two rules as `observed`, but the *Security patterns* gate runs Semgrep with `--error`, which fails on a finding whatever its severity: a REST route declared without a permission (SEC-01) or a third-party plugin referenced in the framework core (ARCH-05) already failed the build. The catalogue now says `enforced` and both rules have `severity: ERROR`, so the behaviour no longer depends on that option. Measured on 29 repositories before the change: no finding of either rule anywhere, so nothing starts to fail.
