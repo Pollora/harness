@@ -19,7 +19,7 @@ return [
     'ARCH-02' => ['title' => 'Domain code calls no global WordPress function', 'tool' => 'PHPStan rule pollora.noWordPressCallInDomain', 'gate' => 'G1', 'status' => 'enforced'],
     'ARCH-03' => ['title' => 'Application code depends on the Domain layer only', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'ARCH-04' => ['title' => 'A core package requires neither illuminate/* nor laravel/*, unless listed in .harness.json', 'tool' => 'pollora-qa deps', 'gate' => 'G1', 'status' => 'enforced'],
-    'ARCH-05' => ['title' => 'The framework core references no third-party plugin (WooCommerce, ACF, Meta Box, WP Rocket)', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'observed'],
+    'ARCH-05' => ['title' => 'The framework core references no third-party plugin (WooCommerce, ACF, Meta Box, WP Rocket)', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
     'ARCH-06' => ['title' => 'Only integration packages, templates and projects depend on pollora/framework', 'tool' => 'pollora-qa deps', 'gate' => 'G1', 'status' => 'enforced'],
     'ARCH-07' => ['title' => 'Every dependency used is declared, none declared is unused', 'tool' => 'composer-dependency-analyser', 'gate' => 'G1', 'status' => 'enforced'],
     'ARCH-08' => ['title' => 'Attribute classes are final, readonly and declare their targets', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
@@ -40,7 +40,7 @@ return [
     'CONV-12' => ['title' => 'Readable Pest tests: one intention per test, datasets over copy-paste', 'tool' => 'Review', 'gate' => 'G2', 'status' => 'planned'],
 
     // Security
-    'SEC-01' => ['title' => 'A REST route declared by attribute states its permission; a public route says so explicitly', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'observed'],
+    'SEC-01' => ['title' => 'A REST route declared by attribute states its permission; a public route says so explicitly', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
     'SEC-02' => ['title' => 'An AJAX action checks a nonce by default; guest access is explicit', 'tool' => 'Semgrep + integration test', 'gate' => 'G1', 'status' => 'planned'],
     'SEC-03' => ['title' => 'No $wpdb query built by interpolation without prepare()', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
     'SEC-04' => ['title' => 'No unescaped Blade output {!! !!} outside a commented allowlist', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],

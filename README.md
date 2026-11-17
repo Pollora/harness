@@ -211,7 +211,15 @@ An exception to a rule is written on the line it concerns, with its reason: `// 
 
 ## Status
 
-This is phase 1 of the rollout: the harness measures every repository without blocking it. Integration tests against a real WordPress, adapter contract tests, mutation testing and performance budgets follow in the next phases.
+The harness no longer only measures: every repository that adopted it runs the gates in `enforce` mode, with a ratchet that only moves up (line coverage, PHPStan level and baseline, mutation score).
+
+| | Rules | Which |
+| --- | --- | --- |
+| Enforced | 24 | style, PHPStan, architecture tests, dependency policy, Semgrep patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, and ARCH-05 on the framework), secrets, `composer audit`, the ratchet, the public surface, backward compatibility, the distribution archive |
+| Observed | 4 | CONV-04 and CONV-06 (names of hooks and commands), CONV-11 (native types), QA-03 (a core package change keeps the framework green) |
+| Planned | 12 | CONV-01, CONV-02, CONV-08, CONV-09, CONV-12, SEC-02, SEC-06, SEC-07, PERF-01, PERF-02, PERF-03, PERF-07 |
+
+`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress, adapter contract tests and performance budgets, which are what the planned SEC-06, SEC-07 and PERF-* rules wait for.
 
 ## Contributing
 

@@ -7,7 +7,7 @@
 rules:
   - id: pollora.arch-05.third-party-plugin-in-core
     languages: [generic]
-    severity: WARNING
+    severity: ERROR
     paths:
       include:
         - "src/"
