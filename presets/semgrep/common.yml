@@ -75,7 +75,7 @@ rules:
 
   - id: pollora.sec-01.rest-route-without-permission
     languages: [generic]
-    severity: WARNING
+    severity: ERROR
     paths:
       include:
         - "*.php"
