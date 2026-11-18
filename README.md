@@ -104,6 +104,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
 | `pollora-qa check --mutation` | Also runs Pest's mutation testing (`pest --mutate --everything --covered-only`) and compares its score with the ratchet's `msi`; reported, never blocking by itself |
+| `pollora-qa check --mutation --mutation-base=REF` | With `"mutation": {"scope": "changed"}` in `.harness.json`, the commit the changed files are counted from (default `HEAD^1`) |
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
@@ -143,6 +144,21 @@ The run is parallel. A suite that fails that way (a global function a helper dec
 **Two traps of Pest's mutation runner.**
 - Pest builds its `--filter` as regex alternatives, one per test that covers the mutated line. Past the PCRE compilation limit (about 64 KB) the filter is invalid, no test runs and the mutant is counted as surviving. The lines covered by almost the whole suite are the ones concerned, and adding tests can lower the score there: fewer, broader tests (datasets folded into loops) beat more of them.
 - A class Composer loads from `files` (a `register.php`, a helper) is loaded before Pest mutates anything, so its mutants always survive. `--class=` does not narrow the run, and a test file edited during a run makes it die silently.
+
+### Mutation score of the changed files
+
+A whole mutation run grows with the size of the repository: the framework's did not finish in thirteen hours, so it cannot run in a pull request. A repository in that case declares, in `.harness.json`:
+
+```json
+"mutation": { "scope": "changed", "min": 80 }
+```
+
+`check --mutation` then mutates only the PHP source files the change touches (`pest --mutate --path=a.php,b.php`, after the suite's one full run) and the *Mutation testing (changed files)* gate holds their score to `min`. It blocks in `enforce` mode, unlike the whole-repository gate, which is observed by default.
+
+- **What counts as a changed file.** The files added, copied, modified or renamed between a base and `HEAD`, under the directories Composer autoloads classes from (`autoload.psr-4`, `psr-0`, `classmap`; `src/` when there are none), minus the files of `autoload.files` (PHP includes them before Pest mutates anything, so their mutants always survive), tests, `vendor/` and deleted files. The base is `HEAD^1`, which on the merge commit a pull request's CI checks out is the target branch before the change, and on the merge commit of a push is the branch before it; `--mutation-base=REF` gives another. The reusable workflow sets `fetch-depth: 2` for such a repository, because a one-commit checkout has no base. A base git cannot resolve fails the gate, saying what to do: it never falls back to the whole repository.
+- **`min` is a threshold, not a ratchet.** The score of some files says nothing about the files of the next pull request, so it is never recorded, tightened or compared with `ratchet.msi`: a pull request that touches a file at 100 % does not raise the bar for the next one. Without `min`, the gate only reports the score. Use either `ratchet.msi` (the whole repository) or `mutation.scope: "changed"`; with both, the scope decides and `msi` reads `unmeasured`.
+- **A score is computed on whole files, not on changed lines.** A mutant that survives in a file you touched counts even if you did not write it, so a one-line change to a weakly tested file can fail the gate. The failure lists the surviving mutants (`UNTESTED src/A.php > Line 61: ...`): add the test that would fail without that line, or raise the score of the file. Choose `min` from a measure of the files that change most, not from the repository's average.
+- **Nothing to mutate passes.** A change without a source file, or whose files Pest creates no mutation in (an interface prints `Mutations: 0 tested`, `Score: 0.00%`, which measures nothing), passes with a note.
 
 ## What is in the box
 
