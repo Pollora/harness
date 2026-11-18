@@ -11,6 +11,7 @@ use Pollora\Harness\Console\Commands\CheckCommand;
 use Pollora\Harness\Console\Commands\DepsCommand;
 use Pollora\Harness\Console\Commands\HookCommand;
 use Pollora\Harness\Console\Commands\InitCommand;
+use Pollora\Harness\Console\Commands\NpmAuditCommand;
 use Pollora\Harness\Console\Commands\RatchetCommand;
 use Pollora\Harness\Console\Commands\RulesCommand;
 use Pollora\Harness\Console\Commands\SurfaceCommand;
@@ -139,6 +140,7 @@ final class Application
             new CheckCommand,
             new RatchetCommand,
             new DepsCommand,
+            new NpmAuditCommand,
             new SurfaceCommand,
             new ArchiveCommand,
             new RulesCommand,

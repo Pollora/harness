@@ -166,16 +166,26 @@ jobs:
         with:
           persist-credentials: false
 
+      # The audit logic lives in the harness (`pollora-qa npm-audit`), read from the version of
+      # this workflow: the same code `pollora-qa check` runs, not a second copy in shell.
+      - uses: actions/checkout@v7
+        with:
+          repository: Pollora/harness
+          ref: ${{ github.job_workflow_sha }}
+          path: .harness-presets
+          persist-credentials: false
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
 
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+
+      # A high or critical advisory blocks, unless `npm_audit.allow` (in `.github/harness.json`, or
+      # `.harness.json`) names it, with a reason and an expiry at most 90 days away. An exception
+      # that has expired fails the job. The tolerated advisories are listed in the job summary.
       - name: Audit the locked npm dependencies
-        run: |
-          status=0
-          for lock in $(find . -maxdepth 3 -name package-lock.json -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.worktrees/*'); do
-            echo "::group::npm audit $(dirname "$lock")"
-            npm audit --audit-level=high --prefix "$(dirname "$lock")" || status=1
-            echo "::endgroup::"
-          done
-          exit $status
+        run: php .harness-presets/bin/pollora-qa npm-audit

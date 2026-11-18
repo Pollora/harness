@@ -113,7 +113,7 @@ it('audits Composer with the binary found on the PATH, or says it is missing', f
 });
 
 it('audits npm for every lock file, or flags npm missing when there is one to audit', function (): void {
-    $bin = covPathWith(['npm']);
+    covPathWith(['npm']);
     $cwd = harnessTempDir();
     mkdir($cwd.'/e2e');
     file_put_contents($cwd.'/package-lock.json', '{}');
@@ -121,8 +121,7 @@ it('audits npm for every lock file, or flags npm missing when there is one to au
 
     $step = covStep(Plan::NPM_AUDIT, $cwd);
 
-    expect($step->action[0])->toBe('sh')
-        ->and($step->action[2])->toContain("'{$bin}/npm' audit --audit-level=high --prefix '.'")->toContain("--prefix 'e2e'");
+    expect($step->action)->toBeInstanceOf(Closure::class)->and($step->skipReason)->toBeNull();
 
     covPathWith([]);
 

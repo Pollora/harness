@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Pollora\Harness\Check;
 
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Config\NpmAuditSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Config\RuleExemption;
+use Pollora\Harness\Console\Commands\NpmAuditCommand;
 use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Metrics\MissingReports;
+use Pollora\Harness\Npm\NpmAudit;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\ChangedSources;
 use Pollora\Harness\Support\InterpreterFlags;
@@ -353,13 +356,14 @@ final readonly class Plan
 
     /**
      * `npm audit` over every lock file of the repository (the root and the test
-     * suites that have their own). Composer's audit does not see these.
+     * suites that have their own). Composer's audit does not see these. Only the
+     * advisories `npm_audit.allow` lists, until their expiry, are tolerated.
      */
     private function npmAudit(): Step
     {
         $name = self::NPM_AUDIT;
         $npm = Paths::which('npm');
-        $directories = $this->npmLockDirectories();
+        $directories = NpmAudit::lockDirectories($this->cwd);
 
         if ($directories === []) {
             return Step::skipped($name, ['SEC-09'], 'no package-lock.json to audit');
@@ -369,38 +373,19 @@ final readonly class Plan
             return Step::missingTool($name, ['SEC-09'], 'npm is not on the PATH', 'install Node.js (https://nodejs.org)');
         }
 
-        $commands = array_map(
-            static fn (string $directory): string => sprintf('%s audit --audit-level=high --prefix %s || status=1', escapeshellarg($npm), escapeshellarg($directory)),
-            $directories,
+        $cwd = $this->cwd;
+        $settings = $this->config->npmAudit;
+
+        return new Step(
+            $name,
+            ['SEC-09'],
+            static function () use ($cwd, $npm, $settings, $directories): StepResult {
+                $result = (new NpmAudit($cwd, $npm, $settings, NpmAuditSettings::today()))->audit($directories);
+                NpmAuditCommand::writeSummary($result);
+
+                return $result->passed() ? StepResult::passed($result->render()) : StepResult::failed($result->render());
+            },
         );
-
-        return new Step($name, ['SEC-09'], ['sh', '-c', 'status=0; '.implode('; ', $commands).'; exit $status']);
-    }
-
-    /**
-     * @return list<string> Directories (relative to the repository) that hold a package-lock.json
-     */
-    private function npmLockDirectories(): array
-    {
-        $directories = [];
-
-        foreach (['', '*/', '*/*/'] as $depth) {
-            $locks = glob($this->cwd.'/'.$depth.'package-lock.json');
-
-            if ($locks === false) {
-                continue;
-            }
-
-            foreach ($locks as $lock) {
-                $directory = ltrim(substr(dirname($lock), strlen($this->cwd)), '/');
-
-                if (preg_match('#(^|/)(node_modules|vendor|\.worktrees|\.git)(/|$)#', $directory) !== 1) {
-                    $directories[] = $directory === '' ? '.' : $directory;
-                }
-            }
-        }
-
-        return $directories;
     }
 
     /**

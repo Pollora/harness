@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Pollora\Harness\Check\Plan;
 use Pollora\Harness\Check\Step;
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Npm\NpmAudit;
 use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
 
@@ -57,18 +58,7 @@ it('audits every package-lock.json except the vendored ones, and never blocks', 
         file_put_contents($cwd.'/'.$directory.'package-lock.json', '{}');
     }
 
-    $step = npmAuditStep($cwd);
-
-    if ($step->skipReason !== null) {
-        expect($step->skipReason)->toBe('npm is not on the PATH');
-
-        return;
-    }
-
-    expect($step->action[2])->toContain('--prefix \'.\'')
-        ->toContain('--prefix \'tests/e2e\'')
-        ->not->toContain('node_modules')
-        ->not->toContain('vendor');
+    expect(NpmAudit::lockDirectories($cwd))->toBe(['.', 'tests/e2e']);
     expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::NPM_AUDIT);
 });
 

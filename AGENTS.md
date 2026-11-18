@@ -48,7 +48,7 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **SEC-04** No unescaped Blade output {!! !!} outside a commented allowlist _(Semgrep, G1)_
 - **SEC-05** No unserialize, eval or extract _(Semgrep, G1)_
 - **SEC-08** No secret in the repository _(gitleaks, G1)_
-- **SEC-09** No dependency with a known vulnerability _(composer audit, G1)_
+- **SEC-09** No dependency with a known vulnerability _(composer audit, npm audit (time-limited exceptions in npm_audit), G1)_
 - **QA-01** Ratchet: no metric gets worse (PHPStan level and baseline, coverage, mutation score) _(pollora-qa ratchet, G2)_
 - **QA-02** The harness files are protected: baseline, .harness.json and api-surface.json change only through a human _(Agent hooks + CODEOWNERS, G0)_
 - **QA-04** The public surface (attributes, hooks fired, configuration keys, commands) changes only with a label: api-change to add, breaking to remove or change _(pollora-qa surface, G2)_
