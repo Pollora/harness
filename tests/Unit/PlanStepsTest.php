@@ -80,7 +80,7 @@ it('scans with the observed Semgrep rules in a gate that never blocks', function
 
     expect($step->action[0])->toBe($bin.'/semgrep')
         ->and(implode(' ', $step->action))->toContain('semgrep/observed.yml')->not->toContain('common.yml')
-        ->and($step->rules)->toBe(['SEC-02'])
+        ->and($step->rules)->toBe(['SEC-02', 'SEC-06', 'SEC-07'])
         ->and(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::SEMGREP_OBSERVED);
 
     $skipped = covStep(Plan::SEMGREP_OBSERVED, harnessTempDir());

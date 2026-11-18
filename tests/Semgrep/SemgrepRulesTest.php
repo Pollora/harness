@@ -6,7 +6,8 @@ use Pollora\Harness\Support\Paths;
 
 /*
  * Each fixture line annotated `// ruleid: <rule>` (or `{{-- ruleid: <rule> --}}`
- * in Blade) must be reported on the next line, and nothing else may be.
+ * in Blade) must be reported on the next line, and nothing else may be. A line two
+ * rules report carries two `ruleid:` markers.
  * Semgrep skips tests/ by default, so the fixtures are scanned from a copy.
  */
 
@@ -31,8 +32,10 @@ it('reports exactly the annotated lines', function (): void {
         copy($fixture->getPathname(), $target);
 
         foreach (file($fixture->getPathname()) ?: [] as $index => $line) {
-            if (preg_match('/ruleid:\s*([a-z0-9-]+)/', $line, $match) === 1) {
-                $expected[] = $match[1].' src/'.$relative.':'.($index + 2);
+            if (preg_match_all('/ruleid:\s*([a-z0-9-]+)/', $line, $matches) > 0) {
+                foreach ($matches[1] as $rule) {
+                    $expected[] = $rule.' src/'.$relative.':'.($index + 2);
+                }
             }
         }
     }

@@ -122,7 +122,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 
 | Command | Does |
 | --- | --- |
-| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed, with the time-limited exceptions of `npm_audit`), the observed Semgrep rules (SEC-02), ratchet |
+| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed, with the time-limited exceptions of `npm_audit`), the observed Semgrep rules (SEC-02, SEC-06, SEC-07), ratchet |
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree; the whole tree where git is not usable |
 | `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
@@ -258,11 +258,11 @@ The harness no longer only measures: every repository that adopted it runs the g
 
 | | Rules | Which |
 | --- | --- | --- |
-| Enforced | 24 | style, PHPStan, architecture tests, dependency policy, Semgrep patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, and ARCH-05 on the framework), secrets, `composer audit`, the ratchet, the public surface, backward compatibility, the distribution archive |
-| Observed | 5 | CONV-04 and CONV-06 (names of hooks and commands), SEC-02 (a hand-registered `wp_ajax_*` hook), CONV-11 (native types), QA-03 (a core package change keeps the framework green) |
-| Planned | 11 | CONV-01, CONV-02, CONV-08, CONV-09, CONV-12, SEC-06, SEC-07, PERF-01, PERF-02, PERF-03, PERF-07 |
+| Enforced | 26 | style, PHPStan, architecture tests, dependency policy, Semgrep patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, and ARCH-05 on the framework), secrets, `composer audit`, the ratchet, the public surface, backward compatibility, the distribution archive, the warm-cache and query-count tests of discovery and Colt (PERF-02, PERF-03, which run in those packages' own suites) |
+| Observed | 7 | CONV-04 and CONV-06 (names of hooks and commands), SEC-02 (a hand-registered `wp_ajax_*` hook), SEC-06 (a request value validated with an unanchored `$`, a signature compared with `==`), SEC-07 (an admin handler or menu page without a capability), CONV-11 (native types), QA-03 (a core package change keeps the framework green) |
+| Planned | 7 | CONV-01, CONV-02, CONV-08, CONV-09, CONV-12, PERF-01, PERF-07 |
 
-`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress, adapter contract tests and performance budgets, which are what the planned SEC-06, SEC-07 and PERF-* rules wait for.
+`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress, adapter contract tests and performance budgets, which are what the planned PERF-01 and PERF-07 rules wait for.
 
 ## Contributing
 
