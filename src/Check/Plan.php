@@ -32,6 +32,9 @@ final readonly class Plan
 
     public const string MUTATION = 'Mutation testing';
 
+    /** The Semgrep rules measured but not yet clean across the ecosystem (SEC-02). */
+    public const string SEMGREP_OBSERVED = 'Security patterns (observed)';
+
     /**
      * The mutation gate of a repository that declares `mutation.scope: "changed"`. Unlike the whole-repository one
      * it is not observed by default: the repository chose a minimum, and a change below it blocks (in enforce mode).
@@ -51,7 +54,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION, self::SEMGREP_OBSERVED];
 
     public function __construct(
         private HarnessConfig $config,
@@ -99,6 +102,7 @@ final readonly class Plan
             $this->dependencyPolicy(),
             $this->dependencyAnalysis(),
             $this->semgrep(),
+            $this->semgrepObserved(),
             $this->audit(),
             $this->npmAudit(),
             $this->publicSurface(),
@@ -297,13 +301,45 @@ final readonly class Plan
             $rules[] = 'ARCH-05';
         }
 
-        $targets = array_values(array_filter(['src', 'app', 'config', 'resources', 'routes'], fn (string $path): bool => is_dir($this->cwd.'/'.$path)));
+        $targets = $this->semgrepTargets();
 
         if ($targets === []) {
             return Step::skipped('Security patterns', $rules, 'no source directory to scan');
         }
 
         return new Step('Security patterns', $rules, [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--error', '--quiet', ...$configs, ...$targets]);
+    }
+
+    /**
+     * The Semgrep rules that are measured but not blocking yet (SEC-02), in a gate of their own so that
+     * an observed rule never turns the blocking "Security patterns" gate red.
+     */
+    private function semgrepObserved(): Step
+    {
+        $rules = ['SEC-02'];
+        $semgrep = Paths::which('semgrep');
+
+        if ($semgrep === null) {
+            return Step::missingTool(self::SEMGREP_OBSERVED, $rules, 'semgrep is not installed, so these rules were not checked (CI runs it)', 'pipx install semgrep');
+        }
+
+        $targets = $this->semgrepTargets();
+
+        if ($targets === []) {
+            return Step::skipped(self::SEMGREP_OBSERVED, $rules, 'no source directory to scan');
+        }
+
+        return new Step(self::SEMGREP_OBSERVED, $rules, [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--error', '--quiet', '--config', Paths::preset('semgrep/observed.yml'), ...$targets]);
+    }
+
+    /**
+     * The directories Semgrep scans: those of the source tree that exist.
+     *
+     * @return list<string>
+     */
+    private function semgrepTargets(): array
+    {
+        return array_values(array_filter(['src', 'app', 'config', 'resources', 'routes'], fn (string $path): bool => is_dir($this->cwd.'/'.$path)));
     }
 
     private function audit(): Step

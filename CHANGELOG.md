@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **SEC-02 is `observed`: a hand-registered AJAX hook is reported.** The Semgrep rule `pollora.sec-02.manual-ajax-hook` (`presets/semgrep/observed.yml`) flags `add_action()`, `Action::add()` and `$action->add()` called with a `wp_ajax_*` or `wp_ajax_nopriv_*` hook (a literal, `"wp_ajax_{$x}"` or `'wp_ajax_' . $x`), which skips the nonce that `pollora/ajax` 1.2.0 checks, and points to `#[Ajax]` / `Ajax::listen()->requireNonce()`. Only `Adapter/Out/WordPress/WordPressAjaxActionRegistrar.php` (the registrar of `pollora/ajax`) is exempt. It runs as its own gate, *Security patterns (observed)*, which never blocks and is observed by default, because the measure over the ecosystem found three hand-registered hooks (`ai-visibility`, `mcp-connector`, the framework's `VersionCheck`): it becomes `enforced` once they go through `pollora/ajax`. The Semgrep fixtures test now copies nested directories, to check the exemption.
+
 ## [0.1.30] - 2026-11-18
 
 ### Fixed

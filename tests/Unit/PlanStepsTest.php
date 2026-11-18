@@ -71,6 +71,25 @@ it('adds the framework rules to the semgrep scan of the framework profile', func
         ->and($step->rules)->toContain('ARCH-05');
 });
 
+it('scans with the observed Semgrep rules in a gate that never blocks', function (): void {
+    $bin = covPathWith(['semgrep']);
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/src');
+
+    $step = covStep(Plan::SEMGREP_OBSERVED, $cwd);
+
+    expect($step->action[0])->toBe($bin.'/semgrep')
+        ->and(implode(' ', $step->action))->toContain('semgrep/observed.yml')->not->toContain('common.yml')
+        ->and($step->rules)->toBe(['SEC-02'])
+        ->and(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::SEMGREP_OBSERVED);
+
+    $skipped = covStep(Plan::SEMGREP_OBSERVED, harnessTempDir());
+    expect($skipped->skipReason)->toBe('no source directory to scan');
+
+    covPathWith([]);
+    expect(covStep(Plan::SEMGREP_OBSERVED, harnessTempDir())->install)->toBe('pipx install semgrep');
+});
+
 it('skips the semgrep scan where there is no source directory, and flags a missing semgrep', function (): void {
     covPathWith(['semgrep']);
     $skipped = covStep('Security patterns', harnessTempDir());

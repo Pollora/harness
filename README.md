@@ -99,7 +99,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 
 | Command | Does |
 | --- | --- |
-| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed), ratchet |
+| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed), the observed Semgrep rules (SEC-02), ratchet |
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree; the whole tree where git is not usable |
 | `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
@@ -117,7 +117,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 
 ### Missing tools
 
-A gate whose tool is not installed does not run, and is not a pass: the summary marks it `– no tool`, prints the command that installs the tool (`pipx install semgrep`, `composer require --dev laravel/pint`…), and ends with "Every gate that ran passed, but not every gate ran." instead of "Every gate passed."; the job summary and `report.json` say the same (`missing_tool`, `install`). Locally this is how Semgrep, which guards SEC-01, SEC-03, SEC-04, SEC-05 and CONV-10, goes unnoticed; CI installs it. `check --strict` makes the missing tool fail the check, in `observe` mode too; a gate listed under `observed` is left out.
+A gate whose tool is not installed does not run, and is not a pass: the summary marks it `– no tool`, prints the command that installs the tool (`pipx install semgrep`, `composer require --dev laravel/pint`…), and ends with "Every gate that ran passed, but not every gate ran." instead of "Every gate passed."; the job summary and `report.json` say the same (`missing_tool`, `install`). Locally this is how Semgrep, which guards SEC-01, SEC-03, SEC-04, SEC-05 and CONV-10 (and reports SEC-02), goes unnoticed; CI installs it. `check --strict` makes the missing tool fail the check, in `observe` mode too; a gate listed under `observed` is left out.
 
 ### Without git
 
@@ -235,8 +235,8 @@ The harness no longer only measures: every repository that adopted it runs the g
 | | Rules | Which |
 | --- | --- | --- |
 | Enforced | 24 | style, PHPStan, architecture tests, dependency policy, Semgrep patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, and ARCH-05 on the framework), secrets, `composer audit`, the ratchet, the public surface, backward compatibility, the distribution archive |
-| Observed | 4 | CONV-04 and CONV-06 (names of hooks and commands), CONV-11 (native types), QA-03 (a core package change keeps the framework green) |
-| Planned | 12 | CONV-01, CONV-02, CONV-08, CONV-09, CONV-12, SEC-02, SEC-06, SEC-07, PERF-01, PERF-02, PERF-03, PERF-07 |
+| Observed | 5 | CONV-04 and CONV-06 (names of hooks and commands), SEC-02 (a hand-registered `wp_ajax_*` hook), CONV-11 (native types), QA-03 (a core package change keeps the framework green) |
+| Planned | 11 | CONV-01, CONV-02, CONV-08, CONV-09, CONV-12, SEC-06, SEC-07, PERF-01, PERF-02, PERF-03, PERF-07 |
 
 `pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress, adapter contract tests and performance budgets, which are what the planned SEC-06, SEC-07 and PERF-* rules wait for.
 
