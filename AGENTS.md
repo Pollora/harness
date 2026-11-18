@@ -43,6 +43,7 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **CONV-10** One named exception per business case; never throw a bare \Exception _(Semgrep, G1)_
 - **CONV-11** Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated _(PHPStan + Pest type coverage, G1)_
 - **SEC-01** A REST route declared by attribute states its permission; a public route says so explicitly _(Semgrep, G1)_
+- **SEC-02** An AJAX action checks a nonce by default; guest access is explicit _(Semgrep + integration test, G1)_
 - **SEC-03** No $wpdb query built by interpolation without prepare() _(Semgrep, G1)_
 - **SEC-04** No unescaped Blade output {!! !!} outside a commented allowlist _(Semgrep, G1)_
 - **SEC-05** No unserialize, eval or extract _(Semgrep, G1)_
