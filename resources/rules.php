@@ -41,7 +41,7 @@ return [
 
     // Security
     'SEC-01' => ['title' => 'A REST route declared by attribute states its permission; a public route says so explicitly', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
-    'SEC-02' => ['title' => 'An AJAX action checks a nonce by default; guest access is explicit', 'tool' => 'Semgrep + integration test', 'gate' => 'G1', 'status' => 'planned'],
+    'SEC-02' => ['title' => 'An AJAX action checks a nonce by default; guest access is explicit', 'tool' => 'Semgrep + integration test', 'gate' => 'G1', 'status' => 'observed'],
     'SEC-03' => ['title' => 'No $wpdb query built by interpolation without prepare()', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
     'SEC-04' => ['title' => 'No unescaped Blade output {!! !!} outside a commented allowlist', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
     'SEC-05' => ['title' => 'No unserialize, eval or extract', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],

@@ -21,18 +21,23 @@ it('reports exactly the annotated lines', function (): void {
     mkdir($copy.'/src');
 
     $expected = [];
+    $root = realpath(__DIR__.'/../Fixtures/semgrep/src');
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
 
-    foreach (glob(__DIR__.'/../Fixtures/semgrep/src/*') ?: [] as $fixture) {
-        copy($fixture, $copy.'/src/'.basename($fixture));
+    foreach ($files as $fixture) {
+        $relative = substr($fixture->getPathname(), strlen($root) + 1);
+        $target = $copy.'/src/'.$relative;
+        is_dir(dirname($target)) || mkdir(dirname($target), 0777, true);
+        copy($fixture->getPathname(), $target);
 
-        foreach (file($fixture) ?: [] as $index => $line) {
+        foreach (file($fixture->getPathname()) ?: [] as $index => $line) {
             if (preg_match('/ruleid:\s*([a-z0-9-]+)/', $line, $match) === 1) {
-                $expected[] = $match[1].' src/'.basename($fixture).':'.($index + 2);
+                $expected[] = $match[1].' src/'.$relative.':'.($index + 2);
             }
         }
     }
 
-    $command = [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--quiet', '--json', '--config', Paths::preset('semgrep/common.yml'), 'src'];
+    $command = [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--quiet', '--json', '--config', Paths::preset('semgrep/common.yml'), '--config', Paths::preset('semgrep/observed.yml'), 'src'];
     $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $copy);
     $json = json_decode((string) stream_get_contents($pipes[1]), true);
     fclose($pipes[1]);
