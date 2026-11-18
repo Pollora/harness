@@ -33,6 +33,7 @@ final readonly class HarnessConfig
      * @param  list<CommandExemption>  $allowCommands  Commands that keep a name without the pollora: prefix, each with its reason (CONV-06)
      * @param  list<RuleExemption>  $allowRules  Architecture rules of tests/Arch.php that are skipped, each with its reason
      * @param  MutationSettings  $mutation  What `check --mutation` mutates and the score it must reach (the `mutation` key)
+     * @param  NpmAuditSettings  $npmAudit  The npm advisories tolerated for a limited time (the `npm_audit` key, SEC-09)
      */
     public function __construct(
         public Profile $profile,
@@ -45,6 +46,7 @@ final readonly class HarnessConfig
         public array $allowCommands = [],
         public array $allowRules = [],
         public MutationSettings $mutation = new MutationSettings,
+        public NpmAuditSettings $npmAudit = new NpmAuditSettings,
     ) {}
 
     public static function exists(string $root): bool
@@ -111,12 +113,13 @@ final readonly class HarnessConfig
             allowCommands: self::commandExemptions($data['allow_commands'] ?? [], $path),
             allowRules: self::ruleExemptions($data['allow_rules'] ?? [], $path),
             mutation: MutationSettings::fromArray($data['mutation'] ?? null, $path),
+            npmAudit: NpmAuditSettings::fromArray($data['npm_audit'] ?? null, $path),
         );
     }
 
     public function withRatchet(Ratchet $ratchet): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit);
     }
 
     /**
@@ -135,6 +138,7 @@ final readonly class HarnessConfig
             'allow_rules' => array_map(static fn (RuleExemption $exemption): array => $exemption->toArray(), $this->allowRules),
             'ratchet' => $this->ratchet->toArray(),
             'mutation' => $this->mutation->toArray(),
+            'npm_audit' => $this->npmAudit->toArray(),
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
 

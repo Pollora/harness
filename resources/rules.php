@@ -48,7 +48,7 @@ return [
     'SEC-06' => ['title' => 'On-the-fly thumbnails only accept declared sizes', 'tool' => 'Contract test (media)', 'gate' => 'G2', 'status' => 'planned'],
     'SEC-07' => ['title' => 'Every administration action checks a capability', 'tool' => 'Integration test per role', 'gate' => 'G2', 'status' => 'planned'],
     'SEC-08' => ['title' => 'No secret in the repository', 'tool' => 'gitleaks', 'gate' => 'G1', 'status' => 'enforced'],
-    'SEC-09' => ['title' => 'No dependency with a known vulnerability', 'tool' => 'composer audit', 'gate' => 'G1', 'status' => 'enforced'],
+    'SEC-09' => ['title' => 'No dependency with a known vulnerability', 'tool' => 'composer audit, npm audit (time-limited exceptions in npm_audit)', 'gate' => 'G1', 'status' => 'enforced'],
 
     // Performance
     'PERF-01' => ['title' => 'SQL queries per page type never exceed the reference', 'tool' => 'Golden project', 'gate' => 'G2', 'status' => 'planned'],

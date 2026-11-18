@@ -93,13 +93,36 @@ The summary of `pollora-qa check` (console, job summary, `.harness/report.json`)
 
 `rule` must be a rule that `tests/Arch.php` evaluates (ARCH-01, ARCH-03, ARCH-08, ARCH-09, CONV-03, CONV-05, CONV-07) and `reason` is required: an unknown rule, a rule checked by another gate, a rule listed twice or an entry without a reason makes `.harness.json` invalid, with a message that names the entry. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
 
+### An npm advisory with no fix yet (`npm_audit`)
+
+The *Dependency audit (npm)* gate runs `npm audit --json` over every `package-lock.json` (the root and the directories two levels down, without `node_modules`, `vendor` or `.worktrees`) and blocks on every high or critical advisory. An advisory can have no patched version: `GHSA-fc5q-39xc-vjpf` (ReDoS in `picomatch`, vulnerable up to 4.0.7, no `first_patched_version`) turns every project that uses Vite red, and downgrading Vite to avoid it would trade a theoretical ReDoS for known fixed flaws. Instead of turning the gate off, list the advisory under `npm_audit.allow` in `.harness.json`, with a reason and an expiry:
+
+```json
+{
+    "npm_audit": {
+        "allow": [
+            { "advisory": "GHSA-fc5q-39xc-vjpf", "reason": "ReDoS in picomatch <= 4.0.7, no patched version published; build-time only", "expires": "2026-12-18" }
+        ]
+    }
+}
+```
+
+- An advisory is tolerated only when its identifier is listed **and** the date is not past (the exception holds through the day it names). Every other high or critical advisory still blocks. Because npm reports a package that only depends on the vulnerable one (`vite`, `tinyglobby`, `fdir`) through that advisory, one entry covers the whole dependency chain.
+- An exception that has expired fails the gate and says so: `exception expired on 2026-12-18`. Nothing is tolerated silently for good.
+- The tolerated advisories are printed with their reason and date by `check`, and written to the job summary of GitHub Actions (`GITHUB_STEP_SUMMARY`); an exception that matches no advisory any more is reported, so it can be removed.
+- `advisory` must be a GitHub identifier (`GHSA-xxxx-xxxx-xxxx`), `reason` is required, and `expires` is a calendar date `YYYY-MM-DD` at most 90 days from today: anything else, or a repeated advisory, makes `.harness.json` invalid, with a message that names the entry.
+- If `npm audit` cannot reach the registry or prints no report, the gate fails: a missing report is never read as a clean one.
+- The gate is observed by default (`OBSERVED_BY_DEFAULT`), like before; the exceptions change what it reports, not whether it blocks.
+
+A template (the skeleton, a theme) cannot carry a `.harness.json`. Its reusable workflow runs `pollora-qa npm-audit`, the same code as the `check` step, which reads the `npm_audit` key from `.harness.json` or, failing that, from `.github/harness.json` (a directory the release archives leave out), as a file holding only that key. `--config=FILE` names another file. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not.
+
 The **Dependency analysis** gate uses the repository's `composer-dependency-analyser.php` when there is one; without it, a harness preset ignores what is noise in a WordPress repository (WordPress classes and functions, which are not Composer packages, the usual PHP extensions, and the classes and libraries of the tests); a repository that needs more writes its own file and can start from the preset with `require`.
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed), the observed Semgrep rules (SEC-02), ratchet |
+| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed, with the time-limited exceptions of `npm_audit`), the observed Semgrep rules (SEC-02), ratchet |
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree; the whole tree where git is not usable |
 | `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
@@ -109,6 +132,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
 | `pollora-qa archive [--fix]` | Checks that development files stay out of the release archive (QA-06); `--fix` writes the missing `export-ignore` lines |
+| `pollora-qa npm-audit [--config=FILE]` | The npm dependency audit alone (SEC-09), for a template that cannot carry the harness; same code as the `check` step |
 | `pollora-qa rules [ID]` | Lists the rules, or explains one |
 | `pollora-qa agents` | Regenerates the harness block of `AGENTS.md` |
 | `pollora-qa hook <event>` | Agent hooks: `pre-edit`, `post-edit`, `stop` |

@@ -93,4 +93,38 @@ final class InvalidConfig extends RuntimeException
 
         return new self("{$path}: mutation.min is \"{$given}\". Give a score between 0 and 100.");
     }
+
+    public static function npmAuditMalformed(string $path): self
+    {
+        return new self("{$path}: npm_audit must be an object with an \"allow\" list of {\"advisory\", \"reason\", \"expires\"} entries.");
+    }
+
+    public static function npmAuditAdvisory(string $path, mixed $advisory): self
+    {
+        $given = is_scalar($advisory) ? (string) $advisory : get_debug_type($advisory);
+
+        return new self("{$path}: npm_audit.allow lists \"{$given}\", which is not a GitHub advisory identifier (GHSA-xxxx-xxxx-xxxx).");
+    }
+
+    public static function npmAuditWithoutReason(string $path, string $advisory): self
+    {
+        return new self("{$path}: npm_audit.allow lists {$advisory} without a reason. Say why the advisory is tolerated.");
+    }
+
+    public static function npmAuditExpiry(string $path, string $advisory, mixed $expires): self
+    {
+        $given = is_scalar($expires) ? (string) $expires : get_debug_type($expires);
+
+        return new self("{$path}: npm_audit.allow lists {$advisory} with the expiry \"{$given}\". Use a calendar date written YYYY-MM-DD.");
+    }
+
+    public static function npmAuditTooFar(string $path, string $advisory, string $latest): self
+    {
+        return new self(sprintf('%s: npm_audit.allow lists %s with an expiry more than %d days away. The latest date accepted today is %s.', $path, $advisory, NpmAuditSettings::MAX_DAYS, $latest));
+    }
+
+    public static function npmAuditDuplicate(string $path, string $advisory): self
+    {
+        return new self("{$path}: npm_audit.allow lists {$advisory} twice.");
+    }
 }
