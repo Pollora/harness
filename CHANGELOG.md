@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-11-18
+
 ### Added
 
 - **`mutation.scope: "added"` holds only the files a change adds to the minimum.** `{ "scope": "added", "min": 80 }` mutates the source files `git diff --diff-filter=A` lists between the base and `HEAD` and the *Mutation testing (new files)* gate fails below `min`; the files the change only modifies are not mutated (the message counts them). It is for a repository whose existing files score unevenly: the framework's, measured one by one, run from 51 % to 100 % (median 74 %), so a minimum fit for new code would block every change to an old file for mutants it did not write. The reusable workflow treats `added` like `changed` (it runs `check --mutation` and keeps two commits at checkout). `ChangedSources::since()` takes the git diff filter (`ChangedSources::CHANGED` or `ChangedSources::ADDED`).
