@@ -105,3 +105,39 @@ it('fails the mutation step, saying why, when Pest prints no score', function ()
         ->and($result->detail)->toContain('the tests must pass first')
         ->and($result->detail)->toContain('2 failed');
 });
+
+describe('a Pest that cannot write its temporary mutation files', function (): void {
+    /** What Pest printed in the incident of 18 November: five mutants, all "killed", on a test that asserts nothing. */
+    $warning = "Warning: fopen(/app/vendor/pestphp/pest-plugin-mutate/src/../.temp/mutations/225429bccf85eb2c): Failed to open stream: No such file or directory in /app/vendor/pestphp/pest-plugin-mutate/src/Support/MutationGenerator.php on line 12\n";
+    $report = "  5 Mutations for 1 Files created\n  ✓ Line 11: PlusToMinus\n  Mutations: 5 tested\n  Score:     100.00%\n";
+
+    it('recognises the warning, and only that one', function () use ($warning): void {
+        expect(MutationRun::cannotWriteTemporaryFiles($warning))->toBeTrue()
+            ->and(MutationRun::cannotWriteTemporaryFiles("\e[33m".$warning."\e[0m"))->toBeTrue()
+            ->and(MutationRun::cannotWriteTemporaryFiles("Warning: fopen(/tmp/other.txt): Failed to open stream: No such file or directory\n"))->toBeFalse()
+            ->and(MutationRun::cannotWriteTemporaryFiles("  Mutations: 5 tested\n  Score:     100.00%\n"))->toBeFalse();
+    });
+
+    it('has no score, and does not repeat the run, instead of a score of 100 %', function () use ($warning, $report): void {
+        $root = projectWithFakePest($warning.$report, 'never used');
+
+        $run = MutationRun::run($root);
+
+        expect($run['unwritable'])->toBeTrue()
+            ->and($run['score'])->toBeNull()
+            ->and($run['empty'])->toBeFalse();
+    });
+
+    it('fails the whole-repository gate, saying what to check', function () use ($warning, $report): void {
+        $root = projectWithFakePest($warning.$report, '');
+        $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core']), $root))->full(null, null, true);
+        $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION))[0];
+
+        $result = ($step->action)();
+
+        expect($result->status)->toBe(StepResult::FAILED)
+            ->and($result->detail)->toContain('could not write its temporary mutation files')
+            ->and($result->detail)->toContain('pest-plugin-mutate/.temp/mutations');
+    });
+
+});

@@ -141,6 +141,8 @@ The run is parallel. A suite that fails that way (a global function a helper dec
 
 **Record a floor below the score you measured.** The figure moves from a run to the next: a mutant that loops until Pest's timeout counts as killed or not depending on the load of the machine (89.18 % and 90.53 % on the same code), and the parallel and single-process runs do not give exactly the same count. Record about two points under what you measured, and raise it by hand when the score has stayed higher for a while (`ratchet --update` only raises, never lowers).
 
+**A mutation run that cannot write its files.** Pest writes each mutant under `vendor/pestphp/pest-plugin-mutate/.temp/mutations`. If that directory is missing or read-only, every mutant process fails and counts as killed, so the score reads 100 % whatever the tests assert. The gates read Pest's `Failed to open stream` warning for that path and fail, naming the directory, rather than report the score. A fresh `composer install` has the directory; a CI that restores `vendor/` from a cache, or a container that deletes it, may not.
+
 **Two traps of Pest's mutation runner.**
 - Pest builds its `--filter` as regex alternatives, one per test that covers the mutated line. Past the PCRE compilation limit (about 64 KB) the filter is invalid, no test runs and the mutant is counted as surviving. The lines covered by almost the whole suite are the ones concerned, and adding tests can lower the score there: fewer, broader tests (datasets folded into loops) beat more of them.
 - A class Composer loads from `files` (a `register.php`, a helper) is loaded before Pest mutates anything, so its mutants always survive. `--class=` does not narrow the run, and a test file edited during a run makes it die silently.
