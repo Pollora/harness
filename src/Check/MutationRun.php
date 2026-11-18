@@ -19,6 +19,11 @@ use Pollora\Harness\Support\InterpreterFlags;
  * long for a pull request mutates only the files the change touches. Files without a mutant (an interface, a
  * file with nothing to mutate) make Pest print `Mutations: 0 tested` and `Score: 0.00%`; that is no score, so the
  * result says `empty` and carries a null score instead of a 0 that would fail any threshold.
+ *
+ * Pest writes every mutant under `vendor/pestphp/pest-plugin-mutate/.temp/mutations`. When it cannot (the
+ * directory is missing or read-only), each mutant's process fails, and a failed process counts as a killed
+ * mutant: the score reads 100 % whatever the tests assert, with only a PHP warning to say so. The result then says
+ * `unwritable` and carries a null score, and the run is not repeated.
  */
 final class MutationRun
 {
@@ -26,13 +31,13 @@ final class MutationRun
 
     /**
      * @param  list<string>  $paths  Source files (relative to $cwd) to mutate; empty mutates everything the tests cover
-     * @return array{score: float|null, summary: string, output: string, empty: bool}
+     * @return array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool}
      */
     public static function run(string $cwd, array $paths = []): array
     {
         $result = self::execute($cwd, true, $paths);
 
-        if ($result['score'] === null && ! $result['empty']) {
+        if ($result['score'] === null && ! $result['empty'] && ! $result['unwritable']) {
             $result = self::execute($cwd, false, $paths);
         }
 
@@ -50,6 +55,24 @@ final class MutationRun
 
         return preg_match('/No mutations created/i', $clean) === 1
             || preg_match('/^\s*Mutations:\s+0 tested\s*$/m', $clean) === 1;
+    }
+
+    /**
+     * Whether Pest warned that it could not write its temporary mutation files, which makes every mutant count as killed.
+     */
+    public static function cannotWriteTemporaryFiles(string $output): bool
+    {
+        $clean = (string) preg_replace(self::ANSI, '', $output);
+
+        return preg_match('/pest-plugin-mutate[^\n]*\.temp[^\n]*Failed to open stream/i', $clean) === 1;
+    }
+
+    /**
+     * What a gate says when the score cannot be trusted because Pest could not write its temporary files.
+     */
+    public static function unwritableMessage(): string
+    {
+        return 'Pest could not write its temporary mutation files (vendor/pestphp/pest-plugin-mutate/.temp/mutations): each mutant process fails, and a failed process counts as killed, so the score would read 100 % whatever the tests assert. Check that the directory exists and is writable, then run again.';
     }
 
     /**
@@ -81,7 +104,7 @@ final class MutationRun
 
     /**
      * @param  list<string>  $paths
-     * @return array{score: float|null, summary: string, output: string, empty: bool}
+     * @return array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool}
      */
     private static function execute(string $cwd, bool $parallel, array $paths): array
     {
@@ -99,7 +122,7 @@ final class MutationRun
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, $cwd);
 
         if (! is_resource($process)) {
-            return ['score' => null, 'summary' => '', 'output' => '', 'empty' => false];
+            return ['score' => null, 'summary' => '', 'output' => '', 'empty' => false, 'unwritable' => false];
         }
 
         $output = (string) stream_get_contents($pipes[1]);
@@ -107,8 +130,9 @@ final class MutationRun
         proc_close($process);
 
         $empty = self::createdNoMutation($output);
+        $unwritable = self::cannotWriteTemporaryFiles($output);
         $parsed = self::parse($output);
 
-        return ['score' => $empty ? null : $parsed['score'], 'summary' => $parsed['summary'], 'output' => $output, 'empty' => $empty];
+        return ['score' => $empty || $unwritable ? null : $parsed['score'], 'summary' => $parsed['summary'], 'output' => $output, 'empty' => $empty, 'unwritable' => $unwritable];
     }
 }

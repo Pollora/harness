@@ -396,3 +396,18 @@ describe('the mutation gate of the changed files', function (): void {
             ->and($names)->not->toContain(Plan::MUTATION);
     });
 });
+
+it('fails the gate of the new files when Pest cannot write its temporary files, instead of reading 100 %', function (): void {
+    $root = scopedRepository(['src/New.php' => "<?php\n"]);
+    mkdir($root.'/vendor/bin', 0o777, true);
+    mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
+    $output = "Warning: fopen(/app/vendor/pestphp/pest-plugin-mutate/src/../.temp/mutations/225429bccf85eb2c): Failed to open stream: No such file or directory\n  Mutations: 5 tested\n  Score:     100.00%\n";
+    file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, ".var_export($output, true).");\n");
+    $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'added', 'min' => 80]]), $root))->full(null, null, true);
+    $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION_ADDED))[0];
+
+    $result = ($step->action)();
+
+    expect($result->status)->toBe(StepResult::FAILED)
+        ->and($result->detail)->toContain('would read 100 % whatever the tests assert');
+});
