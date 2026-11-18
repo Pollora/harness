@@ -51,7 +51,7 @@ final class Signatures
         }
 
         // ok: sec-06
-        if ('none' === $signature || null === $token || self::NONE === $this->secret) {
+        if ($signature === 'none' || $token === null || $this->secret === self::NONE) {
             return false;
         }
 
@@ -68,7 +68,7 @@ final class Signatures
         }
 
         // ruleid: sec-06
-        if ('known' !== $headers['x-api-key'] && $token == $expected) {
+        if ($headers['x-api-key'] !== 'known' && $token == $expected) {
             return false;
         }
 

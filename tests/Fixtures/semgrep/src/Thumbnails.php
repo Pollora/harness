@@ -19,7 +19,7 @@ final class Thumbnails
         }
 
         // ruleid: sec-06
-        if (preg_match("/^[a-z]+$/", $name)) {
+        if (preg_match('/^[a-z]+$/', $name)) {
             return;
         }
 
