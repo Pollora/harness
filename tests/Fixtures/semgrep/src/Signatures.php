@@ -1,0 +1,83 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+final class Signatures
+{
+    private string $secret = 'x';
+
+    public function verify(string $signature, string $expected, ?string $token, array $headers): bool
+    {
+        // ruleid: sec-06
+        if ($signature === $expected) {
+            return true;
+        }
+
+        // ruleid: sec-06
+        if ($expected !== $signature) {
+            return false;
+        }
+
+        // ruleid: sec-06
+        if ($_GET['token'] == $this->secret) {
+            return true;
+        }
+
+        // ruleid: sec-06
+        if (hash_hmac('sha256', 'body', 'k') === $headers['X-Signature']) {
+            return true;
+        }
+
+        // ruleid: sec-06
+        if ($this->secret !== $headers['x-secret']) {
+            return false;
+        }
+
+        // ok: sec-06
+        if (hash_equals($expected, $signature)) {
+            return true;
+        }
+
+        // ok: sec-06
+        if ($token === null || $token === '') {
+            return false;
+        }
+
+        // ok: sec-06
+        if ($signature !== 'none') {
+            return false;
+        }
+
+        // ok: sec-06
+        if ('none' === $signature || null === $token || self::NONE === $this->secret) {
+            return false;
+        }
+
+        // ok: sec-06
+        if (strlen($signature) !== self::LENGTH || $headers['x-token'] === []) {
+            return false;
+        }
+
+        // ok: sec-06
+        foreach ($headers as $key => $value) {
+            if ($key === 'content-type') {
+                return false;
+            }
+        }
+
+        // ruleid: sec-06
+        if ('known' !== $headers['x-api-key'] && $token == $expected) {
+            return false;
+        }
+
+        // ok: sec-06
+        return $expected === $this->normalise($expected);
+    }
+
+    private function normalise(string $value): string
+    {
+        return $value;
+    }
+}

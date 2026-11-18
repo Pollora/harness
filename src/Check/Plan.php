@@ -35,7 +35,7 @@ final readonly class Plan
 
     public const string MUTATION = 'Mutation testing';
 
-    /** The Semgrep rules measured but not yet clean across the ecosystem (SEC-02). */
+    /** The Semgrep rules measured but not yet clean across the ecosystem (SEC-02, SEC-06, SEC-07). */
     public const string SEMGREP_OBSERVED = 'Security patterns (observed)';
 
     /**
@@ -314,12 +314,12 @@ final readonly class Plan
     }
 
     /**
-     * The Semgrep rules that are measured but not blocking yet (SEC-02), in a gate of their own so that
+     * The Semgrep rules that are measured but not blocking yet (SEC-02, SEC-06, SEC-07), in a gate of their own so that
      * an observed rule never turns the blocking "Security patterns" gate red.
      */
     private function semgrepObserved(): Step
     {
-        $rules = ['SEC-02'];
+        $rules = ['SEC-02', 'SEC-06', 'SEC-07'];
         $semgrep = Paths::which('semgrep');
 
         if ($semgrep === null) {
