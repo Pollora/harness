@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.30] - 2026-11-18
+
 ### Fixed
 
 - **The mutation gates fail when Pest cannot write its temporary files, instead of reading 100 %.** Pest writes every mutant under `vendor/pestphp/pest-plugin-mutate/.temp/mutations`; when that directory is missing or read-only, each mutant's process fails, a failed process counts as a killed mutant, and the score reads 100 % whatever the tests assert, with only a PHP warning (`Failed to open stream`) to say so. A test without any assertion scored 100 % that way during the framework's adoption of the gate. `MutationRun::run()` now returns `unwritable: true` and a null score when it sees that warning, does not repeat the run, and both gates (*Mutation testing*, and the changed-files and new-files ones) fail with a message naming the directory.
