@@ -17,6 +17,12 @@ final class ChangedSources
     /** The base compared with `HEAD` when none is given: the first parent. */
     public const string DEFAULT_BASE = 'HEAD^1';
 
+    /** The git diff filter of every file a change touches: added, copied, modified, renamed. */
+    public const string CHANGED = 'ACMR';
+
+    /** The git diff filter of the files a change adds. */
+    public const string ADDED = 'A';
+
     /** The name Pest's mutation bootstrap gives the copy of a file it mutates; never a source file. */
     private const string MUTANT_PREFIX = '.mutant-';
 
@@ -27,16 +33,17 @@ final class ChangedSources
      * before the tests start, so its mutants always survive) and files outside the autoloaded source directories
      * are left out, as is a file that no longer exists.
      *
+     * @param  string  $filter  `self::CHANGED` for every file a change touches, `self::ADDED` for the files it adds only
      * @return list<string>|null null when git cannot say: not a repository, an unknown base, a history too short
      */
-    public static function since(string $cwd, string $base = self::DEFAULT_BASE): ?array
+    public static function since(string $cwd, string $base = self::DEFAULT_BASE, string $filter = self::CHANGED): ?array
     {
         if ($base === '' || str_starts_with($base, '-') || ! Paths::gitUsable($cwd)) {
             return null;
         }
 
         $process = proc_open(
-            ['git', 'diff', '--name-only', '--diff-filter=ACMR', $base, 'HEAD'],
+            ['git', 'diff', '--name-only', '--diff-filter='.$filter, $base, 'HEAD'],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             $cwd,
