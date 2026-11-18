@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`mutation.scope: "changed"` limits the mutation gate to the files a change touches.** `.harness.json` takes a `mutation` key, `{ "scope": "changed", "min": 80 }`: `check --mutation` mutates only the source files that differ between a base and `HEAD` (`pest --mutate --path=a.php,b.php`) and the new *Mutation testing (changed files)* gate holds their score to `min`. It exists for a repository whose whole mutation run is too long for a pull request (the framework's did not finish in thirteen hours). `min` is a fixed threshold, never recorded, tightened or compared with `ratchet.msi`, because the score of some files says nothing about the files of the next change; the gate blocks in `enforce` mode (it is not observed by default), without `min` it only reports. The default scope, `all`, and `ratchet.msi` behave as before.
+- **`check --mutation-base=REF`** sets the commit the changed files are counted from (default `HEAD^1`: the target branch on a pull request's merge commit). A base git cannot resolve fails the gate with the fix instead of skipping it.
+- **The reusable workflow handles the new scope.** `php-package.yml` runs `check --mutation` for a repository that declares `mutation.scope: "changed"` (it did so only for `ratchet.msi`), and keeps two commits in the *Quality gates* checkout (`fetch-depth: 2`) so that `HEAD^1` exists.
+- `Pollora\Harness\Support\ChangedSources` lists the source files a change touches: those under the autoloaded directories, without tests, `vendor/`, `autoload.files`, deleted files or the `.mutant-*` copies of Pest's mutation bootstrap.
+
+### Fixed
+
+- **A file without a mutant is no longer read as a score of 0 %.** Pest prints `Mutations: 0 tested` and `Score: 0.00%` for an interface or a file with nothing to mutate; `MutationRun::run()` now returns `empty: true` and a null score, and does not repeat the run in a single process. The whole-repository gate says "Pest created no mutation" instead of recording 0.
+
 ## [0.1.27] - 2026-11-17
 
 ### Fixed

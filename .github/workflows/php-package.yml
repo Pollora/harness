@@ -45,6 +45,7 @@ jobs:
       mode: ${{ steps.config.outputs.mode }}
       downstream: ${{ steps.config.outputs.downstream }}
       mutation: ${{ steps.config.outputs.mutation }}
+      mutation-scope: ${{ steps.config.outputs.mutation-scope }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,7 +62,10 @@ jobs:
           echo "mode=$(jq -r '.mode // "observe"' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "downstream=$(jq -r '(.downstream // []) | join(",")' .harness.json)" >> "$GITHUB_OUTPUT"
           # A repository that recorded a mutation score (ratchet.msi) gets it checked; the others are untouched.
-          echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
+          # A repository that declares "mutation": {"scope": "changed"} is checked too, on the files the pull request
+          # touches only, against its "min": its whole run is too long for CI. Everything else keeps the rule above.
+          echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
+          echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or (.mutation.scope // "all") == "changed" then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
 
   quality:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
@@ -70,9 +74,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # The mutation gate of the changed files compares HEAD with its first parent: on a pull request's merge commit
+      # that is the target branch, so the checkout keeps two commits instead of one.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: ${{ needs.setup.outputs.mutation-scope == 'changed' && 2 || 1 }}
 
       - uses: shivammathur/setup-php@v2
         with:

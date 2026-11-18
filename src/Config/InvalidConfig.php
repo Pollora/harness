@@ -79,4 +79,18 @@ final class InvalidConfig extends RuntimeException
     {
         return new self("{$path}: allow_rules lists \"{$rule}\" twice. Keep one entry and its reason.");
     }
+
+    public static function unknownMutationScope(string $path, mixed $scope): self
+    {
+        $given = is_scalar($scope) ? (string) $scope : get_debug_type($scope);
+
+        return new self("{$path}: mutation.scope is \"{$given}\". Use \"all\" (the whole repository, compared with ratchet.msi) or \"changed\" (the files a change touches, held to mutation.min).");
+    }
+
+    public static function invalidMutationMinimum(string $path, mixed $min): self
+    {
+        $given = is_scalar($min) ? (string) $min : get_debug_type($min);
+
+        return new self("{$path}: mutation.min is \"{$given}\". Give a score between 0 and 100.");
+    }
 }

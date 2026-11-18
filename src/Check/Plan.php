@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Pollora\Harness\Check;
 
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Config\RuleExemption;
 use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Metrics\MissingReports;
 use Pollora\Harness\Profile;
+use Pollora\Harness\Support\ChangedSources;
 use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
 use Pollora\Harness\Surface\SurfaceCheck;
@@ -29,6 +31,12 @@ final readonly class Plan
     public const string ARCHIVE = 'Distribution archive';
 
     public const string MUTATION = 'Mutation testing';
+
+    /**
+     * The mutation gate of a repository that declares `mutation.scope: "changed"`. Unlike the whole-repository one
+     * it is not observed by default: the repository chose a minimum, and a change below it blocks (in enforce mode).
+     */
+    public const string MUTATION_CHANGED = 'Mutation testing (changed files)';
 
     public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
 
@@ -66,9 +74,10 @@ final readonly class Plan
     }
 
     /**
+     * @param  string|null  $mutationBase  The commit the changed files are counted from (`mutation.scope: "changed"`); `HEAD^1` when null
      * @return list<Step>
      */
-    public function full(?string $coverage = null, ?string $infection = null, bool $mutation = false): array
+    public function full(?string $coverage = null, ?string $infection = null, bool $mutation = false, ?string $mutationBase = null): array
     {
         $score = new MutationScore;
 
@@ -91,7 +100,7 @@ final readonly class Plan
             $this->npmAudit(),
             $this->publicSurface(),
             $this->distributionArchive(),
-            ...($mutation ? [$this->mutation($score)] : []),
+            ...($mutation ? [$this->config->mutation->changedOnly() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
             $this->ratchet($coverage, $infection, $score),
         ];
     }
@@ -371,8 +380,69 @@ final readonly class Plan
                 $score->value = $run['score'];
 
                 return $run['score'] === null
-                    ? StepResult::failed("Pest printed no mutation score: the tests must pass first.\n".trim(substr($run['output'], -600)))
+                    ? StepResult::failed(($run['empty'] ? 'Pest created no mutation: the tests cover no code it can mutate.' : 'Pest printed no mutation score: the tests must pass first.')."\n".trim(substr($run['output'], -600)))
                     : StepResult::passed(sprintf('  Mutation score %s %% (%s)', $run['score'], $run['summary']));
+            },
+            requires: ['vendor/pestphp/pest-plugin-mutate'],
+        );
+    }
+
+    /**
+     * Mutation testing limited to the source files a change touches, held to `mutation.min`.
+     *
+     * The score of some files is not comparable with the score of other files, so it never reaches the ratchet:
+     * the threshold is a fixed number of `.harness.json`, checked here, and the step blocks below it. A change
+     * that touches no source file, or only files Pest creates no mutation in (an interface), passes; a change
+     * whose files cannot be listed (a history too short, an unknown base) fails rather than skip the check.
+     */
+    private function mutationOfChangedFiles(?string $base): Step
+    {
+        $cwd = $this->cwd;
+        $min = $this->config->mutation->min;
+        $base ??= ChangedSources::DEFAULT_BASE;
+
+        return new Step(
+            self::MUTATION_CHANGED,
+            ['QA-01'],
+            static function () use ($cwd, $min, $base): StepResult {
+                $files = ChangedSources::since($cwd, $base);
+
+                if ($files === null) {
+                    return StepResult::failed(sprintf('Cannot list the files changed since %s. The checkout needs a history of two commits (`fetch-depth: 2` in actions/checkout) or a base given with --mutation-base=<ref>.', $base));
+                }
+
+                if ($files === []) {
+                    return StepResult::passed(sprintf('  No source file changed since %s: nothing to mutate.', $base));
+                }
+
+                $run = MutationRun::run($cwd, $files);
+                $count = sprintf('%d changed file%s', count($files), count($files) === 1 ? '' : 's');
+
+                if ($run['empty']) {
+                    return StepResult::passed(sprintf('  Pest created no mutation in the %s (interfaces, or nothing to mutate): nothing to measure.', $count));
+                }
+
+                if ($run['score'] === null) {
+                    return StepResult::failed("Pest printed no mutation score: the tests must pass first.\n".trim(substr($run['output'], -600)));
+                }
+
+                $line = sprintf('  Mutation score of the %s: %s %% (%s)', $count, $run['score'], $run['summary']);
+
+                if ($min === null) {
+                    return StepResult::passed($line.' — no minimum set (mutation.min), reported only');
+                }
+
+                if ($min <= $run['score'] + Ratchet::TOLERANCE) {
+                    return StepResult::passed(sprintf('%s, minimum %s %%', $line, $min));
+                }
+
+                $survivors = MutationRun::survivors($run['output']);
+
+                return StepResult::failed(implode("\n", [
+                    sprintf('%s is below the minimum of %s %% (mutation.min).', $line, $min),
+                    'A score is computed on whole files: a mutant that survives in a file you touched counts even if you did not write it. Add the test that would fail without that line, or raise the score of the files you changed.',
+                    ...array_map(static fn (string $survivor): string => '  '.$survivor, $survivors),
+                ]));
             },
             requires: ['vendor/pestphp/pest-plugin-mutate'],
         );
