@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.28] - 2026-11-18
+
 ### Added
 
 - **`mutation.scope: "changed"` limits the mutation gate to the files a change touches.** `.harness.json` takes a `mutation` key, `{ "scope": "changed", "min": 80 }`: `check --mutation` mutates only the source files that differ between a base and `HEAD` (`pest --mutate --path=a.php,b.php`) and the new *Mutation testing (changed files)* gate holds their score to `min`. It exists for a repository whose whole mutation run is too long for a pull request (the framework's did not finish in thirteen hours). `min` is a fixed threshold, never recorded, tightened or compared with `ratchet.msi`, because the score of some files says nothing about the files of the next change; the gate blocks in `enforce` mode (it is not observed by default), without `min` it only reports. The default scope, `all`, and `ratchet.msi` behave as before.
