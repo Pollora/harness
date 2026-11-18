@@ -38,6 +38,9 @@ final readonly class Plan
      */
     public const string MUTATION_CHANGED = 'Mutation testing (changed files)';
 
+    /** The same gate for `mutation.scope: "added"`: only the files a change adds are mutated. */
+    public const string MUTATION_ADDED = 'Mutation testing (new files)';
+
     public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
 
     public const string ARCH_OUTSIDE_SUITES = 'tests/Arch.php is in no test suite of phpunit.xml, so vendor/bin/pest alone would skip the architecture rules: running it explicitly too (add it to a suite to run it once).';
@@ -100,7 +103,7 @@ final readonly class Plan
             $this->npmAudit(),
             $this->publicSurface(),
             $this->distributionArchive(),
-            ...($mutation ? [$this->config->mutation->changedOnly() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
+            ...($mutation ? [$this->config->mutation->limited() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
             $this->ratchet($coverage, $infection, $score),
         ];
     }
@@ -399,24 +402,27 @@ final readonly class Plan
     {
         $cwd = $this->cwd;
         $min = $this->config->mutation->min;
+        $added = $this->config->mutation->addedOnly();
         $base ??= ChangedSources::DEFAULT_BASE;
 
         return new Step(
-            self::MUTATION_CHANGED,
+            $added ? self::MUTATION_ADDED : self::MUTATION_CHANGED,
             ['QA-01'],
-            static function () use ($cwd, $min, $base): StepResult {
-                $files = ChangedSources::since($cwd, $base);
+            static function () use ($cwd, $min, $base, $added): StepResult {
+                $files = ChangedSources::since($cwd, $base, $added ? ChangedSources::ADDED : ChangedSources::CHANGED);
+                $skipped = $added && $files !== null ? count(ChangedSources::since($cwd, $base) ?? []) - count($files) : 0;
+                $edited = $skipped > 0 ? sprintf(' (%d modified file%s not mutated: the gate holds new files only)', $skipped, $skipped === 1 ? '' : 's') : '';
 
                 if ($files === null) {
                     return StepResult::failed(sprintf('Cannot list the files changed since %s. The checkout needs a history of two commits (`fetch-depth: 2` in actions/checkout) or a base given with --mutation-base=<ref>.', $base));
                 }
 
                 if ($files === []) {
-                    return StepResult::passed(sprintf('  No source file changed since %s: nothing to mutate.', $base));
+                    return StepResult::passed(sprintf('  No %ssource file %s since %s: nothing to mutate%s.', $added ? 'new ' : '', $added ? 'added' : 'changed', $base, $edited));
                 }
 
                 $run = MutationRun::run($cwd, $files);
-                $count = sprintf('%d changed file%s', count($files), count($files) === 1 ? '' : 's');
+                $count = sprintf('%d %s file%s', count($files), $added ? 'new' : 'changed', count($files) === 1 ? '' : 's');
 
                 if ($run['empty']) {
                     return StepResult::passed(sprintf('  Pest created no mutation in the %s (interfaces, or nothing to mutate): nothing to measure.', $count));
@@ -426,7 +432,7 @@ final readonly class Plan
                     return StepResult::failed("Pest printed no mutation score: the tests must pass first.\n".trim(substr($run['output'], -600)));
                 }
 
-                $line = sprintf('  Mutation score of the %s: %s %% (%s)', $count, $run['score'], $run['summary']);
+                $line = sprintf('  Mutation score of the %s: %s %% (%s)%s', $count, $run['score'], $run['summary'], $edited);
 
                 if ($min === null) {
                     return StepResult::passed($line.' — no minimum set (mutation.min), reported only');

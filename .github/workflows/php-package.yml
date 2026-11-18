@@ -62,10 +62,10 @@ jobs:
           echo "mode=$(jq -r '.mode // "observe"' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "downstream=$(jq -r '(.downstream // []) | join(",")' .harness.json)" >> "$GITHUB_OUTPUT"
           # A repository that recorded a mutation score (ratchet.msi) gets it checked; the others are untouched.
-          # A repository that declares "mutation": {"scope": "changed"} is checked too, on the files the pull request
+          # A repository that declares "mutation": {"scope": "changed"} (or "added") is checked too, on the files the pull request
           # touches only, against its "min": its whole run is too long for CI. Everything else keeps the rule above.
           echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
-          echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or (.mutation.scope // "all") == "changed" then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
+          echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or ((.mutation.scope // "all") | IN("changed", "added")) then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
 
   quality:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          fetch-depth: ${{ needs.setup.outputs.mutation-scope == 'changed' && 2 || 1 }}
+          fetch-depth: ${{ needs.setup.outputs.mutation-scope != 'all' && 2 || 1 }}
 
       - uses: shivammathur/setup-php@v2
         with:

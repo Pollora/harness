@@ -111,6 +111,16 @@ describe('the mutation settings of .harness.json', function (): void {
         expect($config->withRatchet($config->ratchet)->mutation->min)->toBe(75.0);
     });
 
+    it('reads the added scope, which also limits the run', function (): void {
+        $settings = MutationSettings::fromArray(['scope' => 'added', 'min' => 80], 'x');
+
+        expect($settings->addedOnly())->toBeTrue()
+            ->and($settings->changedOnly())->toBeFalse()
+            ->and($settings->limited())->toBeTrue()
+            ->and($settings->toArray())->toBe(['scope' => 'added', 'min' => 80])
+            ->and((new MutationSettings)->limited())->toBeFalse();
+    });
+
     it('refuses a scope it does not know', function (): void {
         HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'diff']], 'x.json');
     })->throws(InvalidConfig::class, 'mutation.scope is "diff"');
@@ -143,6 +153,13 @@ describe('the source files a change touches', function (): void {
         ], ['src/Gone.php']);
 
         expect(ChangedSources::since($root))->toBe(['src/Kept.php']);
+    });
+
+    it('lists only the files a change adds when asked, not the ones it modifies', function (): void {
+        $root = scopedRepository(['src/New.php' => "<?php\n", 'src/Old.php' => "<?php // changed\n"]);
+
+        expect(ChangedSources::since($root, ChangedSources::DEFAULT_BASE, ChangedSources::ADDED))->toBe(['src/New.php'])
+            ->and(ChangedSources::since($root))->toBe(['src/New.php', 'src/Old.php']);
     });
 
     it('counts the change from the base it is given', function (): void {
@@ -336,6 +353,35 @@ describe('the mutation gate of the changed files', function (): void {
         $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION_CHANGED))[0];
 
         expect((($step->action)())->detail)->toContain('No source file changed since HEAD');
+    });
+
+    it('holds only the new files to the minimum, and says how many modified files it did not mutate', function (): void {
+        $root = scopedRepository(['src/New.php' => "<?php\n", 'src/Old.php' => "<?php // changed\n"]);
+        mkdir($root.'/vendor/bin', 0o777, true);
+        mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
+        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, 'ARGS '.implode(' ', array_slice(\$argv, 1)).\"\\n\");\nfwrite(STDOUT, \"  Mutations: 1 untested, 9 tested\\n  Score:     90.00%\\n\");\n");
+        $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'added', 'min' => 80]]), $root))->full(null, null, true);
+        $step = array_values(array_filter($steps, static fn (Step $step): bool => str_starts_with($step->name, 'Mutation testing')))[0];
+
+        $result = ($step->action)();
+
+        expect($step->name)->toBe(Plan::MUTATION_ADDED)
+            ->and(Plan::OBSERVED_BY_DEFAULT)->not->toContain(Plan::MUTATION_ADDED)
+            ->and($result->status)->toBe(StepResult::PASSED)
+            ->and($result->detail)->toContain('1 new file')
+            ->and($result->detail)->toContain('1 modified file not mutated');
+    });
+
+    it('passes without running Pest when the change adds no source file', function (): void {
+        $root = scopedRepository(['src/Old.php' => "<?php // changed\n"]);
+        $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'added', 'min' => 80]]), $root))->full(null, null, true);
+        $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION_ADDED))[0];
+
+        $result = ($step->action)();
+
+        expect($result->status)->toBe(StepResult::PASSED)
+            ->and($result->detail)->toContain('No new source file added')
+            ->and($result->detail)->toContain('1 modified file not mutated');
     });
 
     it('does not feed the ratchet with the score of some files', function (): void {

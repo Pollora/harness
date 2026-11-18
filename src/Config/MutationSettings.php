@@ -15,8 +15,12 @@ namespace Pollora\Harness\Config;
  * That minimum is a threshold, not a ratchet: the score of some files says nothing about the score of the next
  * pull request's files, so it is never recorded, tightened or compared with `ratchet.msi`.
  *
+ * `scope: "added"` goes one step further for a repository whose existing files score unevenly: only the files the
+ * change adds are mutated and held to `min`, so a change never fails on a mutant that was already alive in a file it
+ * only edits.
+ *
  * ```json
- * "mutation": { "scope": "changed", "min": 80 }
+ * "mutation": { "scope": "added", "min": 80 }
  * ```
  */
 final readonly class MutationSettings
@@ -27,8 +31,11 @@ final readonly class MutationSettings
     /** Mutate the files a change touches and hold their score to `min`. */
     public const string CHANGED = 'changed';
 
+    /** Mutate only the files a change adds and hold their score to `min`; the files it modifies are not mutated. */
+    public const string ADDED = 'added';
+
     /**
-     * @param  'all'|'changed'  $scope  What `check --mutation` mutates
+     * @param  'all'|'changed'|'added'  $scope  What `check --mutation` mutates
      * @param  float|null  $min  Score (percent, 0 to 100) the changed files must reach; null only reports it. Meaningful for `changed`
      */
     public function __construct(
@@ -47,7 +54,7 @@ final readonly class MutationSettings
 
         $scope = $data['scope'] ?? self::ALL;
 
-        if ($scope !== self::ALL && $scope !== self::CHANGED) {
+        if (! in_array($scope, [self::ALL, self::CHANGED, self::ADDED], true)) {
             throw InvalidConfig::unknownMutationScope($path, $scope);
         }
 
@@ -69,11 +76,27 @@ final readonly class MutationSettings
     }
 
     /**
+     * Whether `check --mutation` is limited to the files the change adds.
+     */
+    public function addedOnly(): bool
+    {
+        return $this->scope === self::ADDED;
+    }
+
+    /**
+     * Whether `check --mutation` mutates only some files of the change (`changed` or `added`), not the repository.
+     */
+    public function limited(): bool
+    {
+        return $this->changedOnly() || $this->addedOnly();
+    }
+
+    /**
      * @return array{scope?: string, min?: int|float}|null null when nothing differs from the default
      */
     public function toArray(): ?array
     {
-        if (! $this->changedOnly() && $this->min === null) {
+        if (! $this->limited() && $this->min === null) {
             return null;
         }
 
