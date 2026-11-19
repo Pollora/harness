@@ -6,6 +6,7 @@ namespace Pollora\Harness\Pest;
 
 use Closure;
 use Pollora\Harness\Architecture\AttributeClasses;
+use Pollora\Harness\Architecture\ForeignNamespaces;
 use Pollora\Harness\Architecture\Layers;
 use Pollora\Harness\Architecture\StrictTypes;
 use Pollora\Harness\Config\HarnessConfig;
@@ -35,6 +36,7 @@ final readonly class Architecture
         private Profile $profile,
         /** @var array<string, RuleExemption> */
         private array $exemptions = [],
+        private ForeignNamespaces $foreign = new ForeignNamespaces([]),
     ) {}
 
     /**
@@ -52,7 +54,7 @@ final readonly class Architecture
             $byRule[$exemption->rule] = $exemption;
         }
 
-        return new self(Layers::discover($root), $profile, $byRule);
+        return new self(Layers::discover($root), $profile, $byRule, ForeignNamespaces::discover($root));
     }
 
     public function register(): void
@@ -94,13 +96,13 @@ final readonly class Architecture
                 arch("ARCH-01 {$domain} stays independent of Laravel and of the outer layers")
                     ->expect($domain)
                     ->not->toUse(['Illuminate', ...$outer]);
-            });
+            }, $domain);
 
             $this->rule('CONV-07', "CONV-07 {$domain} receives its dependencies instead of resolving them", static function () use ($domain): void {
                 arch("CONV-07 {$domain} receives its dependencies instead of resolving them")
                     ->expect($domain)
                     ->not->toUse(['app', 'resolve']);
-            });
+            }, $domain);
         }
 
         foreach ($this->layers->of('application') as $application) {
@@ -109,14 +111,14 @@ final readonly class Architecture
                     arch("ARCH-03 {$application} depends on the domain only")
                         ->expect($application)
                         ->not->toUse($outer);
-                });
+                }, $application);
             }
 
             $this->rule('CONV-07', "CONV-07 {$application} receives its dependencies instead of resolving them", static function () use ($application): void {
                 arch("CONV-07 {$application} receives its dependencies instead of resolving them")
                     ->expect($application)
                     ->not->toUse(['app', 'resolve']);
-            });
+            }, $application);
         }
     }
 
@@ -145,7 +147,7 @@ final readonly class Architecture
                     arch("CONV-03 {$exceptions} names its classes ...Exception")
                         ->expect($exceptions)
                         ->toHaveSuffix('Exception');
-                });
+                }, $exceptions);
             }
         }
     }
@@ -158,21 +160,34 @@ final readonly class Architecture
                 arch("CONV-05 {$root} reads configuration, never env()")
                     ->expect($root)
                     ->not->toUse(['env']);
-            });
+            }, $root);
         }
     }
 
     /**
      * Registers the test of a rule, or a skipped one carrying the reason when `.harness.json` exempts the rule.
      *
+     * A rule that judges a namespace is registered as a skipped test too when an installed package maps
+     * the same namespace (see ForeignNamespaces): the engine would load the package's classes and fail
+     * describing them, so the rule is not evaluated and the skipped test says why.
+     *
      * @param  Closure(): mixed  $register
+     * @param  string|null  $namespace  The namespace the rule is about, when it is one the engine resolves
      */
-    private function rule(string $rule, string $name, Closure $register): void
+    private function rule(string $rule, string $name, Closure $register, ?string $namespace = null): void
     {
         $exemption = $this->exemptions[$rule] ?? null;
 
         if ($exemption instanceof RuleExemption) {
             test($name, fn (): null => null)->skip($exemption->message())->group('arch');
+
+            return;
+        }
+
+        $prefix = $namespace === null ? null : $this->foreign->prefixFor($namespace);
+
+        if ($prefix !== null) {
+            test($name, fn (): null => null)->skip("not evaluated: {$rule} — {$namespace} is also mapped by an installed package ({$prefix}, under vendor/), whose classes are not the project's")->group('arch');
 
             return;
         }
