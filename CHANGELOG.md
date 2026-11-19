@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **An architecture rule no longer fails when an installed package maps the same namespace as a layer of the repository.** In the framework, CONV-03 (`Pollora\Media\Domain\Exceptions`) failed with `Typed property PHPUnit\Architecture\Elements\ObjectDescriptionBase::$path must not be accessed before initialization` as soon as `pollora/media` 0.9.0 (psr-4 `Pollora\Media\` under `vendor/`) added its own `Domain/Exceptions/*` classes to that namespace: the engine of Pest resolves a namespace through every PSR-4 prefix of Composer's class loader, `vendor/` included, and cannot describe those files. `Architecture::register()` now reads `vendor/composer/autoload_psr4.php` (new `Architecture\ForeignNamespaces`) and registers the rules on such a namespace (ARCH-01, ARCH-03, CONV-03, CONV-05, CONV-07) as skipped tests reading `not evaluated: <rule> — <namespace> is also mapped by an installed package (<prefix>, under vendor/)`, never as a silent failure; the other namespaces keep their rules. The step count of `pollora-qa check` is unchanged.
+
 ## [0.1.31] - 2026-11-19
 
 ### Added
