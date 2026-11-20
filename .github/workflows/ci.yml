@@ -8,10 +8,17 @@ on:
 
 permissions: {}
 
+# A new push to a pull request cancels the run still going for the previous one; main and manual
+# runs are never cancelled.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   tests:
     name: Tests PHP ${{ matrix.php }} (${{ matrix.stability }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
@@ -20,20 +27,43 @@ jobs:
         php: ['8.3', '8.4']
         stability: [prefer-lowest, prefer-stable]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           coverage: none
 
       - name: Install Semgrep (its rules are tested too)
-        run: pipx install semgrep
+        run: pipx install semgrep==1.186.0
+
+      - name: Locate Composer's cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Composer's cache
+        id: composer-cache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-${{ matrix.stability }}-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ matrix.php }}-${{ matrix.stability }}-
 
       - name: Install dependencies (${{ matrix.stability }})
-        run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+          STABILITY: ${{ matrix.stability }}
+        run: composer update "--$STABILITY" --prefer-dist --no-interaction --no-progress
+
+      - name: Save Composer's cache
+        if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-${{ matrix.stability }}-${{ hashFiles('composer.json', 'composer.lock') }}
 
       - name: Run the tests
         run: vendor/bin/pest
@@ -41,21 +71,46 @@ jobs:
   dogfood:
     name: The harness passes its own gates
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
           coverage: pcov
 
-      - run: pipx install semgrep
+      - run: pipx install semgrep==1.186.0
 
-      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Locate Composer's cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Composer's cache
+        id: composer-cache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.4-dogfood-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php8.4-dogfood-
+
+      - name: Install Composer dependencies
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Save Composer's cache
+        if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.4-dogfood-${{ hashFiles('composer.json', 'composer.lock') }}
+
 
       - name: Every gate, enforced
         run: bin/pollora-qa check --enforce --coverage=.harness/coverage.xml
@@ -67,7 +122,7 @@ jobs:
 
       - name: Publish the coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: .harness/coverage.xml
@@ -77,29 +132,32 @@ jobs:
   apply-to-hook:
     name: Applied to Pollora/hook (observe mode)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: harness
           persist-credentials: false
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/hook
           path: hook
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
           coverage: none
 
-      - run: pipx install semgrep
+      - run: pipx install semgrep==1.186.0
 
       - name: Require the harness from this checkout
         working-directory: hook
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
         run: |
           composer config repositories.harness '{"type": "path", "url": "../harness", "options": {"symlink": false, "versions": {"pollora/harness": "1.0.0"}}}'
           composer config allow-plugins.pestphp/pest-plugin true
@@ -137,22 +195,23 @@ jobs:
   surface-of-framework:
     name: Public surface of Pollora/framework
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: harness
           persist-credentials: false
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/framework
           ref: develop
           path: framework
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
@@ -160,6 +219,8 @@ jobs:
 
       - name: Require the harness from this checkout
         working-directory: framework
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
         run: |
           composer config repositories.harness '{"type": "path", "url": "../harness", "options": {"symlink": false, "versions": {"pollora/harness": "1.0.0"}}}'
           composer require --dev pollora/harness:1.0.0 --with-all-dependencies --no-interaction --no-progress

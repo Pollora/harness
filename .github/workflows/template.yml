@@ -39,34 +39,42 @@ on:
 
 permissions: {}
 
+# A new push to a pull request cancels the run still going for the previous one. Every other event
+# gets a group of its own (the run id): main, develop and tags are never cancelled or replaced.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pollora-harness-template-{0}-{1}', github.repository, github.event.pull_request.number) || format('pollora-harness-template-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   secrets:
     name: Secrets (SEC-08)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'secrets') }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Scan the history with gitleaks
-        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --redact --no-banner
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --redact --no-banner
 
   style:
     name: Code style
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'style') }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -78,6 +86,8 @@ jobs:
       # %plugin_name%). They are not PHP, so Pint fails to parse the file. It runs on a copy
       # where each placeholder is an identifier: __PLH_theme_namespace__.
       - name: Check the style with Pint
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
         run: |
           if [ -z "$(git ls-files '*.php')" ]; then
             echo "::notice::No PHP file to check."
@@ -96,16 +106,17 @@ jobs:
   security:
     name: Security patterns (SEC-01 to SEC-07, CONV-10)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'security') }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # The rules come from the version of the harness this workflow was called at.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/harness
           ref: ${{ github.job_workflow_sha }}
@@ -113,7 +124,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Semgrep
-        run: pipx install semgrep
+        run: pipx install semgrep==1.186.0
 
       - name: Scan the source
         run: |
@@ -132,15 +143,16 @@ jobs:
   audit:
     name: Dependency audit (SEC-09)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'audit') }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -157,29 +169,30 @@ jobs:
   npm-audit:
     name: Dependency audit (npm)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Observed for now: the gate reports the alerts Composer's audit cannot see
     continue-on-error: true
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # The audit logic lives in the harness (`pollora-qa npm-audit`), read from the version of
       # this workflow: the same code `pollora-qa check` runs, not a second copy in shell.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/harness
           ref: ${{ github.job_workflow_sha }}
           path: .harness-presets
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
