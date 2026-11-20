@@ -94,6 +94,13 @@ final class InvalidConfig extends RuntimeException
         return new self("{$path}: mutation.min is \"{$given}\". Give a score between 0 and 100.");
     }
 
+    public static function unknownService(string $path, mixed $service): self
+    {
+        $given = is_scalar($service) ? (string) $service : get_debug_type($service);
+
+        return new self("{$path}: services lists \"{$given}\". The CI can start: ".implode(', ', HarnessConfig::SERVICES).'.');
+    }
+
     public static function npmAuditMalformed(string $path): self
     {
         return new self("{$path}: npm_audit must be an object with an \"allow\" list of {\"advisory\", \"reason\", \"expires\"} entries.");

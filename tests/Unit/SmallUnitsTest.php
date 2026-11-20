@@ -218,3 +218,23 @@ it('lists the PHP files changed in a working tree: modified, staged and untracke
         ->and(Paths::changedPhpFiles(harnessTempDir()))->toBeNull()
         ->and(Paths::gitUsable($cwd))->toBeTrue();
 });
+
+it('reads the services the CI starts for the tests', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'integration', 'services' => ['redis', 'redis']]);
+
+    expect($config->services)->toBe(['redis'])
+        ->and($config->toArray()['services'])->toBe(['redis'])
+        ->and($config->withRatchet($config->ratchet)->services)->toBe(['redis']);
+});
+
+it('starts no service by default and writes none back', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'integration']);
+
+    expect($config->services)->toBe([])
+        ->and($config->toArray())->not->toHaveKey('services');
+});
+
+it('rejects a service the CI cannot start', function (mixed $service): void {
+    expect(fn () => HarnessConfig::fromArray(['profile' => 'integration', 'services' => [$service]]))
+        ->toThrow(InvalidConfig::class, 'services lists');
+})->with(['an unknown name' => ['mysql'], 'a number' => [3], 'an array' => [[]]]);

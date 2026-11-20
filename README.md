@@ -75,6 +75,18 @@ A package whose console commands are named for the tool itself (`new`, `self-upd
 
 `reason` is required, and an entry gives either `command` (the exact name) or `prefix` (the start of names), not both; anything else makes `.harness.json` invalid. The *Public surface* gate then prints these commands as `keeps its name (allow_commands: …)` instead of as a problem, so the exemption stays visible, and any other command that does not start with `pollora:` is still reported. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
 
+### Services the tests need (`services`)
+
+A repository whose tests talk to a real service lists it in `.harness.json`:
+
+```json
+{
+    "services": ["redis"]
+}
+```
+
+The reusable workflow then starts the service in the *Quality gates* and *Tests* jobs (a Redis 7 on `127.0.0.1:6379`) and installs the PHP extensions it needs (`redis` and `igbinary`), so the repository's tests run against it instead of skipping. The tests read the address from `REDIS_HOST` and `REDIS_PORT`, and should fail rather than skip when the `CI` variable is set, which GitHub Actions sets. Only `redis` is known; any other name makes `.harness.json` invalid.
+
 ### Architecture rules a repository cannot satisfy yet (`allow_rules`)
 
 A repository can hold a rule it cannot satisfy without a breaking change: `Pollora/attributes` cannot make its published attribute classes final and readonly (ARCH-08). Instead of skipping the test by hand from `tests/Arch.php`, which also suspends the checks the rule still does well, list the rule under `allow_rules` in `.harness.json`, with the reason:

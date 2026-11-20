@@ -46,6 +46,7 @@ jobs:
       downstream: ${{ steps.config.outputs.downstream }}
       mutation: ${{ steps.config.outputs.mutation }}
       mutation-scope: ${{ steps.config.outputs.mutation-scope }}
+      redis: ${{ steps.config.outputs.redis }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,6 +65,8 @@ jobs:
           # A repository that recorded a mutation score (ratchet.msi) gets it checked; the others are untouched.
           # A repository that declares "mutation": {"scope": "changed"} (or "added") is checked too, on the files the pull request
           # touches only, against its "min": its whole run is too long for CI. Everything else keeps the rule above.
+          # A repository whose tests need a service lists it under "services" (today: "redis").
+          echo "redis=$(jq -r 'if ((.services // []) | index("redis")) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or ((.mutation.scope // "all") | IN("changed", "added")) then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
 
@@ -84,8 +87,19 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.quality-php }}
-          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite${{ needs.setup.outputs.redis == 'true' && ', redis, igbinary' || '' }}
           coverage: pcov
+
+      - name: Start Redis
+        if: needs.setup.outputs.redis == 'true'
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7-alpine
+          for _ in $(seq 1 30); do
+            if docker exec redis redis-cli ping | grep -q PONG; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::Redis did not start."
+          exit 1
 
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
@@ -133,8 +147,19 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite${{ needs.setup.outputs.redis == 'true' && ', redis, igbinary' || '' }}
           coverage: none
+
+      - name: Start Redis
+        if: needs.setup.outputs.redis == 'true'
+        run: |
+          docker run -d --name redis -p 6379:6379 redis:7-alpine
+          for _ in $(seq 1 30); do
+            if docker exec redis redis-cli ping | grep -q PONG; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::Redis did not start."
+          exit 1
 
       # prefer-lowest proves the lower bounds in composer.json are real.
       - name: Install dependencies (${{ matrix.stability }})
