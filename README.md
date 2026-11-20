@@ -250,6 +250,17 @@ It runs the gates that need nothing but the source: the secrets in the history (
 
 A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%plugin_name%`). They are not PHP, so Pint would fail to parse the file: it runs on a copy where each one is an identifier. `observed` lists the gates a template reports without blocking, the way `.harness.json` does for a package: a theme with hundreds of `{!! !!}` it has not yet been through is `observed: security` until it has.
 
+## Reliability and security of the workflows
+
+`php-package.yml`, `template.yml` and the harness's own `ci.yml` follow the same rules. Their contract does not change: same inputs, same job names (they are the status contexts the repositories require).
+
+- **Pinned by commit.** Every third-party action is referenced by the full SHA of its tag's commit, with the tag in a comment (`actions/checkout@3d3c42e5… # v7.0.1`). Semgrep is installed with `pipx install semgrep==<version>` and gitleaks runs from `ghcr.io/gitleaks/gitleaks:<tag>@sha256:<digest>`. Dependabot (`github-actions` ecosystem, weekly) proposes the new SHA with its tag comment; to bump by hand, resolve the tag with `gh api repos/<org>/<repo>/git/ref/tags/<tag>` (when `object.type` is `tag`, follow `gh api repos/<org>/<repo>/git/tags/<sha>` to the commit), and for the image read the digest with `docker buildx imagetools inspect ghcr.io/gitleaks/gitleaks:<tag>`. Update the comment together with the SHA.
+- **Least privilege.** `permissions: {}` at the top, `contents: read` per job, `persist-credentials: false` on every checkout, no `pull_request_target`, and no `${{ }}` of a value a third party controls inside a `run:` (they go through `env:`).
+- **Composer authenticated with the job's token.** The steps that run Composer set `COMPOSER_AUTH='{"github-oauth": {"github.com": "${{ github.token }}"}}'`. Without it Composer downloads archives from `codeload.github.com` anonymously, and many jobs starting together on the same IPs get `HTTP/2 429` (seen on 20 November). `github.token` exists in a reusable workflow called from another repository: it is the calling run's token, with the permissions of the calling job (`contents: read`). The variable is set on the install step only, never at job level, and GitHub masks the token in the logs. A repository's `composer.json` scripts run in that step, so the token is one a collaborator's workflow already has.
+- **Composer cache.** The download cache is restored for every run, and written only by runs that are not pull requests (`main`, `develop`, tags): a pull request cannot plant an archive that another branch later installs. The key is the PHP version, the stability and the hash of `composer.json` and `composer.lock`, with a prefix fallback.
+- **Time limits.** Every job has a `timeout-minutes` (setup 5, quality 30, tests 15, contract 15, secrets 10, downstream 20), several times the longest duration observed (4 minutes for the slowest job).
+- **Concurrency.** A new push to a pull request cancels the run in progress for it; `main`, other branches, tags and manual runs have a group per run and are never cancelled.
+
 ## Public surface
 
 Projects built on Pollora rely on more than PHP signatures: the attributes and their parameters, the hooks Pollora fires, the configuration keys and the console commands. `pollora-qa surface --update` records them in `api-surface.json`, one line per entry:

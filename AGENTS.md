@@ -41,7 +41,7 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **CONV-06** Commands are named pollora:<verb> or pollora:<group>:<verb>, such as pollora:make:theme; the older dashed names stay as aliases _(pollora-qa surface, G2)_
 - **CONV-07** Domain and Application code never calls app() or resolve(); it receives contracts _(Pest arch, G1)_
 - **CONV-10** One named exception per business case; never throw a bare \Exception _(Semgrep, G1)_
-- **CONV-11** Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated _(PHPStan + Pest type coverage, G1)_
+- **CONV-11** Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated _(PHPStan + type_coverage ratchet (static count, no Pest plugin), G1)_
 - **SEC-01** A REST route declared by attribute states its permission; a public route says so explicitly _(Semgrep, G1)_
 - **SEC-02** An AJAX action checks a nonce by default; guest access is explicit _(Semgrep + integration test, G1)_
 - **SEC-03** No $wpdb query built by interpolation without prepare() _(Semgrep, G1)_

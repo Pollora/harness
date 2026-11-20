@@ -4,12 +4,19 @@
 
 ### Added
 
-- **`check` shows how long each gate took, and the total.** The console summary prints the time of every gate and `Total: …`, the job summary written to `$GITHUB_STEP_SUMMARY` gets a *Time* column and a total line, and `.harness/report.json` gets `total_seconds` (the `seconds` of each step was already there). Times are measured with a monotonic clock (`hrtime`) and shown as `8.4s` under a minute, `3m 05s` above. The number of steps (12) and what the rules check do not change.
-- **`slow_step_share` in `.harness.json` (optional) flags a gate that dominates the run.** `{ "slow_step_share": 0.5 }` lists as `Slow step` (console, job summary, `slow_steps` in the JSON report) every gate that takes more than half of the total and at least 30 seconds. A warning only, off when the key is absent; `HarnessConfig` reads and writes it and `InvalidConfig::slowStepShare` rejects a value that is not above 0 and up to 1.
+- **`type_coverage` is measured (CONV-11): `check` and `ratchet` count the declarations that carry a native type.** `Metrics\TypeCoverage` reads the PHP of the repository with `nikic/php-parser` (now a requirement, `^5.6`: it was only there through Pest's dev dependencies, and PHPStan and Rector ship it inside their phars), so it needs neither Pest's type-coverage plugin (installed in two repositories out of forty-five) nor an autoloader. It counts the return type of every function and method (constructors and destructors excepted), every parameter (promoted ones once) and every property; `mixed` is a type; closures and arrow functions are out; `%placeholder%` markers of theme templates are neutralised; the parameters of the methods that override an untyped method of WordPress (`Walker*`, `WP_Widget`; the parent must be the global class, `\Walker_Nav_Menu`) are left out and reported, because a child cannot narrow them. The files read are the `psr-4`, `psr-0`, `classmap` and `files` entries of `autoload` plus `src` and `app`, minus `vendor`, `node_modules`, `tests` and Blade. The *Ratchet* step prints the percentage, the share of returns, parameters and properties, the five files that concentrate the gap and any file that does not parse (never ignored silently); a repository that records `type_coverage` in its `ratchet` can no longer lower it, and `ratchet --update` records it. Measured over the 45 repositories: 97.19 % (18 316 of 18 846 declarations) in 1.5 s, 0.46 s for the framework. CONV-11 stays `observed` until the floors are recorded.
 
 ### Changed
 
 - The job summary table of `check` has one more column, *Time*, between *Rules* and *Result*.
+
+### Fixed
+
+- **Fewer `HTTP/2 429` from `codeload.github.com` during `composer install`.** The Composer steps are authenticated with the job's token (`COMPOSER_AUTH`, `github-oauth`), the Composer download cache is restored (and saved by non-pull-request runs), and a pull request's older run is cancelled when a new push arrives. Every job has a `timeout-minutes`.
+
+### Security
+
+- **The workflows pin what they run.** `php-package.yml`, `template.yml` and `ci.yml` reference `actions/checkout`, `shivammathur/setup-php`, `actions/upload-artifact`, `actions/setup-node` and the new `actions/cache` by the full commit SHA of their tag (tag in a comment), install `semgrep==1.186.0` and run `ghcr.io/gitleaks/gitleaks:v8.30.1` by digest instead of `latest`. The one `${{ }}` of a step output inside a `run:` (the downstream job's package name) goes through `env:`. zizmor 1.32.0: 34 high and 1 informational findings before, none after. Inputs, outputs and job names are unchanged. See *Reliability and security of the workflows* in the README.
 
 ## [0.1.33] - 2026-11-20
 

@@ -10,7 +10,7 @@ use Pollora\Harness\Config\HarnessConfig;
 /**
  * Measures the metrics the ratchet tracks, from the files the tools already
  * write: the PHPStan configuration and baseline, a Clover coverage report, an
- * Infection JSON log and the architecture rules `.harness.json` exempts. A metric whose source is missing is reported as null
+ * Infection JSON log, the source itself for the type coverage and the architecture rules `.harness.json` exempts. A metric whose source is missing is reported as null
  * (not measured) rather than as zero.
  */
 final readonly class Collector
@@ -25,18 +25,20 @@ final readonly class Collector
     public function __construct(private string $root) {}
 
     /**
-     * @param  array<string, int|float>  $overrides  Values passed on the command line (--metric name=value)
+     * @param  array<string, int|float|null>  $overrides  Values passed on the command line (--metric name=value), or measured elsewhere (null: not measured)
      * @return array<string, int|float|null>
      */
     public function collect(?string $cloverPath = null, ?string $infectionPath = null, array $overrides = [], ?int $exemptedRules = null): array
     {
         $cloverPath ??= $this->findClover();
+        // The static pass is the slowest source: skipped when the value is given.
+        $typeCoverage = array_key_exists('type_coverage', $overrides) ? null : TypeCoverage::measure($this->root)->percentage();
 
         return array_merge([
             'phpstan_level' => $this->phpstanLevel(),
             'phpstan_baseline' => $this->phpstanBaselineEntries(),
             'coverage' => $cloverPath !== null ? self::cloverCoverage($this->resolve($cloverPath)) : null,
-            'type_coverage' => null,
+            'type_coverage' => $typeCoverage,
             'msi' => $infectionPath !== null ? self::infectionMsi($this->resolve($infectionPath)) : null,
             'exempted_rules' => $exemptedRules,
         ], $overrides);
