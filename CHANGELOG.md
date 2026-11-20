@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.33] - 2026-11-20
+
 ### Added
 
 - **`services` in `.harness.json`: a repository can ask the CI for a Redis.** `{ "services": ["redis"] }` makes the reusable workflow `php-package.yml` start a `redis:7-alpine` on `127.0.0.1:6379` and install the `redis` and `igbinary` PHP extensions in the *Quality gates* job (where coverage and the mutation score are measured) and in every *Tests* job, so a repository whose tests need a real Redis runs them instead of skipping. `HarnessConfig` reads and writes the key (so `ratchet --update` keeps it) and rejects a name it does not know (`InvalidConfig::unknownService`); the only known service is `redis`. Prompted by `pollora/object-cache`.
