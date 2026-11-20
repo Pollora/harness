@@ -39,6 +39,19 @@ final readonly class SurfaceExtractor
 
     private const array FILTER_CALLS = ['apply_filters', 'apply_filters_ref_array', 'apply_filters_deprecated'];
 
+    /**
+     * WordPress functions whose first argument is a key or a name that is not a hook: the object cache, transients,
+     * options and their site (multisite) variants. A `pollora/…` string passed to one of them is storage, not an
+     * extension point, so it never enters the public surface (CONV-04). Any other call, or none, still counts.
+     */
+    public const array NOT_HOOK_CALLS = [
+        'wp_cache_get', 'wp_cache_set', 'wp_cache_add', 'wp_cache_replace', 'wp_cache_delete', 'wp_cache_incr', 'wp_cache_decr',
+        'get_transient', 'set_transient', 'delete_transient',
+        'get_site_transient', 'set_site_transient', 'delete_site_transient',
+        'get_option', 'update_option', 'add_option', 'delete_option',
+        'get_site_option', 'update_site_option', 'add_site_option', 'delete_site_option',
+    ];
+
     /** Configuration keys are read this deep; below, a value is an implementation detail. */
     private const int CONFIG_DEPTH = 3;
 
@@ -107,7 +120,9 @@ final readonly class SurfaceExtractor
      * Hook names are read from the code, not from a running WordPress: a
      * string literal that looks like a Pollora hook, wherever it sits (a call,
      * a constant, a hook port). The call it is passed to, when there is one,
-     * says whether it is an action or a filter.
+     * says whether it is an action or a filter; when that call only stores
+     * something under the name (NOT_HOOK_CALLS: cache, transient, option), the
+     * string is a key, not a hook, and is skipped.
      *
      * @return array<string, string>
      */
@@ -131,6 +146,13 @@ final readonly class SurfaceExtractor
                 }
 
                 $call = $index >= 2 && $meaningful[$index - 1]->text === '(' ? strtolower($meaningful[$index - 2]->text) : null;
+
+                // A fully qualified call (\wp_cache_get) is one token with its leading backslash; only the exclusion
+                // looks past it, so that the kind of every other hook is read exactly as before.
+                if ($call !== null && in_array(ltrim($call, '\\'), self::NOT_HOOK_CALLS, true)) {
+                    continue;
+                }
+
                 $kind = match (true) {
                     in_array($call, self::ACTION_CALLS, true) => 'action',
                     in_array($call, self::FILTER_CALLS, true) => 'filter',
