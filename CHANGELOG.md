@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Security
+
+- **The workflows pin what they run.** `php-package.yml`, `template.yml` and `ci.yml` reference `actions/checkout`, `shivammathur/setup-php`, `actions/upload-artifact`, `actions/setup-node` and the new `actions/cache` by the full commit SHA of their tag (tag in a comment), install `semgrep==1.186.0` and run `ghcr.io/gitleaks/gitleaks:v8.30.1` by digest instead of `latest`. The one `${{ }}` of a step output inside a `run:` (the downstream job's package name) goes through `env:`. zizmor 1.32.0: 34 high and 1 informational findings before, none after. Inputs, outputs and job names are unchanged. See *Reliability and security of the workflows* in the README.
+
+### Fixed
+
+- **Fewer `HTTP/2 429` from `codeload.github.com` during `composer install`.** The Composer steps are authenticated with the job's token (`COMPOSER_AUTH`, `github-oauth`), the Composer download cache is restored (and saved by non-pull-request runs), and a pull request's older run is cancelled when a new push arrives. Every job has a `timeout-minutes`.
+
 ## [0.1.33] - 2026-11-20
 
 ### Added
