@@ -58,7 +58,7 @@ final class CheckCommand implements Command
 
         $io->line(sprintf('Pollora harness · profile %s · %s mode · %s gates', $config->profile->value, $mode->value, $fast ? 'fast' : 'full'));
 
-        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT], $io->flag('strict'));
+        $report = new Report($config->profile, $mode, $fast, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT], $io->flag('strict'), $config->slowStepShare);
         $report->print($io);
         $report->writeJson($io->cwd.'/'.($io->option('report') ?? '.harness/report.json'));
 

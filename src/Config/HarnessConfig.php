@@ -38,6 +38,7 @@ final readonly class HarnessConfig
      * @param  MutationSettings  $mutation  What `check --mutation` mutates and the score it must reach (the `mutation` key)
      * @param  NpmAuditSettings  $npmAudit  The npm advisories tolerated for a limited time (the `npm_audit` key, SEC-09)
      * @param  list<string>  $services  Services the CI starts for the tests and the quality gates, among `SERVICES` (the `services` key)
+     * @param  float|null  $slowStepShare  A step that takes more than this share (0 to 1, exclusive of 0) of the run's total time is flagged as slow in the report; null disables the warning (the `slow_step_share` key)
      */
     public function __construct(
         public Profile $profile,
@@ -52,6 +53,7 @@ final readonly class HarnessConfig
         public MutationSettings $mutation = new MutationSettings,
         public NpmAuditSettings $npmAudit = new NpmAuditSettings,
         public array $services = [],
+        public ?float $slowStepShare = null,
     ) {}
 
     public static function exists(string $root): bool
@@ -120,12 +122,13 @@ final readonly class HarnessConfig
             mutation: MutationSettings::fromArray($data['mutation'] ?? null, $path),
             npmAudit: NpmAuditSettings::fromArray($data['npm_audit'] ?? null, $path),
             services: self::services($data['services'] ?? [], $path),
+            slowStepShare: self::slowStepShare($data['slow_step_share'] ?? null, $path),
         );
     }
 
     public function withRatchet(Ratchet $ratchet): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit, $this->services);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit, $this->services, $this->slowStepShare);
     }
 
     /**
@@ -146,6 +149,7 @@ final readonly class HarnessConfig
             'mutation' => $this->mutation->toArray(),
             'npm_audit' => $this->npmAudit->toArray(),
             'services' => $this->services,
+            'slow_step_share' => $this->slowStepShare,
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
 
@@ -218,6 +222,24 @@ final readonly class HarnessConfig
         }
 
         return array_values($services);
+    }
+
+    /**
+     * The share of the total time above which a step is flagged as slow: null when absent.
+     *
+     * @throws InvalidConfig
+     */
+    private static function slowStepShare(mixed $value, string $path): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ((! is_int($value) && ! is_float($value)) || $value <= 0 || $value > 1) {
+            throw InvalidConfig::slowStepShare($path, $value);
+        }
+
+        return (float) $value;
     }
 
     /**

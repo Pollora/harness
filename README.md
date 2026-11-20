@@ -87,6 +87,18 @@ A repository whose tests talk to a real service lists it in `.harness.json`:
 
 The reusable workflow then starts the service in the *Quality gates* and *Tests* jobs (a Redis 7 on `127.0.0.1:6379`) and installs the PHP extensions it needs (`redis` and `igbinary`), so the repository's tests run against it instead of skipping. The tests read the address from `REDIS_HOST` and `REDIS_PORT`, and should fail rather than skip when the `CI` variable is set, which GitHub Actions sets. Only `redis` is known; any other name makes `.harness.json` invalid.
 
+### Where the time goes (`slow_step_share`)
+
+`check` times every gate. The console summary shows the time of each one and a total, the job summary (`$GITHUB_STEP_SUMMARY`) has a *Time* column and a total line, and `.harness/report.json` has `total_seconds` and the `seconds` of each step (the number of steps does not change). To be warned when one gate takes most of the run, give the share of the total above which a gate is flagged:
+
+```json
+{
+    "slow_step_share": 0.5
+}
+```
+
+A gate that takes more than that share of the total, and at least 30 seconds, is listed as `Slow step` in the console and in the job summary, and under `slow_steps` in the JSON report. It is a warning, never a failure. Without the key nothing is flagged; a value that is not above 0 and up to 1 makes `.harness.json` invalid.
+
 ### Architecture rules a repository cannot satisfy yet (`allow_rules`)
 
 A repository can hold a rule it cannot satisfy without a breaking change: `Pollora/attributes` cannot make its published attribute classes final and readonly (ARCH-08). Instead of skipping the test by hand from `tests/Arch.php`, which also suspends the checks the rule still does well, list the rule under `allow_rules` in `.harness.json`, with the reason:
