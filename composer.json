@@ -24,6 +24,7 @@
         "ext-json": "*",
         "ext-tokenizer": "*",
         "laravel/pint": "^1.22",
+        "nikic/php-parser": "^5.6",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-deprecation-rules": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
