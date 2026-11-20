@@ -6,6 +6,15 @@
 
 - **`services` in `.harness.json`: a repository can ask the CI for a Redis.** `{ "services": ["redis"] }` makes the reusable workflow `php-package.yml` start a `redis:7-alpine` on `127.0.0.1:6379` and install the `redis` and `igbinary` PHP extensions in the *Quality gates* job (where coverage and the mutation score are measured) and in every *Tests* job, so a repository whose tests need a real Redis runs them instead of skipping. `HarnessConfig` reads and writes the key (so `ratchet --update` keeps it) and rejects a name it does not know (`InvalidConfig::unknownService`); the only known service is `redis`. Prompted by `pollora/object-cache`.
 
+### Changed
+
+- **SEC-02, SEC-06, SEC-07, CONV-04, CONV-06 and QA-03 are `enforced`: they block in `enforce` mode for every repository that raises the harness to 0.1.33.** Measured over 45 repositories of the ecosystem: no Semgrep result for the three security rules (the two `nosemgrep` comments of `ai-visibility` and `mcp-connector` stay valid), no command problem and no hook problem once the false positive below is fixed. The four Semgrep rules of `presets/semgrep/observed.yml` move to `common.yml` and the file is removed; the *Security patterns (observed)* gate is gone (the report has one step less), and *Security patterns* now lists SEC-02, SEC-06 and SEC-07. A naming problem found by the *Public surface* gate (CONV-04, CONV-06) now fails it, where it only added a line to the output before. QA-03 was already blocking in `enforce` mode (the `downstream` job of `php-package.yml`): only the catalogue and a comment said otherwise. CONV-11 stays `observed`; the catalogue now counts 32 enforced, 1 observed and 7 planned rules.
+
+### Fixed
+
+- **SEC-06 no longer reports the key of a `foreach`.** `$key === $signature` inside `foreach ($entries as $signature => $entry)` compares a name taken from an array, not a secret (`schedule`, `CronIndex.php`); the rule `pollora.sec-06.secret-compared-without-hash-equals` leaves it out. A variable that is not that very key (`$entry['signature']`) is still reported.
+- **A cache key or an option name written `pollora/…` is no longer read as a hook of the public surface.** `wp_cache_get('pollora/theme_templates', …)` made `SurfaceExtractor` record `hook:pollora/theme_templates`. A string that is the first argument of a function that does not name a hook (the object cache, transients, options and their site and multisite variants, listed in `SurfaceExtractor::NOT_HOOK_CALLS`) is ignored; every other string still counts, `do_action()` and `apply_filters()` or not. The framework must run `vendor/bin/pollora-qa surface --update` once: the entry `hook:pollora/theme_templates` disappears from its `api-surface.json`.
+
 ## [0.1.32] - 2026-11-19
 
 ### Fixed
