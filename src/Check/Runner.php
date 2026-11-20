@@ -34,8 +34,8 @@ final readonly class Runner
                 $this->io->line($this->io->warning('  '.$step->note));
             }
 
-            $started = microtime(true);
-            $result = $this->execute($step)->withSeconds(microtime(true) - $started);
+            $started = hrtime(true);
+            $result = $this->execute($step)->withSeconds((hrtime(true) - $started) / 1e9);
 
             $this->io->line(match ($result->status) {
                 StepResult::PASSED => $this->io->success('  passed'),
@@ -43,7 +43,7 @@ final readonly class Runner
                 default => $result->isMissingTool()
                     ? $this->io->warning('  not run, tool missing: '.$result->detail.' ('.$result->install.')')
                     : $this->io->warning('  skipped: '.$result->detail),
-            }.$this->io->muted(sprintf(' (%.1fs)', $result->seconds)));
+            }.$this->io->muted(sprintf(' (%s)', Report::duration($result->seconds))));
 
             if ($result->isFailed()) {
                 $this->annotate($step, $result);

@@ -121,3 +121,18 @@ it('names what is wrong with an exempted rule', function (array $entries, string
     'an unknown rule' => [[['rule' => 'ARCH-99', 'reason' => 'x']], '"ARCH-99", which is not a rule of the catalogue'],
     'a rule tests/Arch.php does not evaluate' => [[['rule' => 'ARCH-04', 'reason' => 'x']], '"ARCH-04", which tests/Arch.php does not evaluate'],
 ]);
+
+it('reads the share of the total time above which a step is flagged slow, and writes it back', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'slow_step_share' => 0.5]);
+
+    expect($config->slowStepShare)->toBe(0.5)
+        ->and($config->toArray()['slow_step_share'])->toBe(0.5)
+        ->and($config->withRatchet(new Ratchet)->slowStepShare)->toBe(0.5)
+        ->and(HarnessConfig::fromArray(['profile' => 'core', 'slow_step_share' => 1])->slowStepShare)->toBe(1.0)
+        ->and(HarnessConfig::fromArray(['profile' => 'core'])->slowStepShare)->toBeNull()
+        ->and(HarnessConfig::fromArray(['profile' => 'core'])->toArray())->not->toHaveKey('slow_step_share');
+});
+
+it('refuses a slow-step share that is not above 0 and up to 1', function (mixed $share): void {
+    HarnessConfig::fromArray(['profile' => 'core', 'slow_step_share' => $share]);
+})->with([[0], [-0.2], [1.5], ['0.5'], [true], [[0.5]]])->throws(InvalidConfig::class, 'slow_step_share');

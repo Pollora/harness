@@ -244,3 +244,25 @@ it('blocks the agent from stopping while a fast gate fails, and lets it stop onc
 
     expect(covHook('stop', [], $cwd)[0])->toBe(Command::SUCCESS);
 });
+
+it('measures the time each step took, from a clock that cannot go back', function (): void {
+    $cwd = sys_get_temp_dir().'/harness-timing-'.bin2hex(random_bytes(4));
+    mkdir($cwd);
+
+    $steps = [
+        new Step('Quick', ['ARCH-09'], static fn (): StepResult => StepResult::passed()),
+        new Step('Slow', ['ARCH-09'], static function (): StepResult {
+            usleep(150_000);
+
+            return StepResult::passed();
+        }),
+    ];
+
+    [$results, $output] = covRunSteps($steps, $cwd);
+
+    expect($results[0]['result']->seconds)->toBeLessThan(0.1)
+        ->and($results[1]['result']->seconds)->toBeGreaterThanOrEqual(0.15)->toBeLessThan(5.0)
+        ->and($output)->toMatch('/passed \(0\.[1-4]s\)/');
+
+    rmdir($cwd);
+});

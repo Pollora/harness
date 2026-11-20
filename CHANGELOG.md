@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`check` shows how long each gate took, and the total.** The console summary prints the time of every gate and `Total: …`, the job summary written to `$GITHUB_STEP_SUMMARY` gets a *Time* column and a total line, and `.harness/report.json` gets `total_seconds` (the `seconds` of each step was already there). Times are measured with a monotonic clock (`hrtime`) and shown as `8.4s` under a minute, `3m 05s` above. The number of steps (12) and what the rules check do not change.
+- **`slow_step_share` in `.harness.json` (optional) flags a gate that dominates the run.** `{ "slow_step_share": 0.5 }` lists as `Slow step` (console, job summary, `slow_steps` in the JSON report) every gate that takes more than half of the total and at least 30 seconds. A warning only, off when the key is absent; `HarnessConfig` reads and writes it and `InvalidConfig::slowStepShare` rejects a value that is not above 0 and up to 1.
+
+### Changed
+
+- The job summary table of `check` has one more column, *Time*, between *Rules* and *Result*.
+
 ## [0.1.33] - 2026-11-20
 
 ### Added
