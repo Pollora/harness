@@ -82,6 +82,25 @@ final readonly class Layers
         return $this->layers[$kind] ?? [];
     }
 
+    /**
+     * The classes of the repository inside a namespace: every file under its PSR-4 roots that declares a type.
+     * A template (`*.blade.php`) or a script without a type is not a class.
+     *
+     * @return list<string>
+     */
+    public function classesIn(string $namespace): array
+    {
+        $classes = [];
+
+        foreach ($this->files as $class => $path) {
+            if (str_starts_with($class, $namespace.'\\') && ! str_ends_with($path, '.blade.php') && StrictTypes::declaresType((string) file_get_contents($path))) {
+                $classes[] = $class;
+            }
+        }
+
+        return $classes;
+    }
+
     public function isHexagonal(): bool
     {
         return $this->of('domain') !== [];

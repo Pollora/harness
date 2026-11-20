@@ -40,8 +40,11 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **CONV-05** Configuration lives under pollora.<package>; env() is only called in config/ _(Pest arch, G1)_
 - **CONV-06** Commands are named pollora:<verb> or pollora:<group>:<verb>, such as pollora:make:theme; the older dashed names stay as aliases _(pollora-qa surface, G2)_
 - **CONV-07** Domain and Application code never calls app() or resolve(); it receives contracts _(Pest arch, G1)_
+- **CONV-08** A class is final unless it is an extension point (an abstract base, a builder or a facade-backed service, which use Macroable) _(Pest arch, G1)_
+- **CONV-09** A facade is a thin front for an injectable service bound in the container, with no logic of its own; a new facade resolves a contract _(Pest arch, G1)_
 - **CONV-10** One named exception per business case; never throw a bare \Exception _(Semgrep, G1)_
 - **CONV-11** Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated _(PHPStan + type_coverage ratchet (static count, no Pest plugin), G1)_
+- **CONV-12** Pest tests are it()/test() functions, one intention each, with datasets over copy-paste; no PHPUnit test class _(Pest arch + review, G2)_
 - **SEC-01** A REST route declared by attribute states its permission; a public route says so explicitly _(Semgrep, G1)_
 - **SEC-02** An AJAX action checks a nonce by default; guest access is explicit _(Semgrep + integration test, G1)_
 - **SEC-03** No $wpdb query built by interpolation without prepare() _(Semgrep, G1)_

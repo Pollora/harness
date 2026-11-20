@@ -72,6 +72,11 @@ final class Signatures
             return false;
         }
 
+        // ok: sec-06 (a lexer token of the tokenizer compared with its constant: not a secret)
+        if (is_array($token) && $token[0] === T_STRING && $tokens[$index][0] !== \T_EXTENDS) {
+            return false;
+        }
+
         // ok: sec-06
         return $expected === $this->normalise($expected);
     }
