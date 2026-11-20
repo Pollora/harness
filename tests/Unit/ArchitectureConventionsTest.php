@@ -116,7 +116,7 @@ function runArchitectureOf(?string $source): array
     file_put_contents($root.'/phpunit.xml', '<?xml version="1.0"?><phpunit bootstrap="bootstrap.php"><testsuites><testsuite name="A"><file>tests/Arch.php</file></testsuite></testsuites></phpunit>');
     file_put_contents($root.'/tests/Arch.php', "<?php\n\nPollora\\Harness\\Pest\\Architecture::for(dirname(__DIR__), Pollora\\Harness\\Profile::Core, [])->register();\n");
 
-    $process = proc_open([PHP_BINARY, '-d', 'memory_limit=2G', dirname(__DIR__, 2).'/vendor/bin/pest', 'tests/Arch.php', '--filter=CONV-(08|09|12)', '--colors=never'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root);
+    $process = proc_open([PHP_BINARY, '-d', 'memory_limit=2G', dirname(__DIR__, 2).'/vendor/bin/pest', 'tests/Arch.php', '--filter=CONV-(08|09|12)', '--colors=never'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, [...getenv(), 'COLUMNS' => '200']);
     $output = (string) stream_get_contents($pipes[1]).(string) stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);

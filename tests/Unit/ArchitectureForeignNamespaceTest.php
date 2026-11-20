@@ -277,7 +277,7 @@ it('runs the naming and layer rules of a namespace shared with an installed pack
     file_put_contents($root.'/phpunit.xml', '<?xml version="1.0"?><phpunit><testsuites><testsuite name="A"><directory>tests</directory></testsuite></testsuites></phpunit>');
     file_put_contents($root.'/tests/Arch.php', "<?php\n\nPollora\\Harness\\Pest\\Architecture::for(dirname(__DIR__), Pollora\\Harness\\Profile::Core, [])->register();\n");
 
-    $process = proc_open([PHP_BINARY, '-d', 'memory_limit=2G', 'pest-bin.php', 'tests/Arch.php', '--colors=never'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root);
+    $process = proc_open([PHP_BINARY, '-d', 'memory_limit=2G', 'pest-bin.php', 'tests/Arch.php', '--colors=never'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, [...getenv(), 'COLUMNS' => '200']);
     $output = (string) stream_get_contents($pipes[1]).(string) stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
