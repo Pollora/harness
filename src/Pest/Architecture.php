@@ -183,9 +183,12 @@ final readonly class Architecture
         $layers = $this->layers;
         $root = $this->root;
 
-        $this->observed('CONV-08', 'CONV-08 classes are final unless they are an extension point', static fn (): array => FinalClasses::problems($layers));
-        $this->observed('CONV-09', 'CONV-09 a facade is a thin front for a contract', static fn (): array => FacadeClasses::problems($layers));
-        $this->observed('CONV-12', 'CONV-12 tests are Pest functions, not PHPUnit classes', static fn (): array => $root === '' ? [] : TestClasses::problems($root));
+        $noClass = $layers->files === [] ? 'no class under the PSR-4 roots of composer.json' : null;
+        $noTest = $root === '' || TestClasses::files($root) === [] ? 'no test file under tests/ or the autoload-dev roots' : null;
+
+        $this->observed('CONV-08', 'CONV-08 classes are final unless they are an extension point', static fn (): array => FinalClasses::problems($layers), $noClass);
+        $this->observed('CONV-09', 'CONV-09 a facade is a thin front for a contract', static fn (): array => FacadeClasses::problems($layers), $noClass);
+        $this->observed('CONV-12', 'CONV-12 tests are Pest functions, not PHPUnit classes', static fn (): array => TestClasses::problems($root), $noTest);
     }
 
     /**
@@ -195,10 +198,19 @@ final readonly class Architecture
      * fails: it is marked incomplete, with the problems as its message, so the report shows them and the
      * blocking step stays green (see the README, "Architecture rules that are observed").
      *
+     * A rule with nothing to read (no class, no test file) is registered as skipped with that reason, never as a pass.
+     *
      * @param  Closure(): list<string>  $problems
+     * @param  string|null  $nothingToRead  Why the rule has nothing to judge, when that is the case
      */
-    private function observed(string $rule, string $name, Closure $problems): void
+    private function observed(string $rule, string $name, Closure $problems, ?string $nothingToRead = null): void
     {
+        if ($nothingToRead !== null && ! ($this->exemptions[$rule] ?? null) instanceof RuleExemption) {
+            test($name, fn (): null => null)->skip("not evaluated: {$rule} — {$nothingToRead}")->group('arch');
+
+            return;
+        }
+
         $observed = (Catalogue::all()[$rule]['status'] ?? 'enforced') === 'observed';
 
         $this->rule($rule, $name, static function () use ($rule, $name, $problems, $observed): void {

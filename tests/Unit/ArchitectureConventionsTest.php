@@ -88,7 +88,10 @@ it('finds the PHPUnit test classes and leaves Pest files, separate-process tests
 });
 
 it('finds nothing to report in a repository without tests directory or composer.json', function (): void {
-    expect(TestClasses::problems(harnessTempDir()))->toBe([]);
+    $root = harnessTempDir();
+
+    expect(TestClasses::problems($root))->toBe([])
+        ->and(TestClasses::files($root))->toBe([]);
 });
 
 /**
@@ -97,14 +100,17 @@ it('finds nothing to report in a repository without tests directory or composer.
  *
  * @return array{int, string} Exit code and output
  */
-function runArchitectureOf(string $source): array
+function runArchitectureOf(?string $source): array
 {
     $root = '/tmp/pollora-harness-arch-'.bin2hex(random_bytes(5));
     mkdir($root.'/src', 0o755, true);
     mkdir($root.'/tests', 0o755, true);
     $autoload = dirname(__DIR__, 2).'/vendor/autoload.php';
 
-    file_put_contents($root.'/src/Thing.php', $source);
+    if ($source !== null) {
+        file_put_contents($root.'/src/Thing.php', $source);
+    }
+
     file_put_contents($root.'/composer.json', '{"autoload": {"psr-4": {"Acme\\\\Obs\\\\": "src/"}}}');
     file_put_contents($root.'/bootstrap.php', "<?php\n\n\$loader = require '{$autoload}';\n\$loader->addPsr4('Acme\\\\Obs\\\\', __DIR__.'/src');\n");
     file_put_contents($root.'/phpunit.xml', '<?xml version="1.0"?><phpunit bootstrap="bootstrap.php"><testsuites><testsuite name="A"><file>tests/Arch.php</file></testsuite></testsuites></phpunit>');
@@ -129,4 +135,13 @@ it('reports an observed rule without failing the run, and passes a clean reposit
         ->and($cleanCode)->toBe(0)
         ->and($cleanOutput)->not->toContain('incomplete')
         ->and($cleanOutput)->toContain('3 passed');
+});
+
+it('shows a rule with nothing to read as not evaluated, never as a pass', function (): void {
+    [$code, $output] = runArchitectureOf(null);
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('not evaluated: CONV-08 — no class under the PSR-4 roots of composer.json')
+        ->and($output)->toContain('not evaluated: CONV-09 — no class under the PSR-4 roots of composer.json')
+        ->and($output)->not->toContain('✓ CONV-08');
 });

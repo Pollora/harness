@@ -32,7 +32,6 @@ final class TestClasses
     public static function problems(string $root): array
     {
         $problems = [];
-        $root = rtrim($root, '/');
 
         foreach (self::files($root) as $path) {
             foreach (SourceTypes::ofFile($path) as $type) {
@@ -79,17 +78,14 @@ final class TestClasses
         return false;
     }
 
-    /** Whether annotations ask for a separate process. */
-    private static function isolates(string $annotations): bool
-    {
-        return preg_match('/RunInSeparateProcess|RunTestsInSeparateProcesses|@runInSeparateProcess|@runTestsInSeparateProcesses/i', $annotations) === 1;
-    }
-
     /**
+     * The PHP files of the test directories of the repository (`tests/` and the `autoload-dev` PSR-4 roots), without fixtures.
+     *
      * @return list<string>
      */
-    private static function files(string $root): array
+    public static function files(string $root): array
     {
+        $root = rtrim($root, '/');
         $directories = ['tests'];
         $composer = is_file($root.'/composer.json') ? json_decode((string) file_get_contents($root.'/composer.json'), true) : null;
         $psr4 = is_array($composer) && is_array($composer['autoload-dev'] ?? null) && is_array($composer['autoload-dev']['psr-4'] ?? null) ? $composer['autoload-dev']['psr-4'] : [];
@@ -126,5 +122,11 @@ final class TestClasses
         ksort($files);
 
         return array_values($files);
+    }
+
+    /** Whether annotations ask for a separate process. */
+    private static function isolates(string $annotations): bool
+    {
+        return preg_match('/RunInSeparateProcess|RunTestsInSeparateProcesses|@runInSeparateProcess|@runTestsInSeparateProcesses/i', $annotations) === 1;
     }
 }
