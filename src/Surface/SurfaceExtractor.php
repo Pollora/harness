@@ -32,13 +32,6 @@ use Throwable;
  */
 final readonly class SurfaceExtractor
 {
-    /** A hook fired by Pollora: two segments or more after "pollora/", or one written in snake_case. */
-    private const string HOOK = '~^pollora/(?:[a-z0-9_-]+/[a-z0-9_/-]+|[a-z0-9]+_[a-z0-9_]+)$~';
-
-    private const array ACTION_CALLS = ['do_action', 'do_action_ref_array', 'do_action_deprecated'];
-
-    private const array FILTER_CALLS = ['apply_filters', 'apply_filters_ref_array', 'apply_filters_deprecated'];
-
     /**
      * WordPress functions whose first argument is a key or a name that is not a hook: the object cache, transients,
      * options and their site (multisite) variants. A `pollora/…` string passed to one of them is storage, not an
@@ -51,6 +44,13 @@ final readonly class SurfaceExtractor
         'get_option', 'update_option', 'add_option', 'delete_option',
         'get_site_option', 'update_site_option', 'add_site_option', 'delete_site_option',
     ];
+
+    /** A hook fired by Pollora: two segments or more after "pollora/", or one written in snake_case. */
+    private const string HOOK = '~^pollora/(?:[a-z0-9_-]+/[a-z0-9_/-]+|[a-z0-9]+_[a-z0-9_]+)$~';
+
+    private const array ACTION_CALLS = ['do_action', 'do_action_ref_array', 'do_action_deprecated'];
+
+    private const array FILTER_CALLS = ['apply_filters', 'apply_filters_ref_array', 'apply_filters_deprecated'];
 
     /** Configuration keys are read this deep; below, a value is an implementation detail. */
     private const int CONFIG_DEPTH = 3;
