@@ -18,6 +18,9 @@ final readonly class HarnessConfig
 {
     public const string FILE = '.harness.json';
 
+    /** The services a repository's tests may ask the CI to start (the `services` key). */
+    public const array SERVICES = ['redis'];
+
     /** The files an agent may not edit and that CODEOWNERS should protect (QA-02). */
     public const array DEFAULT_PROTECTED = [
         '.harness.json',
@@ -34,6 +37,7 @@ final readonly class HarnessConfig
      * @param  list<RuleExemption>  $allowRules  Architecture rules of tests/Arch.php that are skipped, each with its reason
      * @param  MutationSettings  $mutation  What `check --mutation` mutates and the score it must reach (the `mutation` key)
      * @param  NpmAuditSettings  $npmAudit  The npm advisories tolerated for a limited time (the `npm_audit` key, SEC-09)
+     * @param  list<string>  $services  Services the CI starts for the tests and the quality gates, among `SERVICES` (the `services` key)
      */
     public function __construct(
         public Profile $profile,
@@ -47,6 +51,7 @@ final readonly class HarnessConfig
         public array $allowRules = [],
         public MutationSettings $mutation = new MutationSettings,
         public NpmAuditSettings $npmAudit = new NpmAuditSettings,
+        public array $services = [],
     ) {}
 
     public static function exists(string $root): bool
@@ -114,12 +119,13 @@ final readonly class HarnessConfig
             allowRules: self::ruleExemptions($data['allow_rules'] ?? [], $path),
             mutation: MutationSettings::fromArray($data['mutation'] ?? null, $path),
             npmAudit: NpmAuditSettings::fromArray($data['npm_audit'] ?? null, $path),
+            services: self::services($data['services'] ?? [], $path),
         );
     }
 
     public function withRatchet(Ratchet $ratchet): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit, $this->services);
     }
 
     /**
@@ -139,6 +145,7 @@ final readonly class HarnessConfig
             'ratchet' => $this->ratchet->toArray(),
             'mutation' => $this->mutation->toArray(),
             'npm_audit' => $this->npmAudit->toArray(),
+            'services' => $this->services,
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
 
@@ -191,6 +198,26 @@ final readonly class HarnessConfig
         }
 
         return array_values($exemptions);
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @throws InvalidConfig
+     */
+    private static function services(mixed $value, string $path): array
+    {
+        $services = [];
+
+        foreach (is_array($value) ? $value : [] as $service) {
+            if (! is_string($service) || ! in_array($service, self::SERVICES, true)) {
+                throw InvalidConfig::unknownService($path, $service);
+            }
+
+            $services[$service] = $service;
+        }
+
+        return array_values($services);
     }
 
     /**
