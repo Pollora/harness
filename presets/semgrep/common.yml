@@ -247,11 +247,12 @@ rules:
       - metavariable-regex:
           metavariable: $S
           regex: '(?is)\A(?!\s*(strlen|mb_strlen|count|sizeof|is_\w+|isset|empty)\s*\().*(signature|hmac|token|secret|api_?key|apikey|private_?key|secret_?key|license_?key)'
-      # Comparing with a literal, null or a number is a presence check, not a
+      # Comparing with a literal, null, a number or a constant (`Cls::NAME`, or a bare
+      # one such as the `T_STRING` of the tokenizer) is a presence or type check, not a
       # secret check.
       - metavariable-regex:
           metavariable: $O
-          regex: '(?is)\A(?!(null|true|false|\[\s*\]|-?\d+(\.\d+)?|"[^"]*"|''[^'']*''|[A-Za-z_\\]+::[A-Z_]+)\z)'
+          regex: '(?is)\A(?!(null|true|false|\[\s*\]|-?\d+(\.\d+)?|"[^"]*"|''[^'']*''|[A-Za-z_\\]+::[A-Z_]+|\\?[A-Z][A-Z0-9_]*)\z)'
       # The key of a foreach is a name from an array, not a secret: `$key === $signature`
       # in `foreach ($entries as $signature => $entry)` is a lookup. $S is shared with
       # the patterns above, so only a variable that is that very key is left out.

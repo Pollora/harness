@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- **SEC-06 no longer reports a bare constant.** `$token[0] === T_STRING`, a lexer token compared with its tokenizer constant, is a type check, not a secret comparison; it joins the literals, `null`, numbers and `Cls::NAME` constants that were already left out. Found by the first run of the rule as a blocking one, on the harness's own code (4 findings, `src/Architecture/SourceTypes.php`); the fixtures that must be detected still are (43 detections, unchanged), a negative fixture was added, and the self scan of `src/` goes from 4 findings to none.
+
 - **Fewer `HTTP/2 429` from `codeload.github.com` during `composer install`.** The Composer steps are authenticated with the job's token (`COMPOSER_AUTH`, `github-oauth`), the Composer download cache is restored (and saved by non-pull-request runs), and a pull request's older run is cancelled when a new push arrives. Every job has a `timeout-minutes`.
 
 ### Security
