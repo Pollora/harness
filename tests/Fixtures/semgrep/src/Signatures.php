@@ -76,6 +76,28 @@ final class Signatures
         return $expected === $this->normalise($expected);
     }
 
+    /**
+     * @param  array<string, array<string, string>>  $entries  Rows indexed by their signature
+     */
+    public function find(array $entries, string $key): ?array
+    {
+        foreach ($entries as $signature => $entry) {
+            // ok: sec-06
+            if ($key === $signature) {
+                return $entry;
+            }
+        }
+
+        foreach ($entries as $name => $entry) {
+            // ruleid: sec-06
+            if ($key === $entry['signature']) {
+                return $entry;
+            }
+        }
+
+        return null;
+    }
+
     private function normalise(string $value): string
     {
         return $value;

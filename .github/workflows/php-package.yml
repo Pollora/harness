@@ -225,7 +225,7 @@ jobs:
     needs: setup
     if: contains(needs.setup.outputs.downstream, 'framework')
     runs-on: ubuntu-latest
-    # Observed in phase 1 of the rollout: it reports what it would have caught.
+    # Blocks in enforce mode (QA-03); in observe mode it only reports what it would have caught.
     continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
     permissions:
       contents: read

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Pollora\Harness\Config\CommandExemption;
 use Pollora\Harness\Surface\NamingConventions;
+use Pollora\Harness\Surface\SurfaceCheck;
 use Pollora\Harness\Surface\SurfaceDiff;
 use Pollora\Harness\Surface\SurfaceExtractor;
 
@@ -132,4 +133,78 @@ it('matches a command exactly, and a prefix at the start only', function (): voi
         ->and($exact->matches('new:thing'))->toBeFalse()
         ->and($prefix->matches('nectar:mcp'))->toBeTrue()
         ->and($prefix->matches('my-nectar:mcp'))->toBeFalse();
+});
+
+/**
+ * A package whose only source file is the given PHP body, with its recorded surface.
+ *
+ * @param  array<string, string>|null  $recorded  The api-surface.json content; none is written when null
+ */
+function surfaceProject(string $body, ?array $recorded = null): string
+{
+    $root = harnessTempDir();
+    mkdir($root.'/src', 0o755, true);
+    file_put_contents($root.'/composer.json', '{"name": "pollora/demo", "autoload": {"psr-4": {"Pollora\\\\Demo\\\\": "src/"}}}');
+    file_put_contents($root.'/src/Events.php', "<?php\n\nnamespace Pollora\\Demo;\n\nfinal class Events\n{\n    public function run(): void\n    {\n{$body}\n    }\n}\n");
+
+    if ($recorded !== null) {
+        file_put_contents($root.'/api-surface.json', json_encode(['version' => 1, 'surface' => $recorded]));
+    }
+
+    return $root;
+}
+
+it('does not read a cache key, a transient or an option name as a hook', function (string $call): void {
+    $root = surfaceProject("        {$call};");
+
+    expect((new SurfaceExtractor($root))->extract())->not->toHaveKey('hook:pollora/theme_templates');
+})->with([
+    'object cache read' => "wp_cache_get('pollora/theme_templates', 'pollora')",
+    'object cache write' => "wp_cache_set('pollora/theme_templates', \$value, 'pollora', 60)",
+    'fully qualified' => "\\wp_cache_get('pollora/theme_templates')",
+    'upper case' => "WP_CACHE_GET('pollora/theme_templates')",
+    'transient' => "set_transient('pollora/theme_templates', \$value)",
+    'site transient' => "get_site_transient('pollora/theme_templates')",
+    'option' => "update_option('pollora/theme_templates', \$value)",
+    'site option' => "delete_site_option('pollora/theme_templates')",
+]);
+
+it('still reads a hook wherever it is, even next to a cache call or passed as a later argument', function (): void {
+    $root = surfaceProject(<<<'PHP'
+        $cached = wp_cache_get('pollora/theme_templates');
+        do_action('pollora/orders/placed');
+        $dispatcher->dispatch('pollora/orders/status_label');
+        wp_cache_set('key', 'pollora/orders/second_argument');
+        PHP);
+
+    expect((new SurfaceExtractor($root))->extract())
+        ->toHaveKey('hook:pollora/orders/placed', 'action')
+        ->toHaveKey('hook:pollora/orders/status_label', 'hook')
+        ->toHaveKey('hook:pollora/orders/second_argument', 'hook')
+        ->not->toHaveKey('hook:pollora/theme_templates');
+});
+
+it('fails the public surface check on a hook name that breaks the convention, even when the surface is unchanged', function (): void {
+    $root = surfaceProject("        do_action('pollora/order_placed');", ['hook:pollora/order_placed' => 'action']);
+
+    $result = (new SurfaceCheck($root))->run('none');
+
+    expect($result['passed'])->toBeFalse()
+        ->and(implode("\n", $result['lines']))->toContain('[CONV-04] The hook pollora/order_placed should read')
+        ->and(implode("\n", $result['lines']))->toContain('unchanged');
+});
+
+it('fails the public surface check on a naming problem when the change itself is allowed', function (): void {
+    $root = surfaceProject("        do_action('pollora/order_placed');", []);
+
+    $result = (new SurfaceCheck($root))->run('all');
+
+    expect($result['passed'])->toBeFalse()
+        ->and(implode("\n", $result['lines']))->toContain('the pull request says so')->toContain('[CONV-04]');
+});
+
+it('passes the public surface check when the names follow the convention, and when a cache key is the only odd string', function (): void {
+    $root = surfaceProject("        do_action('pollora/orders/placed');\n        wp_cache_get('pollora/theme_templates');", ['hook:pollora/orders/placed' => 'action']);
+
+    expect((new SurfaceCheck($root))->run('none')['passed'])->toBeTrue();
 });

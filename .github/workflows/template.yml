@@ -94,7 +94,7 @@ jobs:
           "$pint" --test
 
   security:
-    name: Security patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10)
+    name: Security patterns (SEC-01 to SEC-07, CONV-10)
     runs-on: ubuntu-latest
     continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'security') }}
     permissions:

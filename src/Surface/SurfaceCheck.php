@@ -32,6 +32,12 @@ final readonly class SurfaceCheck
     }
 
     /**
+     * Compares the code with the recorded surface and checks the names of its hooks and commands.
+     *
+     * The check fails when the surface changes beyond what $allow permits (QA-04), and also when a hook or a command
+     * breaks the naming conventions (CONV-04, CONV-06), whether or not the surface changed. A command that
+     * .harness.json exempts is only reported.
+     *
      * @return array{passed: bool, lines: list<string>}
      */
     public function run(string $allow): array
@@ -40,24 +46,37 @@ final readonly class SurfaceCheck
         $diff = SurfaceDiff::between(SurfaceFile::read($this->root), $current);
         $lines = array_map(static fn (string $line): string => '  '.$line, $diff->lines());
 
-        foreach ([...NamingConventions::problems($current, $this->commandExemptions), ...NamingConventions::exempted($current, $this->commandExemptions)] as $problem) {
+        $problems = NamingConventions::problems($current, $this->commandExemptions);
+
+        foreach ([...$problems, ...NamingConventions::exempted($current, $this->commandExemptions)] as $problem) {
             $lines[] = '  '.$problem;
         }
+
+        $named = $problems === [] ? null : '  [CONV-04, CONV-06] A name above does not follow the convention: rename it (an alias and a deprecation for a released name), or list a command under allow_commands in .harness.json with the reason.';
 
         if ($diff->isEmpty()) {
             array_unshift($lines, sprintf('  The public surface is unchanged (%d entries).', count($current)));
 
-            return ['passed' => true, 'lines' => $lines];
+            if ($named !== null) {
+                $lines[] = '';
+                $lines[] = $named;
+            }
+
+            return ['passed' => $named === null, 'lines' => $lines];
         }
 
         $label = $diff->requiredLabel();
-        $passed = $diff->allowedBy($allow);
+        $allowed = $diff->allowedBy($allow);
 
         $lines[] = '';
-        $lines[] = $passed
+        $lines[] = $allowed
             ? "  [QA-04] The public surface changes, and the pull request says so ({$label}). Record it: vendor/bin/pollora-qa surface --update."
             : "  [QA-04] The public surface changes: label the pull request \"{$label}\"".($label === 'breaking' ? ', deprecate first and release it in a major version' : '').', then record it with vendor/bin/pollora-qa surface --update.';
 
-        return ['passed' => $passed, 'lines' => $lines];
+        if ($named !== null) {
+            $lines[] = $named;
+        }
+
+        return ['passed' => $allowed && $named === null, 'lines' => $lines];
     }
 }

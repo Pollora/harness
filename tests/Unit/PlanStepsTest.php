@@ -71,23 +71,17 @@ it('adds the framework rules to the semgrep scan of the framework profile', func
         ->and($step->rules)->toContain('ARCH-05');
 });
 
-it('scans with the observed Semgrep rules in a gate that never blocks', function (): void {
-    $bin = covPathWith(['semgrep']);
+it('scans SEC-02, SEC-06 and SEC-07 in the blocking Semgrep gate, with no gate of their own', function (): void {
+    covPathWith(['semgrep']);
     $cwd = harnessTempDir();
     mkdir($cwd.'/src');
 
-    $step = covStep(Plan::SEMGREP_OBSERVED, $cwd);
+    $step = covStep('Security patterns', $cwd);
 
-    expect($step->action[0])->toBe($bin.'/semgrep')
-        ->and(implode(' ', $step->action))->toContain('semgrep/observed.yml')->not->toContain('common.yml')
-        ->and($step->rules)->toBe(['SEC-02', 'SEC-06', 'SEC-07'])
-        ->and(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::SEMGREP_OBSERVED);
-
-    $skipped = covStep(Plan::SEMGREP_OBSERVED, harnessTempDir());
-    expect($skipped->skipReason)->toBe('no source directory to scan');
-
-    covPathWith([]);
-    expect(covStep(Plan::SEMGREP_OBSERVED, harnessTempDir())->install)->toBe('pipx install semgrep');
+    expect($step->rules)->toBe(['SEC-01', 'SEC-02', 'SEC-03', 'SEC-04', 'SEC-05', 'SEC-06', 'SEC-07', 'CONV-10'])
+        ->and(implode(' ', $step->action))->toContain('semgrep/common.yml')->not->toContain('observed')
+        ->and(Plan::OBSERVED_BY_DEFAULT)->not->toContain('Security patterns')
+        ->and(file_exists(dirname(__DIR__, 2).'/presets/semgrep/observed.yml'))->toBeFalse();
 });
 
 it('skips the semgrep scan where there is no source directory, and flags a missing semgrep', function (): void {
