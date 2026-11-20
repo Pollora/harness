@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **CONV-08, CONV-09 and CONV-12 are `observed`: three architecture rules read from the files, which report and never block.** CONV-08 (a class is `final` unless it is an extension point: abstract, a builder named `…Builder`, a class that uses `Macroable`, or a parent that another class of the repository extends), CONV-09 (a facade is a thin front: only `getFacadeAccessor()`, returning `Service::class` or a binding name; a `Service::class` of the repository that is a concrete class is reported, a contract is an interface) and CONV-12 (no PHPUnit test class: a concrete class extending a `…TestCase` with a test method is reported; `#[RunInSeparateProcess]` / `#[RunTestsInSeparateProcesses]` and the PHPStan rule tests are the documented exceptions; the `Fixtures` and `Stubs` directories are not read). They are read from the tokens (`Architecture\SourceTypes`, `FinalClasses`, `FacadeClasses`, `TestClasses`), without an autoloader. A rule that the catalogue lists as `observed` is registered by `tests/Arch.php` as a test that is marked incomplete, with `observed, not blocking: <rule> — N problem(s)` and the list, when it finds something (the step stays green) and passes when it finds nothing; `enforced` in the catalogue makes the same test fail. Measured over the 45 repositories of the ecosystem: see the pull request. The catalogue now counts 32 enforced, 4 observed and 4 planned rules.
+
+### Changed
+
+- **A layer shared with an installed package is now judged, on the classes of the repository only, instead of not evaluated.** The 0.1.32 compromise skipped ARCH-01, ARCH-03, CONV-03, CONV-05 and CONV-07 on a namespace that a package under `vendor/` also maps (the framework lost six CONV-07 tests with `pollora/media` 0.9). Those rules now receive the explicit list of the classes found in the repository's own PSR-4 directories instead of the namespace: the engine of Pest resolves a class name to its own file only, so the package's classes are never read and `ObjectDescriptionBase::$path` is never reached. Only a class that the package also has under the same name is left out, with a skipped test `… (classes shared with a package)` that names it, and a namespace with no class to judge is skipped with the reason. The test names are unchanged. `ForeignNamespaces` keeps the directories of each foreign prefix (`directories`) and tells a shadowed class (`shadows()`), `Layers::classesIn()` lists the classes of a namespace.
+
 ## [0.1.33] - 2026-11-20
 
 ### Added

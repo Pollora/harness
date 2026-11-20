@@ -15,15 +15,18 @@ namespace Pollora\Harness\Architecture;
  * Pollora\Media\Domain\Exceptions\* to the framework), the rule is then run
  * on the classes of the package too, and the engine fails describing them
  * ("Typed property ObjectDescriptionBase::$path must not be accessed before
- * initialization"). A rule can only judge the project's own classes, so a
- * namespace the engine would fill from vendor/ is not evaluated.
+ * initialization"). A rule can only judge the project's own classes: for a
+ * namespace the engine would fill from vendor/, the rule is given the explicit list of the project's
+ * classes instead of the namespace (the engine resolves a class name to its own file only, so nothing is
+ * read from vendor/), except for a class that the package also has under the same name (`shadows()`).
  */
 final readonly class ForeignNamespaces
 {
     /**
      * @param  list<string>  $prefixes  The PSR-4 prefixes mapped to a directory outside the project, without trailing backslash
+     * @param  array<string, list<string>>  $directories  The directories outside the project of each of those prefixes
      */
-    public function __construct(public array $prefixes) {}
+    public function __construct(public array $prefixes, public array $directories = []) {}
 
     /**
      * Reads vendor/composer/autoload_psr4.php, the map the class loader is built from. A project without
@@ -50,7 +53,7 @@ final readonly class ForeignNamespaces
     {
         $root = rtrim($root, '/');
         $realRoot = realpath($root);
-        $prefixes = [];
+        $found = [];
 
         foreach ($map as $prefix => $directories) {
             if (! is_string($prefix)) {
@@ -59,17 +62,14 @@ final readonly class ForeignNamespaces
 
             foreach ((array) $directories as $directory) {
                 if (is_string($directory) && self::isForeign($directory, $root, $realRoot === false ? $root : $realRoot)) {
-                    $prefixes[] = rtrim($prefix, '\\');
-
-                    break;
+                    $found[rtrim($prefix, '\\')][] = $directory;
                 }
             }
         }
 
-        $prefixes = array_values(array_unique($prefixes));
-        sort($prefixes);
+        ksort($found);
 
-        return new self($prefixes);
+        return new self(array_keys($found), array_map(static fn (array $directories): array => array_values(array_unique($directories)), $found));
     }
 
     /**
@@ -93,6 +93,31 @@ final readonly class ForeignNamespaces
         }
 
         return null;
+    }
+
+    /**
+     * Whether an installed package has a class (or a namespace directory) of this very name, which the engine
+     * would then read next to the project's own: such a class cannot be told apart from the package's.
+     */
+    public function shadows(string $class): bool
+    {
+        foreach ($this->directories as $prefix => $directories) {
+            if ($prefix === '' || ! str_starts_with($class, $prefix)) {
+                continue;
+            }
+
+            $relative = str_replace('\\', '/', ltrim(substr($class, strlen($prefix)), '\\'));
+
+            foreach ($directories as $directory) {
+                $path = rtrim($directory, '/').'/'.$relative;
+
+                if (is_file($path.'.php') || is_dir($path)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
