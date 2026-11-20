@@ -34,10 +34,18 @@ on:
 
 permissions: {}
 
+# A new push to a pull request cancels the run still going for the previous one. Every other event
+# (main, develop, tags, manual runs) gets a group of its own (the run id): it is never cancelled or
+# replaced. The group name is prefixed so that it cannot clash with a group of the calling workflow.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pollora-harness-php-package-{0}-{1}', github.repository, github.event.pull_request.number) || format('pollora-harness-php-package-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   setup:
     name: Read .harness.json
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -48,7 +56,7 @@ jobs:
       mutation-scope: ${{ steps.config.outputs.mutation-scope }}
       redis: ${{ steps.config.outputs.redis }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -74,17 +82,18 @@ jobs:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
     needs: setup
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       # The mutation gate of the changed files compares HEAD with its first parent: on a pull request's merge commit
       # that is the target branch, so the checkout keeps two commits instead of one.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: ${{ needs.setup.outputs.mutation-scope != 'all' && 2 || 1 }}
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.quality-php }}
           extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite${{ needs.setup.outputs.redis == 'true' && ', redis, igbinary' || '' }}
@@ -101,11 +110,35 @@ jobs:
           echo "::error::Redis did not start."
           exit 1
 
+      # Composer's download cache: a hit means no archive is fetched from GitHub. A pull request
+      # only restores it; the cache is written by the runs that are not pull requests (see README).
+      - name: Locate Composer's cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Composer's cache
+        id: composer-cache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ inputs.quality-php }}-quality-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ inputs.quality-php }}-quality-
+
       - name: Install Composer dependencies
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
         run: composer install --prefer-dist --no-interaction --no-progress
 
+      - name: Save Composer's cache
+        if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ inputs.quality-php }}-quality-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+
       - name: Install Semgrep
-        run: pipx install semgrep
+        run: pipx install semgrep==1.186.0
 
       - name: Run every gate
         # QA-04: the pull request's labels say which public surface changes it
@@ -120,7 +153,7 @@ jobs:
 
       - name: Keep the report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: harness-report
           path: .harness/
@@ -131,6 +164,7 @@ jobs:
     name: Tests PHP ${{ matrix.php }} (${{ matrix.stability }})
     needs: setup
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
     permissions:
       contents: read
@@ -140,11 +174,11 @@ jobs:
         php: ${{ fromJSON(inputs.php-versions) }}
         stability: [prefer-lowest, prefer-stable]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite, pdo_sqlite${{ needs.setup.outputs.redis == 'true' && ', redis, igbinary' || '' }}
@@ -162,8 +196,33 @@ jobs:
           exit 1
 
       # prefer-lowest proves the lower bounds in composer.json are real.
+      # Composer's download cache: a hit means no archive is fetched from GitHub. A pull request
+      # only restores it; the cache is written by the runs that are not pull requests (see README).
+      - name: Locate Composer's cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Composer's cache
+        id: composer-cache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-${{ matrix.stability }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ matrix.php }}-${{ matrix.stability }}-
+
       - name: Install dependencies (${{ matrix.stability }})
-        run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+          STABILITY: ${{ matrix.stability }}
+        run: composer update "--$STABILITY" --prefer-dist --no-interaction --no-progress
+
+      - name: Save Composer's cache
+        if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-${{ matrix.stability }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
 
       - name: Run the tests
         run: vendor/bin/pest
@@ -172,22 +231,25 @@ jobs:
     name: PHP API compatibility (QA-05)
     needs: setup
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # A pull request labelled "breaking" is a major version: the check reports, it does not block.
     continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' || contains(github.event.pull_request.labels.*.name, 'breaking') }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.quality-php }}
           coverage: none
 
       - name: Compare the PHP API with the latest release
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
         run: |
           tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -z "$tag" ]; then
@@ -208,42 +270,44 @@ jobs:
     name: Secrets (SEC-08)
     needs: setup
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Scan the history with gitleaks
-        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --redact --no-banner
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --redact --no-banner
 
   downstream:
     name: Downstream — framework with this change (QA-03)
     needs: setup
     if: contains(needs.setup.outputs.downstream, 'framework')
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Blocks in enforce mode (QA-03); in observe mode it only reports what it would have caught.
     continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: package
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/framework
           ref: ${{ inputs.framework-ref }}
           path: framework
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.quality-php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
@@ -269,12 +333,37 @@ jobs:
           composer config repositories.subject "{\"type\": \"path\", \"url\": \"../package\", \"options\": {\"symlink\": false, \"versions\": {\"$name\": \"$version\"}}}"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
+      - name: Locate Composer's cache
+        id: composer-cache
+        if: steps.alias.outputs.skip != 'true'
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Composer's cache
+        id: composer-cache-restore
+        if: steps.alias.outputs.skip != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ inputs.quality-php }}-downstream-${{ hashFiles('framework/composer.json', 'framework/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ inputs.quality-php }}-downstream-
+
       - name: Install the framework with this change
         if: steps.alias.outputs.skip != 'true'
         working-directory: framework
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+          PACKAGE: ${{ steps.alias.outputs.name }}
         run: |
           composer install --prefer-dist --no-interaction --no-progress
-          composer update "${{ steps.alias.outputs.name }}" --with-all-dependencies --no-interaction --no-progress
+          composer update "$PACKAGE" --with-all-dependencies --no-interaction --no-progress
+
+      - name: Save Composer's cache
+        if: steps.alias.outputs.skip != 'true' && github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ inputs.quality-php }}-downstream-${{ hashFiles('framework/composer.json', 'framework/composer.lock') }}
 
       - name: Run the framework's unit tests
         if: steps.alias.outputs.skip != 'true'

@@ -36,7 +36,7 @@ return [
     'CONV-08' => ['title' => 'A class is final unless it is an extension point (an abstract base, a builder or a facade-backed service, which use Macroable)', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'observed'],
     'CONV-09' => ['title' => 'A facade is a thin front for an injectable service bound in the container, with no logic of its own; a new facade resolves a contract', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'observed'],
     'CONV-10' => ['title' => 'One named exception per business case; never throw a bare \\Exception', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
-    'CONV-11' => ['title' => 'Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated', 'tool' => 'PHPStan + Pest type coverage', 'gate' => 'G1', 'status' => 'observed'],
+    'CONV-11' => ['title' => 'Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated', 'tool' => 'PHPStan + type_coverage ratchet (static count, no Pest plugin)', 'gate' => 'G1', 'status' => 'observed'],
     'CONV-12' => ['title' => 'Pest tests are it()/test() functions, one intention each, with datasets over copy-paste; no PHPUnit test class', 'tool' => 'Pest arch + review', 'gate' => 'G2', 'status' => 'observed'],
 
     // Security

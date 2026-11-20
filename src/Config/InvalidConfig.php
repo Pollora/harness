@@ -101,6 +101,13 @@ final class InvalidConfig extends RuntimeException
         return new self("{$path}: services lists \"{$given}\". The CI can start: ".implode(', ', HarnessConfig::SERVICES).'.');
     }
 
+    public static function slowStepShare(string $path, mixed $share): self
+    {
+        $given = is_scalar($share) ? var_export($share, true) : get_debug_type($share);
+
+        return new self("{$path}: slow_step_share is {$given}. Give a share of the total time above 0 and up to 1, e.g. 0.5.");
+    }
+
     public static function npmAuditMalformed(string $path): self
     {
         return new self("{$path}: npm_audit must be an object with an \"allow\" list of {\"advisory\", \"reason\", \"expires\"} entries.");

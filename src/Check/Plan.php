@@ -13,6 +13,7 @@ use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Distribution\Archive;
 use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Metrics\MissingReports;
+use Pollora\Harness\Metrics\TypeCoverage;
 use Pollora\Harness\Npm\NpmAudit;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\ChangedSources;
@@ -466,7 +467,9 @@ final readonly class Plan
         return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection, $mutation): StepResult {
             $collector = new Collector($cwd);
             $measured = $mutation?->value;
-            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, $measured === null ? [] : ['msi' => $measured], Collector::exemptedRules($config)));
+            $types = TypeCoverage::measure($cwd);
+            $overrides = ['type_coverage' => $types->percentage()] + ($measured === null ? [] : ['msi' => $measured]);
+            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, $overrides, Collector::exemptedRules($config)));
             $source = $coverage === null ? $collector->findClover() : null;
             $regressions = array_filter($rows, static fn (array $row): bool => $row['verdict'] === 'regressed');
             $lines = array_map(static fn (array $row): string => sprintf(
@@ -481,7 +484,7 @@ final readonly class Plan
                 $lines[] = sprintf('  Line coverage read from %s (no --coverage given); run `check --coverage` to refresh it.', $source);
             }
 
-            array_push($lines, ...MissingReports::notes($rows));
+            array_push($lines, ...$types->lines(), ...MissingReports::notes($rows));
 
             return $regressions === []
                 ? StepResult::passed(implode("\n", $lines))

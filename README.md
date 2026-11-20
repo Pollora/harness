@@ -87,6 +87,18 @@ A repository whose tests talk to a real service lists it in `.harness.json`:
 
 The reusable workflow then starts the service in the *Quality gates* and *Tests* jobs (a Redis 7 on `127.0.0.1:6379`) and installs the PHP extensions it needs (`redis` and `igbinary`), so the repository's tests run against it instead of skipping. The tests read the address from `REDIS_HOST` and `REDIS_PORT`, and should fail rather than skip when the `CI` variable is set, which GitHub Actions sets. Only `redis` is known; any other name makes `.harness.json` invalid.
 
+### Where the time goes (`slow_step_share`)
+
+`check` times every gate. The console summary shows the time of each one and a total, the job summary (`$GITHUB_STEP_SUMMARY`) has a *Time* column and a total line, and `.harness/report.json` has `total_seconds` and the `seconds` of each step (the number of steps does not change). To be warned when one gate takes most of the run, give the share of the total above which a gate is flagged:
+
+```json
+{
+    "slow_step_share": 0.5
+}
+```
+
+A gate that takes more than that share of the total, and at least 30 seconds, is listed as `Slow step` in the console and in the job summary, and under `slow_steps` in the JSON report. It is a warning, never a failure. Without the key nothing is flagged; a value that is not above 0 and up to 1 makes `.harness.json` invalid.
+
 ### Architecture rules a repository cannot satisfy yet (`allow_rules`)
 
 A repository can hold a rule it cannot satisfy without a breaking change: `Pollora/attributes` cannot make its published attribute classes final and readonly (ARCH-08). Instead of skipping the test by hand from `tests/Arch.php`, which also suspends the checks the rule still does well, list the rule under `allow_rules` in `.harness.json`, with the reason:
@@ -238,6 +250,17 @@ jobs:
 It runs the gates that need nothing but the source: the secrets in the history (SEC-08), the code style (Pint, the template's own `pint.json` or the Laravel preset), the security patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, with the rules of the version the workflow is pinned at) and the dependency audit of a committed `composer.lock` (SEC-09). PHPStan, Rector, the dependency analysis, the tests matrix, the API contract and the downstream run need a package: a template keeps its own tests in its own workflow.
 
 A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%plugin_name%`). They are not PHP, so Pint would fail to parse the file: it runs on a copy where each one is an identifier. `observed` lists the gates a template reports without blocking, the way `.harness.json` does for a package: a theme with hundreds of `{!! !!}` it has not yet been through is `observed: security` until it has.
+
+## Reliability and security of the workflows
+
+`php-package.yml`, `template.yml` and the harness's own `ci.yml` follow the same rules. Their contract does not change: same inputs, same job names (they are the status contexts the repositories require).
+
+- **Pinned by commit.** Every third-party action is referenced by the full SHA of its tag's commit, with the tag in a comment (`actions/checkout@3d3c42e5… # v7.0.1`). Semgrep is installed with `pipx install semgrep==<version>` and gitleaks runs from `ghcr.io/gitleaks/gitleaks:<tag>@sha256:<digest>`. Dependabot (`github-actions` ecosystem, weekly) proposes the new SHA with its tag comment; to bump by hand, resolve the tag with `gh api repos/<org>/<repo>/git/ref/tags/<tag>` (when `object.type` is `tag`, follow `gh api repos/<org>/<repo>/git/tags/<sha>` to the commit), and for the image read the digest with `docker buildx imagetools inspect ghcr.io/gitleaks/gitleaks:<tag>`. Update the comment together with the SHA.
+- **Least privilege.** `permissions: {}` at the top, `contents: read` per job, `persist-credentials: false` on every checkout, no `pull_request_target`, and no `${{ }}` of a value a third party controls inside a `run:` (they go through `env:`).
+- **Composer authenticated with the job's token.** The steps that run Composer set `COMPOSER_AUTH='{"github-oauth": {"github.com": "${{ github.token }}"}}'`. Without it Composer downloads archives from `codeload.github.com` anonymously, and many jobs starting together on the same IPs get `HTTP/2 429` (seen on 20 November). `github.token` exists in a reusable workflow called from another repository: it is the calling run's token, with the permissions of the calling job (`contents: read`). The variable is set on the install step only, never at job level, and GitHub masks the token in the logs. A repository's `composer.json` scripts run in that step, so the token is one a collaborator's workflow already has.
+- **Composer cache.** The download cache is restored for every run, and written only by runs that are not pull requests (`main`, `develop`, tags): a pull request cannot plant an archive that another branch later installs. The key is the PHP version, the stability and the hash of `composer.json` and `composer.lock`, with a prefix fallback.
+- **Time limits.** Every job has a `timeout-minutes` (setup 5, quality 30, tests 15, contract 15, secrets 10, downstream 20), several times the longest duration observed (4 minutes for the slowest job).
+- **Concurrency.** A new push to a pull request cancels the run in progress for it; `main`, other branches, tags and manual runs have a group per run and are never cancelled.
 
 ## Public surface
 

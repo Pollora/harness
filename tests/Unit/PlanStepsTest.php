@@ -184,6 +184,22 @@ it('compares the ratchet with the report it is given, and fails on a regression'
     expect($passed->status)->toBe(StepResult::PASSED);
 });
 
+it('prints the type coverage and the files that concentrate the gap, and fails when a recorded floor drops', function (): void {
+    $cwd = harnessTempDir();
+    mkdir($cwd.'/src', 0o755, true);
+    file_put_contents($cwd.'/src/Untyped.php', '<?php function a($x) {} function b($y) {}');
+    file_put_contents($cwd.'/src/Typed.php', '<?php function c(int $z): void {}');
+
+    $shown = covExecute(covStep('Ratchet', $cwd, ['profile' => 'core', 'ratchet' => ['type_coverage' => 30.0]]));
+
+    expect($shown->status)->toBe(StepResult::PASSED)
+        ->and($shown->detail)->toContain('Type coverage: 33.33 %')->toContain('4 untyped in src/Untyped.php');
+
+    $dropped = covExecute(covStep('Ratchet', $cwd, ['profile' => 'core', 'ratchet' => ['type_coverage' => 90.0]]));
+
+    expect($dropped->isFailed())->toBeTrue()->and($dropped->detail)->toContain('regressed');
+});
+
 it('says where the coverage was read from when it was not asked for, and when no report exists', function (): void {
     $cwd = harnessTempDir();
     $config = ['profile' => 'core', 'ratchet' => ['coverage' => 40.0]];
