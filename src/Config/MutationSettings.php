@@ -35,6 +35,14 @@ final readonly class MutationSettings
     public const string ADDED = 'added';
 
     /**
+     * The score a limited run (`changed` or `added`) is held to when nothing says otherwise: neither `mutation.min`
+     * nor a figure the caller chose. Deliberately low. Mutation scores are measured on whole files and the files of a
+     * repository score unevenly (51 % to 100 % in the framework), so a high default would fail pull requests for
+     * mutants they did not write; 50 % still catches a file whose tests barely notice a change.
+     */
+    public const float PULL_REQUEST_MINIMUM = 50.0;
+
+    /**
      * @param  'all'|'changed'|'added'  $scope  What `check --mutation` mutates
      * @param  float|null  $min  Score (percent, 0 to 100) the changed files must reach; null only reports it. Meaningful for `changed`
      */
@@ -65,6 +73,30 @@ final readonly class MutationSettings
         }
 
         return new self($scope, $min === null ? null : (float) $min);
+    }
+
+    /**
+     * The settings for one run whose scope the command line chose (`check --mutation-scope=`), which wins over `.harness.json`.
+     *
+     * A limited scope keeps `mutation.min` when the file sets one and otherwise falls back to
+     * `PULL_REQUEST_MINIMUM`, so that choosing the scope never leaves the run without a threshold. `all` keeps
+     * the settings as they are: the whole-repository run is compared with the ratchet, not with `min`.
+     *
+     * @param  'all'|'changed'|'added'  $scope
+     */
+    public function withScope(string $scope): self
+    {
+        return new self($scope, $scope === self::ALL ? $this->min : ($this->min ?? self::PULL_REQUEST_MINIMUM));
+    }
+
+    /**
+     * Whether a `--mutation-scope` value names a scope.
+     *
+     * @phpstan-assert-if-true 'all'|'changed'|'added' $scope
+     */
+    public static function isScope(string $scope): bool
+    {
+        return in_array($scope, [self::ALL, self::CHANGED, self::ADDED], true);
     }
 
     /**

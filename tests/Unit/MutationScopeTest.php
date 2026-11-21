@@ -9,6 +9,7 @@ use Pollora\Harness\Check\StepResult;
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\InvalidConfig;
 use Pollora\Harness\Config\MutationSettings;
+use Pollora\Harness\Console\Commands\CheckCommand;
 use Pollora\Harness\Support\ChangedSources;
 
 /**
@@ -410,4 +411,116 @@ it('fails the gate of the new files when Pest cannot write its temporary files, 
 
     expect($result->status)->toBe(StepResult::FAILED)
         ->and($result->detail)->toContain('would read 100 % whatever the tests assert');
+});
+
+describe('the mutation scope a run chooses on the command line', function (): void {
+    /**
+     * The mutation step of a plan built the way `check --mutation-scope=` builds it, with a fake Pest.
+     *
+     * @param  string|null  $scope  The `--mutation-scope` value, null when the option is not given
+     * @param  array<string, mixed>|null  $mutation  The `mutation` key of .harness.json
+     * @param  array<string, string>  $changes  Files of the last commit
+     */
+    function stepChosenBy(?string $scope, ?array $mutation, string $report = "  Mutations: 2 untested, 8 tested\n  Score:     80.00%\n", array $changes = ['src/A.php' => "<?php\n"], ?string $base = null): Step
+    {
+        $root = scopedRepository($changes);
+        mkdir($root.'/vendor/bin', 0o777, true);
+        mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
+        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, ".var_export($report, true).");\n");
+        $config = HarnessConfig::fromArray(['profile' => 'core', 'mutation' => $mutation, 'ratchet' => ['msi' => 90]]);
+
+        if ($scope !== null) {
+            $config = $config->withMutation($config->mutation->withScope($scope));
+        }
+
+        $steps = (new Plan($config, $root))->full(null, null, true, $base);
+
+        return array_values(array_filter($steps, static fn (Step $step): bool => str_starts_with($step->name, 'Mutation testing')))[0];
+    }
+
+    it('wins over the file, which wins over the default', function (?string $scope, ?array $file, string $step): void {
+        expect(stepChosenBy($scope, $file)->name)->toBe($step);
+    })->with([
+        'no option, no key: the whole repository' => [null, null, Plan::MUTATION],
+        'no option, the file says added' => [null, ['scope' => 'added', 'min' => 70], Plan::MUTATION_ADDED],
+        'no option, the file says changed' => [null, ['scope' => 'changed'], Plan::MUTATION_CHANGED],
+        'changed over no key' => ['changed', null, Plan::MUTATION_CHANGED],
+        'changed over a file that says all' => ['changed', ['scope' => 'all'], Plan::MUTATION_CHANGED],
+        'all over a file that says changed' => ['all', ['scope' => 'changed', 'min' => 80], Plan::MUTATION],
+        'added over a file that says changed' => ['added', ['scope' => 'changed', 'min' => 80], Plan::MUTATION_ADDED],
+    ]);
+
+    it('holds a limited run to mutation.min when the file sets one, and to 50 % when it does not', function (): void {
+        $kept = (new MutationSettings('all', 85.0))->withScope('changed');
+        $fallback = (new MutationSettings)->withScope('changed');
+
+        expect($kept->min)->toBe(85.0)
+            ->and($fallback->min)->toBe(MutationSettings::PULL_REQUEST_MINIMUM)
+            ->and(MutationSettings::PULL_REQUEST_MINIMUM)->toBe(50.0)
+            ->and((new MutationSettings)->withScope('all')->min)->toBeNull();
+    });
+
+    it('fails a changed file under the fallback minimum, and passes one at it', function (): void {
+        $below = (stepChosenBy('changed', null, "  Mutations: 6 untested, 4 tested\n  Score:     40.00%\n")->action)();
+        $at = (stepChosenBy('changed', null, "  Mutations: 5 untested, 5 tested\n  Score:     50.00%\n")->action)();
+
+        expect($below->status)->toBe(StepResult::FAILED)->and($below->detail)->toContain('minimum of 50')
+            ->and($at->status)->toBe(StepResult::PASSED);
+    });
+
+    it('passes, saying there is nothing to mutate, when the pull request changes no PHP source file', function (): void {
+        $result = (stepChosenBy('changed', null, '', ['README.md' => "x\n", 'tests/AThing.php' => "<?php\n"])->action)();
+
+        expect($result->status)->toBe(StepResult::PASSED)
+            ->and($result->detail)->toContain('nothing to mutate')
+            ->not->toContain('unmeasured');
+    });
+
+    it('fails, saying what to do, when the base is not in the checkout, instead of passing', function (): void {
+        $result = (stepChosenBy('changed', null, '', base: 'origin/no-such-branch')->action)();
+
+        expect($result->status)->toBe(StepResult::FAILED)
+            ->and($result->detail)->toContain('origin/no-such-branch', 'fetch-depth: 2', '--mutation-base');
+    });
+
+    it('mutates the whole repository, as before, without the option', function (): void {
+        $step = stepChosenBy(null, null);
+
+        expect($step->name)->toBe(Plan::MUTATION)
+            ->and(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::MUTATION)
+            ->and((($step->action)())->detail)->toContain('Mutation score 80');
+    });
+
+    it('says the msi of the ratchet is not measured on purpose when the run is limited', function (): void {
+        $root = scopedRepository(['src/A.php' => "<?php\n"]);
+        mkdir($root.'/vendor/bin', 0o777, true);
+        mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
+        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, \"  Mutations: 1 tested\\n  Score:     100.00%\\n\");\n");
+        $config = HarnessConfig::fromArray(['profile' => 'core', 'ratchet' => ['msi' => 90]]);
+        $limited = array_values(array_filter((new Plan($config->withMutation($config->mutation->withScope('changed')), $root))->full(null, null, true), static fn (Step $step): bool => $step->name === 'Ratchet'))[0];
+        $whole = array_values(array_filter((new Plan($config, $root))->full(null, null, false), static fn (Step $step): bool => $step->name === 'Ratchet'))[0];
+
+        expect((($limited->action)())->detail)->toContain('mutated only the files of the change')->not->toContain('Infection')
+            ->and((($whole->action)())->detail)->toContain('no Infection log');
+    });
+
+    it('refuses a scope it does not know, or an option without value, before running any gate', function (string ...$arguments): void {
+        $cwd = harnessTempDir();
+        file_put_contents($cwd.'/.harness.json', '{"profile": "core"}');
+
+        [$code, $output, $errors] = harnessRun(new CheckCommand, $cwd, ...$arguments);
+
+        expect($code)->toBe(1)->and($errors)->toContain('--mutation-scope')->and($output)->not->toContain('Pollora harness ·');
+    })->with([
+        'unknown value' => ['--mutation-scope=everything'],
+        'no value' => ['--mutation-scope'],
+    ]);
+
+    it('knows the three scopes', function (): void {
+        expect(MutationSettings::isScope('all'))->toBeTrue()
+            ->and(MutationSettings::isScope('changed'))->toBeTrue()
+            ->and(MutationSettings::isScope('added'))->toBeTrue()
+            ->and(MutationSettings::isScope('CHANGED'))->toBeFalse()
+            ->and(MutationSettings::isScope(''))->toBeFalse();
+    });
 });
