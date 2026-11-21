@@ -9,14 +9,15 @@ declare(strict_types=1);
 it('has loaded WordPress', function (): void {
     expect(function_exists('register_post_meta'))->toBeTrue()
         ->and(defined('ABSPATH'))->toBeTrue()
-        ->and(get_bloginfo('name'))->not->toBe('');
+        ->and(get_bloginfo('name') !== '')->toBeTrue();
 });
 
 it('talks to the database of the installed site', function (): void {
     global $wpdb;
 
     expect($wpdb)->toBeInstanceOf(wpdb::class)
-        ->and(get_option('siteurl'))->toBeString()->not->toBe('')
+        ->and(get_option('siteurl'))->toBeString()
+        ->and(get_option('siteurl') !== '')->toBeTrue()
         ->and(is_blog_installed())->toBeTrue();
 });
 
