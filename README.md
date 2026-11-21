@@ -269,6 +269,45 @@ It runs the gates that need nothing but the source: the secrets in the history (
 
 A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%plugin_name%`). They are not PHP, so Pint would fail to parse the file: it runs on a copy where each one is an identifier. `observed` lists the gates a template reports without blocking, the way `.harness.json` does for a package: a theme with hundreds of `{!! !!}` it has not yet been through is `observed: security` until it has.
 
+## Integration tests against a real WordPress
+
+Pollora packages test against Brain Monkey, which doubles WordPress. That is fast, and it proves the logic, but a defect that only a real WordPress shows passes the CI: `register_post_meta()` called before WordPress is loaded was found by the framework's downstream job, not by the package's own tests. The reusable workflow has an **optional** job for that. It is off by default: while the input is empty the job is skipped, nothing starts, and no other job, `needs` or required status changes.
+
+### Turning it on
+
+```yaml
+jobs:
+  harness:
+    uses: Pollora/harness/.github/workflows/php-package.yml@main
+    with:
+      wordpress-integration: tests/Integration # the suite; empty (default) = off
+      wordpress-version: latest # latest (default), nightly, 6.9, 6.9.1
+      wordpress-plugins: action-scheduler # optional, wordpress.org slugs, comma-separated
+    permissions:
+      contents: read
+```
+
+The job is named `WordPress integration PHP <version>` (one per version of `php-versions`, 8.3 and 8.4 by default). It installs WordPress with WP-CLI under `$RUNNER_TEMP/wordpress` (outside the repository, so no linter reads it), against a MySQL 8.0 service container (digest-pinned), installs the plugins asked for, then exports `WP_PATH` and `WP_CORE_DIR` (the directory holding `wp-load.php`) and `WP_TESTS_DB_HOST`, `WP_TESTS_DB_NAME`, `WP_TESTS_DB_USER`, `WP_TESTS_DB_PASSWORD` to the tests. `WP_DEBUG` is on and cron is off. It then starts the suite, in this order: the `test:integration` script of `composer.json` when there is one (the repository owns the command, as `hook` does with `composer test:wordpress`); otherwise `vendor/bin/pest -c phpunit.integration.xml` when that file exists; otherwise `vendor/bin/pest <wordpress-integration>`. The inputs are validated (a path inside the repository, a version, plugin slugs) before anything runs. Like the *Tests* job it only reports in observe mode and blocks in enforce mode; no other job needs it, so it is a status to require when the repository wants it.
+
+### The bootstrap and a first test
+
+`stubs/wordpress/` holds a bootstrap, a PHPUnit configuration and a test that proves a real WordPress is loaded. Copy them:
+
+```bash
+mkdir -p tests/Integration
+cp vendor/pollora/harness/stubs/wordpress/bootstrap.php.stub tests/Integration/bootstrap.php
+cp vendor/pollora/harness/stubs/wordpress/WordPressLoadedTest.php.stub tests/Integration/WordPressLoadedTest.php
+cp vendor/pollora/harness/stubs/wordpress/phpunit.integration.xml.stub phpunit.integration.xml
+```
+
+The bootstrap loads Composer's autoloader, then `wp-load.php` from `WP_PATH`, and stops with a clear message when it is missing. `phpunit.integration.xml` keeps the suite apart from `phpunit.xml`: **exclude `tests/Integration` from the suites of `phpunit.xml`**, otherwise the unit run would load WordPress too. The example test checks `function_exists('register_post_meta')`, `get_bloginfo()`, the database, a real hook and a real meta registration; if the bootstrap did not load WordPress, or a Brain Monkey stub were standing in, it fails. Locally: install WordPress anywhere (WP-CLI, SQLite or MySQL) and run `WP_PATH=/path/to/wordpress vendor/bin/pest -c phpunit.integration.xml`.
+
+### What it costs, and when to turn it on
+
+Expect roughly 2 to 3 minutes added per PHP version before the tests themselves (MySQL start, WordPress download and install, Composer), 30 to 60 seconds less once the caches are warm; the jobs run in parallel with the others, so a pull request waits only if this job is the slowest. These figures are estimates: they have not been measured on a pilot repository yet. WordPress archives and plugin archives are cached (restored on every run, written only by runs that are not pull requests, like Composer's cache), and `latest` is resolved to a version number first so the cache key is exact.
+
+Turn it on for a repository whose code calls WordPress functions, hooks or the database in ways a double cannot reproduce: hook registration order, `register_*`, queries, options, cron, REST routes, anything that depends on WordPress being loaded. Leave it off for pure-PHP packages with no WordPress call (the ones that already pass on doubles prove nothing more here), and keep the suite small: what a double already proves belongs in the unit suite. MySQL 8.0 is used because it is what hosts run and what `hook` already tests on; it is past its upstream support, so the image will move to 8.4 once a pilot shows the authentication plugin of the client works with it.
+
 ## Reliability and security of the workflows
 
 `php-package.yml`, `template.yml` and the harness's own `ci.yml` follow the same rules. Their contract does not change: same inputs, same job names (they are the status contexts the repositories require).
@@ -277,7 +316,7 @@ A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%pl
 - **Least privilege.** `permissions: {}` at the top, `contents: read` per job, `persist-credentials: false` on every checkout, no `pull_request_target`, and no `${{ }}` of a value a third party controls inside a `run:` (they go through `env:`).
 - **Composer authenticated with the job's token.** The steps that run Composer set `COMPOSER_AUTH='{"github-oauth": {"github.com": "${{ github.token }}"}}'`. Without it Composer downloads archives from `codeload.github.com` anonymously, and many jobs starting together on the same IPs get `HTTP/2 429` (seen on 20 November). `github.token` exists in a reusable workflow called from another repository: it is the calling run's token, with the permissions of the calling job (`contents: read`). The variable is set on the install step only, never at job level, and GitHub masks the token in the logs. A repository's `composer.json` scripts run in that step, so the token is one a collaborator's workflow already has.
 - **Composer cache.** The download cache is restored for every run, and written only by runs that are not pull requests (`main`, `develop`, tags): a pull request cannot plant an archive that another branch later installs. The key is the PHP version, the stability and the hash of `composer.json` and `composer.lock`, with a prefix fallback.
-- **Time limits.** Every job has a `timeout-minutes` (setup 5, quality 30, tests 15, contract 15, secrets 10, downstream 20), several times the longest duration observed (4 minutes for the slowest job).
+- **Time limits.** Every job has a `timeout-minutes` (setup 5, quality 30, tests 15, WordPress integration 20, contract 15, secrets 10, downstream 20), several times the longest duration observed (4 minutes for the slowest job).
 - **Concurrency.** A new push to a pull request cancels the run in progress for it; `main`, other branches, tags and manual runs have a group per run and are never cancelled.
 
 ## Promoting a rule
@@ -356,7 +395,9 @@ The harness no longer only measures: every repository that adopted it runs the g
 | Observed | 7 | CONV-02 (no raw registration arrays), CONV-08 (final classes), CONV-09 (thin facades), CONV-11 (native types), CONV-12 (Pest functions), PERF-01 (query budgets), PERF-07 (nightly measures) |
 | Planned | 1 | CONV-01 |
 
-`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress and adapter contract tests. The performance budgets are checked from their files (see [Performance budgets](#performance-budgets)); the measuring itself stays in the repository that owns a site.
+**Why CONV-01 stays `planned`.** The rule ("the common case needs no configuration") was read four ways over the 45 repositories, with `nikic/php-parser`, and none is precise enough to report without noise. (1) A public static factory, or a public method of a `*Builder` / `*Factory` / `*Registry` / `*Registrar` / `*Manager`, with 4 required parameters (3 when one is a required `bool`), exceptions, interfaces, callbacks, `@internal`, Infrastructure, Console and Providers left out: 22 reports in 8 repositories, about 1 s; 5 were real (`Ability::create()` and `AbilityDefinition::reading()` / `writing()` with 7 required arguments, `Registry::table()` / `variables()`), 17 were not (12 view helpers of an admin screen, internal factories of the harness, a three-boolean predicate). Without the admin screens and from 5 required parameters: 6 reports, 3 real. (2) A public constructor with 3 or more required scalars: 55 reports, nearly all value objects, events and DTOs, whose fields are required by nature. (3) A required `bool` next to another required parameter: 10 reports, 3 real (`put($path, $contents, $dryRun)`), the others WordPress callbacks and setters. (4) Any public method with 4 or more required parameters: 62 outside constructors, about half of them WordPress hook callbacks or signatures imposed by a contract. Deciding that a parameter has an "obvious default" is a judgment on meaning, not on syntax, and the few real cases (6 to 10 in 45 repositories) are too few to show a false-positive rate under 10 %. The rule stays with its present tool: review, and the documentation examples run as tests.
+
+`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Integration tests against a real WordPress are an opt-in job (see [Integration tests against a real WordPress](#integration-tests-against-a-real-wordpress)). Still to come: adapter contract tests. The performance budgets are checked from their files (see [Performance budgets](#performance-budgets)); the measuring itself stays in the repository that owns a site.
 
 ## Contributing
 

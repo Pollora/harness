@@ -38,6 +38,25 @@ on:
           everything. Ignored when the repository declares mutation.scope itself.
         type: string
         default: changed
+      wordpress-integration:
+        description: >-
+          Optional. Directory of the integration test suite (for example `tests/Integration`) that runs against a real
+          WordPress and a real MySQL, in the `WordPress integration` job. Empty (default) disables the job: it is skipped.
+          A `test:integration` script in composer.json takes precedence over the directory to start the suite.
+        type: string
+        default: ''
+      wordpress-version:
+        description: >-
+          WordPress the integration job installs: `latest` (default, the latest stable release), `nightly` or a
+          version number such as `6.9` or `6.9.1`. Ignored while wordpress-integration is empty.
+        type: string
+        default: latest
+      wordpress-plugins:
+        description: >-
+          Comma-separated wordpress.org slugs the integration job installs and activates (for example `action-scheduler`).
+          Empty (default): none. Ignored while wordpress-integration is empty.
+        type: string
+        default: ''
 
 permissions: {}
 
@@ -254,6 +273,186 @@ jobs:
 
       - name: Run the tests
         run: vendor/bin/pest
+
+  # Optional: runs the repository's integration suite against a real WordPress and a real MySQL, which Brain Monkey doubles
+  # cannot reproduce. Skipped (nothing starts, no cost) while the `wordpress-integration` input is empty. No other job
+  # depends on it: a skipped or failed run here changes no other job and no status the repository requires. MySQL is a
+  # service container rather than SQLite: it is the database WordPress runs on, so a query the SQLite translation layer
+  # would accept and MySQL refuse is caught, and nothing but the WordPress archive (cached) is downloaded.
+  wordpress:
+    name: WordPress integration PHP ${{ matrix.php }}
+    needs: setup
+    if: inputs.wordpress-integration != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: ${{ needs.setup.outputs.mode != 'enforce' }}
+    permissions:
+      contents: read
+    services:
+      mysql:
+        image: mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJSON(inputs.php-versions) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pdo, mysqli, gd, intl, exif
+          tools: wp-cli
+          coverage: none
+
+      # The inputs come from the calling workflow: they are checked here, and reach the other steps through
+      # $GITHUB_ENV, never through a ${{ }} written inside a script.
+      - name: Check the inputs and resolve the WordPress version
+        id: wp
+        env:
+          SUITE: ${{ inputs.wordpress-integration }}
+          VERSION: ${{ inputs.wordpress-version }}
+          PLUGINS: ${{ inputs.wordpress-plugins }}
+        run: |
+          set -euo pipefail
+          case "$SUITE" in
+            *..*|/*|*[!A-Za-z0-9._/-]*) echo "::error::wordpress-integration is \"$SUITE\": give a directory of the repository, such as tests/Integration."; exit 1 ;;
+          esac
+          if [ ! -e "$SUITE" ] && ! jq -e '.scripts["test:integration"]' composer.json > /dev/null 2>&1; then
+            echo "::error::wordpress-integration is \"$SUITE\", which does not exist, and composer.json has no test:integration script."
+            exit 1
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^(latest|nightly|[0-9]+\.[0-9]+(\.[0-9]+)?)$'; then
+            echo "::error::wordpress-version is \"$VERSION\": use latest, nightly or a version such as 6.9 or 6.9.1."
+            exit 1
+          fi
+          if [ -n "$PLUGINS" ] && ! printf '%s' "$PLUGINS" | grep -Eq '^[a-z0-9-]+(,[a-z0-9-]+)*$'; then
+            echo "::error::wordpress-plugins is \"$PLUGINS\": give wordpress.org slugs separated by commas."
+            exit 1
+          fi
+          resolved="$VERSION"
+          if [ "$VERSION" = "latest" ]; then
+            # The first offer of the update API is the latest stable release.
+            resolved=$(curl --fail --silent --show-error --retry 3 --max-time 30 'https://api.wordpress.org/core/version-check/1.7/' | jq -r '.offers[0].version')
+            if ! printf '%s' "$resolved" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+              echo "::error::Could not resolve the latest WordPress version (got \"$resolved\")."
+              exit 1
+            fi
+          fi
+          echo "WordPress $VERSION resolves to $resolved"
+          echo "version=$resolved" >> "$GITHUB_OUTPUT"
+          # Comma-separated slugs cannot be part of a cache key: a short digest stands for them.
+          echo "plugins=$(printf '%s' "$PLUGINS" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+          # A nightly changes every day: its archive is cached per day.
+          if [ "$VERSION" = "nightly" ]; then echo "cache=nightly-$(date -u +%F)" >> "$GITHUB_OUTPUT"; else echo "cache=$resolved" >> "$GITHUB_OUTPUT"; fi
+
+      # WP-CLI keeps the WordPress archive and the plugin archives here. A pull request only restores the cache;
+      # the runs that are not pull requests write it (see README).
+      - name: Restore the WordPress downloads
+        id: wp-cache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.wp-cli/cache
+          key: wp-cli-${{ runner.os }}-${{ steps.wp.outputs.cache }}-${{ steps.wp.outputs.plugins }}
+          restore-keys: |
+            wp-cli-${{ runner.os }}-${{ steps.wp.outputs.cache }}-
+
+      - name: Locate Composer's cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Composer's cache
+        id: composer-cache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-wordpress-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ matrix.php }}-wordpress-
+
+      - name: Install Composer dependencies
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
+
+      - name: Save Composer's cache
+        if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-wordpress-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+
+      # WordPress goes under RUNNER_TEMP, outside the repository: no Pint, PHPStan or Pest scan reads its files.
+      - name: Install WordPress
+        env:
+          WP_VERSION: ${{ steps.wp.outputs.version }}
+          PLUGINS: ${{ inputs.wordpress-plugins }}
+          WP_VERSION_INPUT: ${{ inputs.wordpress-version }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/wordpress"
+          version="$WP_VERSION"
+          if [ "$WP_VERSION_INPUT" = "nightly" ]; then version="nightly"; fi
+          wp core download --path="$dir" --version="$version" --force
+          # MySQL is healthy before the steps start (service health check); the loop covers a slow first connection.
+          for _ in $(seq 1 30); do
+            if php -r 'exit(@mysqli_connect("127.0.0.1", "root", "root", "wordpress", 3306) ? 0 : 1);'; then break; fi
+            sleep 2
+          done
+          wp config create --path="$dir" --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1:3306 --skip-check --extra-php <<'PHP'
+          define('WP_DEBUG', true);
+          define('WP_DEBUG_LOG', true);
+          define('WP_DEBUG_DISPLAY', false);
+          define('DISABLE_WP_CRON', true);
+          PHP
+          wp core install --path="$dir" --url=http://localhost --title=Integration --admin_user=admin --admin_password=admin --admin_email=admin@example.com --skip-email
+          if [ -n "$PLUGINS" ]; then
+            IFS=, read -ra slugs <<< "$PLUGINS"
+            wp plugin install "${slugs[@]}" --activate --path="$dir"
+          fi
+          {
+            echo "WP_PATH=$dir"
+            echo "WP_CORE_DIR=$dir"
+            echo "WP_TESTS_DB_HOST=127.0.0.1:3306"
+            echo "WP_TESTS_DB_NAME=wordpress"
+            echo "WP_TESTS_DB_USER=root"
+            echo "WP_TESTS_DB_PASSWORD=root"
+          } >> "$GITHUB_ENV"
+          echo "Installed WordPress $(wp core version --path="$dir") on PHP $(php -r 'echo PHP_VERSION;')"
+
+      - name: Save the WordPress downloads
+        if: github.event_name != 'pull_request' && steps.wp-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.wp-cli/cache
+          key: wp-cli-${{ runner.os }}-${{ steps.wp.outputs.cache }}-${{ steps.wp.outputs.plugins }}
+
+      # The repository owns the command when it declares it. Otherwise the suite runs with phpunit.integration.xml
+      # (its own bootstrap loads WordPress, see resources/wordpress/), or with the directory alone.
+      - name: Run the integration tests
+        env:
+          SUITE: ${{ inputs.wordpress-integration }}
+        run: |
+          set -euo pipefail
+          if jq -e '.scripts["test:integration"]' composer.json > /dev/null 2>&1; then
+            composer run-script test:integration
+          elif [ -f phpunit.integration.xml ]; then
+            vendor/bin/pest -c phpunit.integration.xml
+          else
+            vendor/bin/pest "$SUITE"
+          fi
 
   contract:
     name: PHP API compatibility (QA-05)
