@@ -165,6 +165,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
 | `pollora-qa archive [--fix]` | Checks that development files stay out of the release archive (QA-06); `--fix` writes the missing `export-ignore` lines |
 | `pollora-qa composer-audit [--locked]` | The Composer dependency audit alone (SEC-09), which tries again when Packagist cannot be reached; same code as the `check` step, used by the reusable workflow of the templates |
+| `pollora-qa check --template [--config=FILE]` | The ratchet of a template's optional `.harness.json`, what the `Ratchet (QA-01)` job of `template.yml` runs; nothing without a file |
 | `pollora-qa npm-audit [--config=FILE]` | The npm dependency audit alone (SEC-09), for a template that cannot carry the harness; same code as the `check` step |
 | `pollora-qa rules [ID]` | Lists the rules, or explains one |
 | `pollora-qa agents` | Regenerates the harness block of `AGENTS.md` |
@@ -287,7 +288,7 @@ jobs:
     uses: Pollora/harness/.github/workflows/template.yml@v0.1.10
     with:
       mode: enforce # observe reports and never blocks
-      observed: '' # gates reported but never blocking: secrets, style, security, audit
+      observed: '' # gates reported but never blocking: secrets, style, security, audit, ratchet
     permissions:
       contents: read
 ```
@@ -295,6 +296,44 @@ jobs:
 It runs the gates that need nothing but the source: the secrets in the history (SEC-08), the code style (Pint, the template's own `pint.json` or the Laravel preset), the security patterns (SEC-01, SEC-03, SEC-04, SEC-05, CONV-10, with the rules of the version the workflow is pinned at) and the dependency audit of a committed `composer.lock` (SEC-09). PHPStan, Rector, the dependency analysis, the tests matrix, the API contract and the downstream run need a package: a template keeps its own tests in its own workflow.
 
 A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%plugin_name%`). They are not PHP, so Pint would fail to parse the file: it runs on a copy where each one is an identifier. `observed` lists the gates a template reports without blocking, the way `.harness.json` does for a package: a theme with hundreds of `{!! !!}` it has not yet been through is `observed: security` until it has.
+
+### A .harness.json for a template
+
+A template may carry one optional file so that a floor can be recorded for it, which a template without a file cannot do (the type coverage of CONV-11 is the first use). `template.yml` reads `.harness.json` at the root, or failing that `.github/harness.json` (a directory the release archives leave out, so the file does not travel into the projects built from the template: prefer it when the template is distributed as an archive; the root file is copied by a scaffolder that copies the whole repository). A template without the file is checked exactly as before: the new `Ratchet (QA-01)` job finds nothing to read and passes at once, and no other job changes.
+
+The file is a subset of a package's, and the profile may be left out (it is then `template`; `project` is accepted, any other profile is refused):
+
+```json
+{
+    "profile": "template",
+    "ratchet": {
+        "type_coverage": 88.3
+    }
+}
+```
+
+| Key | What `template.yml` does with it |
+| --- | --- |
+| `ratchet.type_coverage` | The `Ratchet (QA-01)` job measures the share of typed declarations from the source alone (nikic/php-parser: no autoloader, no `composer install` of the template, `%placeholder%` markers read as identifiers) and fails a measure lower than the floor, with 0.05 point of tolerance. Without a floor nothing is compared. |
+| `ratchet.coverage`, `ratchet.phpstan_level`, `ratchet.phpstan_baseline`, `ratchet.exempted_rules`, `ratchet.exempted_classes` | Compared when they can be measured: a Clover report at one of the usual places, a `phpstan.neon` or baseline, `allow_rules`. A template does not run its tests here, so a recorded `coverage` is reported as "no report" and not compared. `msi` is never measured. |
+| `npm_audit.allow` | Read by the npm audit job, as before. |
+| `slow_step_share`, `observed` | Read by the report of the ratchet job (a step flagged slow, a step named in `observed` reported without blocking). |
+| `allow_commands`, `allow_rules` | Validated like in a package. No template gate uses `allow_commands`; `allow_rules` feeds the `exempted_rules` and `exempted_classes` floors. |
+| `mode` | Ignored: the `mode` input of `template.yml` decides whether a drop blocks (`enforce`) or only reports (`observe`), and `observed: ratchet` turns the job into a report. |
+
+A value that cannot be compared, a key out of range (`"type_coverage": 120`), an unknown profile or a package profile fails the job with the file named. `.harness.json` stays a protected file (QA-02): a person raises or records a floor, an agent does not.
+
+```bash
+# in the template: write the minimal file (the profile and the floor measured now, rounded down to a tenth)
+vendor/bin/pollora-qa init --profile=template            # or php path/to/harness/bin/pollora-qa init --profile=template
+vendor/bin/pollora-qa init --profile=template --config=.github/harness.json
+# later: raise the floors to what the code reaches (never lowers them)
+vendor/bin/pollora-qa ratchet --update
+# what the job runs
+vendor/bin/pollora-qa check --template --enforce
+```
+
+`init --profile=template` creates nothing but that file (no `phpstan.neon`, `tests/Arch.php`, `AGENTS.md` or workflow), and a file that already exists keeps every key it has.
 
 ## Integration tests against a real WordPress
 

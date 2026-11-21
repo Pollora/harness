@@ -130,6 +130,21 @@ final readonly class Plan
     }
 
     /**
+     * What `template.yml` runs for a template that declares a `.harness.json`: the ratchet alone.
+     *
+     * A template installs nothing, so PHPStan, Rector, the tests and the rest of `full()` do not apply; the
+     * ratchet reads the source with nikic/php-parser (no autoloader, no `composer install` of the template),
+     * and the Clover report only when the template produced one. Each step it does not run stays the job of
+     * the other jobs of `template.yml`.
+     *
+     * @return list<Step>
+     */
+    public function template(?string $coverage = null): array
+    {
+        return [$this->ratchet($coverage, null)];
+    }
+
+    /**
      * The rules `.harness.json` exempts (allow_rules), one line each, so the gate says what it does not evaluate
      * (and which declared exemptions it does not apply yet, because the rule is observed).
      */
