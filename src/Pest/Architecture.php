@@ -10,6 +10,7 @@ use Pollora\Harness\Architecture\FacadeClasses;
 use Pollora\Harness\Architecture\FinalClasses;
 use Pollora\Harness\Architecture\ForeignNamespaces;
 use Pollora\Harness\Architecture\Layers;
+use Pollora\Harness\Architecture\RawRegistrationArrays;
 use Pollora\Harness\Architecture\StrictTypes;
 use Pollora\Harness\Architecture\TestClasses;
 use Pollora\Harness\Config\HarnessConfig;
@@ -177,7 +178,7 @@ final readonly class Architecture
         }
     }
 
-    /** CONV-08, CONV-09, CONV-12: rules read from the files, observed until the catalogue says otherwise */
+    /** CONV-02, CONV-08, CONV-09, CONV-12: rules read from the files, observed until the catalogue says otherwise */
     private function conventions(): void
     {
         $layers = $this->layers;
@@ -186,6 +187,7 @@ final readonly class Architecture
         $noClass = $layers->files === [] ? 'no class under the PSR-4 roots of composer.json' : null;
         $noTest = $root === '' || TestClasses::files($root) === [] ? 'no test file under tests/ or the autoload-dev roots' : null;
 
+        $this->observed('CONV-02', 'CONV-02 a registration is described by an attribute or a typed object, not a raw array', static fn (): array => RawRegistrationArrays::problems($layers, $root), $noClass);
         $this->observed('CONV-08', 'CONV-08 classes are final unless they are an extension point', static fn (): array => FinalClasses::problems($layers), $noClass);
         $this->observed('CONV-09', 'CONV-09 a facade is a thin front for a contract', static fn (): array => FacadeClasses::problems($layers), $noClass);
         $this->observed('CONV-12', 'CONV-12 tests are Pest functions, not PHPUnit classes', static fn (): array => TestClasses::problems($root), $noTest);
