@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Rules;
 
+use Pollora\Harness\Architecture\ClassExemptions;
 use Pollora\Harness\Architecture\FacadeClasses;
 use Pollora\Harness\Architecture\FinalClasses;
 use Pollora\Harness\Architecture\Layers;
@@ -43,7 +44,11 @@ final class PromotionReport
     public const string NO_PROBE = 'no-probe';
 
     /**
-     * @return list<array{rule: string, title: string, verdict: string, count: int, first: list<string>, note: string, exempted: string|null}>
+     * `count` is what would block once the per-class exemptions of `allow_rules` are applied; `found` is what the
+     * rule reports before them, `exempted_problems` the difference, `exempted_classes` the classes the exemptions
+     * name and `stale` the patterns that exempt nothing. Without a per-class exemption `count` equals `found`.
+     *
+     * @return list<array{rule: string, title: string, verdict: string, count: int, first: list<string>, note: string, exempted: string|null, found: int, exempted_problems: int, exempted_classes: list<string>, stale: list<string>}>
      */
     public static function build(string $root, ?HarnessConfig $config = null): array
     {
@@ -51,7 +56,17 @@ final class PromotionReport
         $exemptions = [];
 
         foreach ($config instanceof HarnessConfig ? $config->allowRules : [] as $exemption) {
-            $exemptions[$exemption->rule] = $exemption->reason;
+            if (! $exemption->isPartial()) {
+                $exemptions[$exemption->rule] = $exemption->reason;
+            }
+        }
+
+        $partials = [];
+
+        foreach ($config instanceof HarnessConfig ? $config->allowRules : [] as $exemption) {
+            if ($exemption->isPartial()) {
+                $partials[$exemption->rule][] = $exemption;
+            }
         }
 
         $layers = null;
@@ -74,6 +89,20 @@ final class PromotionReport
                 default => [self::NO_PROBE, [], 'the catalogue lists this rule as observed, but promote-report has no probe for it: measure it another way'],
             };
 
+            $found = count($problems);
+            $exemptedProblems = 0;
+            $exemptedClasses = [];
+            $stale = [];
+
+            if (isset($partials[$rule]) && in_array($verdict, [self::WOULD_BLOCK, self::CLEAN], true)) {
+                $outcome = ClassExemptions::apply($partials[$rule], $problems, $layers, $root);
+                $problems = $outcome->kept;
+                $exemptedProblems = $outcome->exemptedProblems();
+                $exemptedClasses = $outcome->classes();
+                $stale = $outcome->warnings();
+                $verdict = $problems === [] ? self::CLEAN : self::WOULD_BLOCK;
+            }
+
             $rows[] = [
                 'rule' => $rule,
                 'title' => $definition['title'],
@@ -82,6 +111,10 @@ final class PromotionReport
                 'first' => array_slice($problems, 0, self::FIRST),
                 'note' => $note,
                 'exempted' => $exemptions[$rule] ?? null,
+                'found' => $found,
+                'exempted_problems' => $exemptedProblems,
+                'exempted_classes' => $exemptedClasses,
+                'stale' => $stale,
             ];
         }
 

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`allow_rules` exempts some classes of a rule, not only the whole rule (`classes`).** CONV-08 has hundreds of open classes in 20 repositories, a few of which are real extension points: exempting the rule would stop judging all of them. An entry may now carry `"classes": ["Acme\\Models\\*", "Acme\\Foo"]` (a fully qualified class name or a namespace prefix ending in `\\*`, nothing else) for CONV-02, CONV-08 and CONV-09. The classes are removed from the problems of the rule and named (`exempted: CONV-08 — <reason> — N classes: …`, in a skipped test and in the notes of the *Architecture* and *Tests and architecture* gates); a pattern that matches no class, or none that the rule reports, is a `stale exemption` warning (an incomplete test, never a failure); an exemption of an `observed` rule stays declared, not applied. Several entries may name one rule; an entry limited to classes and a whole-rule entry for the same rule make the file invalid (`InvalidConfig::ruleExemptionConflict`), as do a bad pattern, an empty list, or `classes` on another rule. Compatibility: `classes` is optional and additive; an entry without it, and every existing `.harness.json`, behave exactly as before (`toArray()` writes no `classes` key). New: `Config\ClassPattern`, `Architecture\ClassExemptions`, `ExemptionEffect`, `Exempted`.
+- **A ratchet metric `exempted_classes`: the (rule, class) pairs the per-class exemptions remove, lower is better.** It counts a class only when the rule reports it, so a `final` class under an exempted namespace costs nothing and a new open class raises the figure and fails QA-01 against the recorded ceiling: a namespace prefix cannot widen unnoticed. `exempted_rules` keeps counting whole-rule entries only. Measured only in a repository that has a `classes` entry or already records the key (`unmeasured` otherwise), so an existing `.harness.json` is unchanged; `ratchet --update` records and lowers it, `--metric=exempted_classes:N` works.
+- **CONV-02 can be exempted (`allow_rules`).** It joins `RuleExemption::EXEMPTIBLE` and `Plan::ARCHITECTURE_RULES` (the test that keeps them equal still holds); its status stays `observed`.
+
+### Changed
+
+- **`promote-report` takes the per-class exemptions into account.** The text says `CONV-08  would block (15 found, 12 exempted by allow_rules in 4 classes: 3 remaining)` (or `clean` when nothing remains) and lists the stale patterns. In the JSON, `count` is what remains after the exemptions (unchanged without any), and each row gains `found`, `exempted_problems`, `exempted_classes` and `stale`.
+
 ## [0.1.34] - 2026-11-21
 
 ### Added

@@ -75,6 +75,31 @@ final class InvalidConfig extends RuntimeException
         return new self("{$path}: allow_rules exempts \"{$rule}\" without a reason. Say why the rule cannot hold.");
     }
 
+    public static function classesNotSupported(string $path, string $rule): self
+    {
+        return new self(sprintf(
+            '%s: allow_rules limits "%s" to classes, but only %s report problems class by class. Remove "classes" to exempt the whole rule.',
+            $path,
+            $rule,
+            implode(', ', RuleExemption::CLASS_EXEMPTIBLE),
+        ));
+    }
+
+    public static function classesNotAList(string $path, string $rule): self
+    {
+        return new self("{$path}: the \"classes\" of the allow_rules entry for \"{$rule}\" must be a non-empty list of class names or namespace prefixes. Remove \"classes\" to exempt the whole rule.");
+    }
+
+    public static function invalidClassPattern(string $path, string $rule, string $pattern): self
+    {
+        return new self("{$path}: allow_rules \"{$rule}\" lists the class pattern \"{$pattern}\", which is neither a fully qualified class name (Acme\\Foo) nor a namespace prefix ending in \\* (Acme\\Models\\*). No other pattern is supported.");
+    }
+
+    public static function ruleExemptionConflict(string $path, string $rule): self
+    {
+        return new self("{$path}: allow_rules exempts \"{$rule}\" as a whole and for some classes. Keep one: the whole rule, or the classes.");
+    }
+
     public static function duplicateRuleExemption(string $path, string $rule): self
     {
         return new self("{$path}: allow_rules lists \"{$rule}\" twice. Keep one entry and its reason.");

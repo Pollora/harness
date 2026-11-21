@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Check;
 
+use Pollora\Harness\Architecture\ClassExemptions;
+use Pollora\Harness\Architecture\Layers;
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\NpmAuditSettings;
 use Pollora\Harness\Config\Ratchet;
@@ -17,6 +19,7 @@ use Pollora\Harness\Metrics\TypeCoverage;
 use Pollora\Harness\Npm\NpmAudit;
 use Pollora\Harness\Performance\PerformanceCheck;
 use Pollora\Harness\Profile;
+use Pollora\Harness\Rules\Catalogue;
 use Pollora\Harness\Support\ChangedSources;
 use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
@@ -59,7 +62,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array ARCHITECTURE_RULES = ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07', 'CONV-08', 'CONV-09', 'CONV-12'];
+    public const array ARCHITECTURE_RULES = ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-02', 'CONV-03', 'CONV-05', 'CONV-07', 'CONV-08', 'CONV-09', 'CONV-12'];
 
     /**
      * Gates reported but never blocking, whatever `.harness.json` says: a new
@@ -136,11 +139,35 @@ final readonly class Plan
             return null;
         }
 
-        return implode("\n  ", array_map(static fn (RuleExemption $exemption): string => $exemption->message().' (allow_rules)', $this->config->allowRules));
+        $lines = [];
+        $partials = [];
+
+        foreach ($this->config->allowRules as $exemption) {
+            if ($exemption->isPartial()) {
+                $partials[$exemption->rule][] = $exemption;
+            } else {
+                $lines[] = $exemption->message().' (allow_rules)';
+            }
+        }
+
+        if ($partials !== []) {
+            $layers = Layers::discover($this->cwd);
+
+            foreach ($partials as $rule => $exemptions) {
+                $applied = (Catalogue::all()[$rule]['status'] ?? 'enforced') !== 'observed';
+
+                foreach (ClassExemptions::apply($exemptions, ClassExemptions::problemsOf($rule, $layers, $this->cwd), $layers, $this->cwd)->effects as $effect) {
+                    array_push($lines, $effect->message($applied).' (allow_rules)', ...$effect->warnings());
+                }
+            }
+        }
+
+        return implode("\n  ", $lines);
     }
 
     /**
-     * The exemptions that take effect now: a declared exemption of an observed rule is not one.
+     * The exemptions that take effect now: a declared exemption of an observed rule is not one, and an exemption
+     * limited to some classes does not stop the rule, which keeps running on the others.
      *
      * @return list<string>
      */
@@ -148,7 +175,7 @@ final readonly class Plan
     {
         return array_values(array_map(
             static fn (RuleExemption $exemption): string => $exemption->rule,
-            array_filter($this->config->allowRules, static fn (RuleExemption $exemption): bool => $exemption->applies()),
+            array_filter($this->config->allowRules, static fn (RuleExemption $exemption): bool => $exemption->applies() && ! $exemption->isPartial()),
         ));
     }
 
@@ -509,7 +536,7 @@ final readonly class Plan
             $measured = $mutation?->value;
             $types = TypeCoverage::measure($cwd);
             $overrides = ['type_coverage' => $types->percentage()] + ($measured === null ? [] : ['msi' => $measured]);
-            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, $overrides, Collector::exemptedRules($config)));
+            $rows = $config->ratchet->compare($collector->collect($coverage, $infection, $overrides, Collector::exemptedRules($config), Collector::exemptedClasses($config, $cwd)));
             $source = $coverage === null ? $collector->findClover() : null;
             $regressions = array_filter($rows, static fn (array $row): bool => $row['verdict'] === 'regressed');
             $lines = array_map(static fn (array $row): string => sprintf(
