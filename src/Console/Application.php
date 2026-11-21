@@ -8,6 +8,7 @@ use Pollora\Harness\Config\InvalidConfig;
 use Pollora\Harness\Console\Commands\AgentsCommand;
 use Pollora\Harness\Console\Commands\ArchiveCommand;
 use Pollora\Harness\Console\Commands\CheckCommand;
+use Pollora\Harness\Console\Commands\ComposerAuditCommand;
 use Pollora\Harness\Console\Commands\DepsCommand;
 use Pollora\Harness\Console\Commands\HookCommand;
 use Pollora\Harness\Console\Commands\InitCommand;
@@ -121,8 +122,11 @@ final class Application
         $io->line('Usage: pollora-qa <command> [options]');
         $io->line();
 
+        // The column is as wide as the longest name, so that `promote-report` or any later command stays aligned.
+        $width = max([0, ...array_map(static fn (Command $command): int => strlen($command->name()), $this->commands)]);
+
         foreach ($this->commands as $command) {
-            $io->line(sprintf('  %-9s %s', $command->name(), $command->description()));
+            $io->line(sprintf('  %-'.$width.'s %s', $command->name(), $command->description()));
         }
 
         $io->line();
@@ -143,6 +147,7 @@ final class Application
             new PromoteReportCommand,
             new DepsCommand,
             new NpmAuditCommand,
+            new ComposerAuditCommand,
             new SurfaceCommand,
             new ArchiveCommand,
             new RulesCommand,

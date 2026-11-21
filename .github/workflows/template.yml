@@ -152,11 +152,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # The audit logic lives in the harness (`pollora-qa composer-audit`), read from the version of
+      # this workflow, like the npm audit below: it tries again when Packagist times out.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Pollora/harness
+          ref: ${{ github.job_workflow_sha }}
+          path: .harness-presets
+          persist-credentials: false
+
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
 
+      # A vulnerability fails at once. A network failure of the advisory API is attempted again
+      # (3 attempts, 5 s then 15 s apart); if it stays unreachable the job fails, saying so.
       - name: Audit the locked dependencies
         run: |
           if [ ! -f composer.lock ]; then
@@ -164,7 +175,7 @@ jobs:
             exit 0
           fi
           # --locked: nothing is installed here, the lock file is what ships
-          composer audit --locked --no-interaction
+          php .harness-presets/bin/pollora-qa composer-audit --locked
 
   npm-audit:
     name: Dependency audit (npm)

@@ -7,6 +7,8 @@ use Pollora\Harness\Check\Step;
 use Pollora\Harness\Check\StepResult;
 use Pollora\Harness\Config\HarnessConfig;
 
+require_once __DIR__.'/../Support/ComposerAuditFake.php';
+
 beforeEach(function (): void {
     $this->originalPath = getenv('PATH');
 });
@@ -97,13 +99,23 @@ it('skips the semgrep scan where there is no source directory, and flags a missi
 });
 
 it('audits Composer with the binary found on the PATH, or says it is missing', function (): void {
-    $bin = covPathWith(['composer']);
+    covPathWith(['composer']);
 
-    expect(covStep('Dependency audit', harnessTempDir())->action)->toBe([$bin.'/composer', 'audit', '--no-interaction']);
+    // An in-process step, so that a network failure can be attempted again; it runs the `composer` of the PATH.
+    expect(covStep('Dependency audit', harnessTempDir())->action)->toBeInstanceOf(Closure::class);
 
     covPathWith([]);
 
     expect(covStep('Dependency audit', harnessTempDir())->install)->toBe('https://getcomposer.org/download/');
+});
+
+it('runs the Composer audit step through the composer of the PATH and fails on a vulnerability', function (): void {
+    [, $directory] = fakeComposer([[1, "Found 1 security vulnerability advisory affecting 1 package:\nCVE: CVE-2026-0001"]]);
+    putenv('PATH='.$directory.PATH_SEPARATOR.(string) getenv('PATH'));
+
+    $result = (covStep('Dependency audit', harnessTempDir())->action)();
+
+    expect($result->isFailed())->toBeTrue()->and($result->detail)->toContain('CVE-2026-0001')->and(fakeComposerCalls($directory))->toBe(1);
 });
 
 it('audits npm for every lock file, or flags npm missing when there is one to audit', function (): void {

@@ -28,6 +28,12 @@ final readonly class HarnessConfig
         'api-surface.json',
     ];
 
+    /** The top-level keys this version reads: any other key of the file is kept as it is when the file is saved. */
+    private const array KNOWN_KEYS = [
+        'profile', 'mode', 'downstream', 'allow_laravel', 'protected', 'observed', 'allow_commands',
+        'allow_rules', 'ratchet', 'mutation', 'npm_audit', 'services', 'slow_step_share', 'performance',
+    ];
+
     /**
      * @param  list<string>  $downstream  Repositories run against this one by the downstream job
      * @param  list<string>  $allowLaravel  Laravel packages a core package may still require (ARCH-04 exceptions)
@@ -137,7 +143,7 @@ final readonly class HarnessConfig
      */
     public function withMutation(MutationSettings $mutation): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $this->ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $mutation, $this->npmAudit, $this->services, $this->slowStepShare);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $this->ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $mutation, $this->npmAudit, $this->services, $this->slowStepShare, $this->performance);
     }
 
     public function withRatchet(Ratchet $ratchet): self
@@ -168,12 +174,44 @@ final readonly class HarnessConfig
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
 
+    /**
+     * Writes the file. A top-level key this version does not know (written by a newer harness, or by hand)
+     * is carried over from the file on disk exactly as it was: saving never loses a key.
+     */
     public function save(string $root): void
     {
         file_put_contents(
             self::path($root),
-            json_encode($this->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
+            json_encode($this->toArray() + self::unknownKeys($root), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
         );
+    }
+
+    /**
+     * The top-level keys of the file on disk that `fromArray()` does not read, or none when the file is absent or unreadable.
+     *
+     * @return array<string, mixed>
+     */
+    private static function unknownKeys(string $root): array
+    {
+        if (! is_file(self::path($root))) {
+            return [];
+        }
+
+        $data = json_decode((string) file_get_contents(self::path($root)), true);
+
+        if (! is_array($data)) {
+            return [];
+        }
+
+        $unknown = [];
+
+        foreach ($data as $key => $value) {
+            if (! in_array($key, self::KNOWN_KEYS, true)) {
+                $unknown[(string) $key] = $value;
+            }
+        }
+
+        return $unknown;
     }
 
     /**

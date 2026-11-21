@@ -123,6 +123,8 @@ The summary of `pollora-qa check` (console, job summary, `.harness/report.json`)
 
 ### An npm advisory with no fix yet (`npm_audit`)
 
+Both dependency audits call a service of the network (the Packagist advisory API, the npm registry) and tolerate its incidents without ever hiding a finding. A failure of the transport (timeout, DNS, refused or reset connection, HTTP 5xx or 429) is attempted again: 3 attempts in all, 5 s then 15 s apart (20 s at most). A vulnerability is a result and fails at once, without a second attempt; so does any other error. A service still unreachable after the attempts fails the step, with `advisory API unreachable after 3 attempts` and the last error, so that a network incident reads differently from a vulnerability and is never a pass. `pollora-qa composer-audit [--locked]` runs the same code for the reusable workflow of the templates.
+
 The *Dependency audit (npm)* gate runs `npm audit --json` over every `package-lock.json` (the root and the directories two levels down, without `node_modules`, `vendor` or `.worktrees`) and blocks on every high or critical advisory. An advisory can have no patched version: `GHSA-fc5q-39xc-vjpf` (ReDoS in `picomatch`, vulnerable up to 4.0.7, no `first_patched_version`) turns every project that uses Vite red, and downgrading Vite to avoid it would trade a theoretical ReDoS for known fixed flaws. Instead of turning the gate off, list the advisory under `npm_audit.allow` in `.harness.json`, with a reason and an expiry:
 
 ```json
@@ -162,6 +164,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
 | `pollora-qa archive [--fix]` | Checks that development files stay out of the release archive (QA-06); `--fix` writes the missing `export-ignore` lines |
+| `pollora-qa composer-audit [--locked]` | The Composer dependency audit alone (SEC-09), which tries again when Packagist cannot be reached; same code as the `check` step, used by the reusable workflow of the templates |
 | `pollora-qa npm-audit [--config=FILE]` | The npm dependency audit alone (SEC-09), for a template that cannot carry the harness; same code as the `check` step |
 | `pollora-qa rules [ID]` | Lists the rules, or explains one |
 | `pollora-qa agents` | Regenerates the harness block of `AGENTS.md` |

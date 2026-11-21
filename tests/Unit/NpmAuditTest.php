@@ -45,7 +45,32 @@ function npmSettings(array ...$exceptions): NpmAuditSettings
 
 function npmAuditOf(string $root, NpmAuditSettings $settings, ?DateTimeImmutable $today = null): NpmAuditResult
 {
-    return (new NpmAudit($root, (string) Paths::which('npm'), $settings, $today ?? npmToday()))->audit(NpmAudit::lockDirectories($root));
+    // The wait between two attempts is skipped: a test never sleeps.
+    return (new NpmAudit($root, (string) Paths::which('npm'), $settings, $today ?? npmToday(), sleep: static function (int $seconds): void {}))->audit(NpmAudit::lockDirectories($root));
+}
+
+/**
+ * A repository whose fake `npm` answers each call with the next fixture of the list (the last repeats) and counts its calls.
+ *
+ * @param  list<string>  $fixtures  Names of tests/Fixtures/npm-audit/<name>.json
+ * @return array{string, string} The repository root and the directory of the fake, which holds the call counter
+ */
+function npmAuditSequence(array $fixtures): array
+{
+    $root = harnessTempDir();
+    $bin = harnessTempDir();
+    file_put_contents($root.'/package-lock.json', '{}');
+
+    foreach ($fixtures as $index => $fixture) {
+        copy(__DIR__.'/../Fixtures/npm-audit/'.$fixture.'.json', $bin.'/out-'.($index + 1));
+    }
+
+    file_put_contents($bin.'/last', (string) count($fixtures));
+    file_put_contents($bin.'/npm', "#!/bin/sh\nd=\$(dirname \"\$0\")\nn=\$(cat \"\$d/count\" 2>/dev/null || echo 0)\nn=\$((n + 1))\necho \$n > \"\$d/count\"\n[ -f \"\$d/out-\$n\" ] || n=\$(cat \"\$d/last\")\ncat \"\$d/out-\$n\"\nexit 1\n");
+    chmod($bin.'/npm', 0o755);
+    putenv('PATH='.$bin.PATH_SEPARATOR.(string) getenv('PATH'));
+
+    return [$root, $bin];
 }
 
 it('blocks a high advisory that no exception names', function (): void {
@@ -256,4 +281,30 @@ it('fails the command on an invalid file, without npm, and passes without a lock
     expect($invalid)->toBe(1)->and($err)->toContain('without a reason')
         ->and($none)->toBe(0)->and($out)->toContain('No package-lock.json')
         ->and($missing)->toBe(1)->and($missingErr)->toContain('npm is not on the PATH');
+});
+
+it('tries npm audit again when the registry cannot be reached, then judges the answer', function (): void {
+    [$root, $bin] = npmAuditSequence(['offline', 'clean']);
+
+    $result = npmAuditOf($root, new NpmAuditSettings);
+
+    expect($result->passed())->toBeTrue()->and((int) file_get_contents($bin.'/count'))->toBe(2);
+});
+
+it('fails, saying the advisory API is unreachable, when the registry never answers', function (): void {
+    [$root, $bin] = npmAuditSequence(['offline']);
+
+    $result = npmAuditOf($root, new NpmAuditSettings);
+
+    expect($result->passed())->toBeFalse()
+        ->and($result->render())->toContain('advisory API unreachable after 3 attempts', 'EAI_AGAIN')
+        ->and((int) file_get_contents($bin.'/count'))->toBe(3);
+});
+
+it('does not try npm audit again when it finds an advisory', function (): void {
+    [$root, $bin] = npmAuditSequence(['picomatch', 'clean']);
+
+    $result = npmAuditOf($root, new NpmAuditSettings);
+
+    expect($result->blocking)->toHaveCount(1)->and((int) file_get_contents($bin.'/count'))->toBe(1);
 });
