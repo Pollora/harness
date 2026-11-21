@@ -31,6 +31,11 @@ final class InvalidConfig extends RuntimeException
         ));
     }
 
+    public static function notATemplateProfile(string $path, Profile $profile): self
+    {
+        return new self(sprintf('%s declares the profile "%s", but template.yml checks a template: use "template" (or "project"), or leave the profile out.', $path, $profile->value));
+    }
+
     public static function unknownMode(string $path, mixed $mode): self
     {
         $given = is_scalar($mode) ? (string) $mode : get_debug_type($mode);

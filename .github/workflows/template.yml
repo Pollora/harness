@@ -1,10 +1,15 @@
 # Pollora harness — reusable workflow for a template: the skeleton, a theme, a plugin or a module.
 #
 # A template is copied into every project built from it, so it cannot carry the harness:
-# no `pollora/harness` in its composer.json, no `.harness.json` or `AGENTS.md` at its root.
+# no `pollora/harness` in its composer.json, no `AGENTS.md` at its root.
 # This workflow checks it from the outside instead. It installs what it needs in the job,
 # reads the presets from this repository, and the template only adds one file,
 # `.github/workflows/harness.yml`, which the scaffolders already strip.
+#
+# A template MAY also carry a `.harness.json` (or `.github/harness.json`, which the release
+# archives leave out): the `ratchet` job then holds its type coverage floor (QA-01, CONV-11),
+# and `npm_audit.allow` is read by the npm audit. A template without that file is checked
+# exactly as before: the `ratchet` job finds nothing to read and passes at once.
 #
 #   jobs:
 #     harness:
@@ -29,7 +34,7 @@ on:
         type: string
         default: enforce
       observed:
-        description: gates reported but never blocking even in enforce mode, among secrets, style, security and audit (space or comma separated)
+        description: gates reported but never blocking even in enforce mode, among secrets, style, security, audit and ratchet (space or comma separated)
         type: string
         default: ''
       php-version:
@@ -213,3 +218,65 @@ jobs:
       # that has expired fails the job. The tolerated advisories are listed in the job summary.
       - name: Audit the locked npm dependencies
         run: php .harness-presets/bin/pollora-qa npm-audit
+
+  ratchet:
+    name: Ratchet (QA-01)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'ratchet') }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Optional: a template that never adopted the file has nothing to hold, and every step below is skipped.
+      - name: Look for the template's harness file
+        id: file
+        run: |
+          if [ -f .harness.json ] || [ -f .github/harness.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No .harness.json (or .github/harness.json): no ratchet floor to hold."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.file.outputs.present == 'true'
+        with:
+          repository: Pollora/harness
+          ref: ${{ github.job_workflow_sha }}
+          path: .harness-presets
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        if: steps.file.outputs.present == 'true'
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+
+      # The type coverage is read from the source by nikic/php-parser alone: no `composer install` of the
+      # template (it may not install here) and none of the harness (Pint, PHPStan, Rector are not needed). The
+      # parser comes from a scratch directory, at the version the harness requires, and the harness loads its
+      # own classes next to it.
+      - name: Install the source parser
+        if: steps.file.outputs.present == 'true'
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
+        run: |
+          constraint="$(jq -r '.require["nikic/php-parser"]' .harness-presets/composer.json)"
+          mkdir "$RUNNER_TEMP/parser"
+          composer require --working-dir="$RUNNER_TEMP/parser" "nikic/php-parser:$constraint" --no-interaction --no-progress --no-scripts
+          ln -s "$RUNNER_TEMP/parser/vendor" .harness-presets/vendor
+
+      # The workflow's mode decides whether a drop blocks (enforce) or only reports (observe): the file's own
+      # `mode` key is for packages and is ignored here. Without a recorded floor nothing is compared.
+      - name: Hold the ratchet floors
+        if: steps.file.outputs.present == 'true'
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          flag=--observe
+          [ "$MODE" = "enforce" ] && flag=--enforce
+          php .harness-presets/bin/pollora-qa check --template "$flag"

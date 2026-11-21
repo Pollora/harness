@@ -18,6 +18,12 @@ final readonly class HarnessConfig
 {
     public const string FILE = '.harness.json';
 
+    /**
+     * Where a template may keep the same file instead: a directory the release archives leave out, so that it
+     * does not land in every project built from the template (the place `pollora-qa npm-audit` already reads).
+     */
+    public const string TEMPLATE_FILE = '.github/harness.json';
+
     /** The services a repository's tests may ask the CI to start (the `services` key). */
     public const array SERVICES = ['redis'];
 
@@ -69,9 +75,75 @@ final readonly class HarnessConfig
         return is_file(self::path($root));
     }
 
-    public static function path(string $root): string
+    public static function path(string $root, string $file = self::FILE): string
     {
-        return rtrim($root, '/').'/'.self::FILE;
+        return rtrim($root, '/').'/'.$file;
+    }
+
+    /**
+     * The file a template declares its harness settings in, relative to the root: `.harness.json`, else
+     * `.github/harness.json`; null when the template has neither (it then gets no check of its own).
+     */
+    public static function locateForTemplate(string $root): ?string
+    {
+        foreach ([self::FILE, self::TEMPLATE_FILE] as $file) {
+            if (is_file(self::path($root, $file))) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Reads the optional file of a template (see `locateForTemplate()`).
+     *
+     * The profile is optional there: a template is a `template`, and a file that only holds `ratchet` or
+     * `npm_audit` is valid. A file that declares another profile than `template` or `project` is refused, since
+     * the gates of that profile are not the ones `template.yml` runs.
+     *
+     * @throws InvalidConfig
+     */
+    public static function loadForTemplate(string $root, string $file): self
+    {
+        $config = self::loadAny($root, $file);
+
+        if (! in_array($config->profile, [Profile::Template, Profile::Project], true)) {
+            throw InvalidConfig::notATemplateProfile(self::path($root, $file), $config->profile);
+        }
+
+        return $config;
+    }
+
+    /**
+     * Reads a file that may leave the profile out, which then means `template` (only a template can do without).
+     * A file that declares a profile is read as `load()` reads it.
+     *
+     * @throws InvalidConfig
+     */
+    public static function loadAny(string $root, string $file = self::FILE): self
+    {
+        $path = self::path($root, $file);
+
+        if (! is_file($path)) {
+            throw InvalidConfig::missing($path);
+        }
+
+        try {
+            $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $jsonException) {
+            throw InvalidConfig::unreadable($path, $jsonException->getMessage());
+        }
+
+        if (! is_array($data)) {
+            throw InvalidConfig::unreadable($path, 'the root must be an object');
+        }
+
+        if (! array_key_exists('profile', $data)) {
+            $data['profile'] = Profile::Template->value;
+        }
+
+        return self::fromArray($data, $path);
     }
 
     /**
@@ -177,12 +249,18 @@ final readonly class HarnessConfig
     /**
      * Writes the file. A top-level key this version does not know (written by a newer harness, or by hand)
      * is carried over from the file on disk exactly as it was: saving never loses a key.
+     *
+     * @param  bool  $template  The file of a template: `mode` is left out, since `template.yml` takes it from its own input
      */
-    public function save(string $root): void
+    public function save(string $root, string $file = self::FILE, bool $template = false): void
     {
+        if (! is_dir(dirname(self::path($root, $file)))) {
+            mkdir(dirname(self::path($root, $file)), 0o755, true);
+        }
+
         file_put_contents(
-            self::path($root),
-            json_encode($this->toArray() + self::unknownKeys($root), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
+            self::path($root, $file),
+            json_encode(($template ? array_diff_key($this->toArray(), ['mode' => true]) : $this->toArray()) + self::unknownKeys($root, $file), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n",
         );
     }
 
@@ -191,13 +269,13 @@ final readonly class HarnessConfig
      *
      * @return array<string, mixed>
      */
-    private static function unknownKeys(string $root): array
+    private static function unknownKeys(string $root, string $file): array
     {
-        if (! is_file(self::path($root))) {
+        if (! is_file(self::path($root, $file))) {
             return [];
         }
 
-        $data = json_decode((string) file_get_contents(self::path($root)), true);
+        $data = json_decode((string) file_get_contents(self::path($root, $file)), true);
 
         if (! is_array($data)) {
             return [];
