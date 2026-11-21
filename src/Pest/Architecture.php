@@ -6,6 +6,7 @@ namespace Pollora\Harness\Pest;
 
 use Closure;
 use Pollora\Harness\Architecture\AttributeClasses;
+use Pollora\Harness\Architecture\ClassExemptions;
 use Pollora\Harness\Architecture\FacadeClasses;
 use Pollora\Harness\Architecture\FinalClasses;
 use Pollora\Harness\Architecture\ForeignNamespaces;
@@ -17,6 +18,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\RuleExemption;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Rules\Catalogue;
+use Pollora\Harness\Support\Text;
 
 /**
  * Registers the architecture rules as Pest tests.
@@ -38,6 +40,11 @@ use Pollora\Harness\Rules\Catalogue;
  * something, its test is reported as incomplete ("I" in Pest's output) with the findings as the message,
  * and passes when it finds nothing. Promoting a rule to `enforced` in the catalogue makes the same test fail.
  *
+ * A CONV-02, CONV-08 or CONV-09 entry with `classes` exempts only those classes (names or `Namespace\*`
+ * prefixes): the rule keeps judging every other class, the exempted ones are named by a skipped test
+ * ("exempted: CONV-08 — <reason> — N classes: …"), and a pattern that matches nothing makes that test
+ * incomplete ("stale exemption"), never a failure. While the rule is observed the exemption is declared, not applied.
+ *
  * A rule on a namespace that an installed package also maps is run on the explicit list of the repository's
  * own classes (see ForeignNamespaces); it is only skipped, with the reason, when no such list can be judged.
  */
@@ -50,6 +57,8 @@ final readonly class Architecture
         private array $exemptions = [],
         private ForeignNamespaces $foreign = new ForeignNamespaces([]),
         private string $root = '',
+        /** @var array<string, list<RuleExemption>> The exemptions limited to some classes, by rule */
+        private array $partials = [],
     ) {}
 
     /**
@@ -62,12 +71,17 @@ final readonly class Architecture
         $exemptions ??= $config instanceof HarnessConfig ? $config->allowRules : [];
 
         $byRule = [];
+        $partials = [];
 
         foreach ($exemptions as $exemption) {
-            $byRule[$exemption->rule] = $exemption;
+            if ($exemption->isPartial()) {
+                $partials[$exemption->rule][] = $exemption;
+            } else {
+                $byRule[$exemption->rule] = $exemption;
+            }
         }
 
-        return new self(Layers::discover($root), $profile, $byRule, ForeignNamespaces::discover($root), $root);
+        return new self(Layers::discover($root), $profile, $byRule, ForeignNamespaces::discover($root), $root, $partials);
     }
 
     public function register(): void
@@ -216,9 +230,17 @@ final readonly class Architecture
             return;
         }
 
-        $this->rule($rule, $name, static function () use ($rule, $name, $problems, $observed): void {
-            test($name, function () use ($rule, $problems, $observed): void {
+        $partials = $this->partials[$rule] ?? [];
+        $layers = $this->layers;
+        $root = $this->root;
+
+        $this->rule($rule, $name, static function () use ($rule, $name, $problems, $observed, $partials, $layers, $root): void {
+            test($name, function () use ($rule, $problems, $observed, $partials, $layers, $root): void {
                 $found = $problems();
+
+                if ($partials !== [] && ! $observed) {
+                    $found = ClassExemptions::apply($partials, $found, $layers, $root)->kept;
+                }
 
                 if ($observed && $found !== []) {
                     test()->markTestIncomplete("observed, not blocking: {$rule} — ".count($found)." problem(s)\n".implode("\n", $found));
@@ -227,6 +249,40 @@ final readonly class Architecture
                 expect($found)->toBeEmpty("{$rule}\n".implode("\n", $found));
             })->group('arch');
         }, honourExemption: ! $observed);
+
+        if ($exempted) {
+            return;
+        }
+
+        foreach ($partials as $position => $exemption) {
+            $this->classExemption($rule, $position, $exemption, $problems, $observed);
+        }
+    }
+
+    /**
+     * Registers the test that names what a per-class exemption removes, so that nothing is exempted without a trace.
+     *
+     * It is skipped with `exempted: <rule> — <reason> — N classes: …` (declared, not applied while the rule is
+     * observed), and incomplete, with one `stale exemption` line per pattern that exempts nothing, when a class is gone.
+     *
+     * @param  Closure(): list<string>  $problems
+     */
+    private function classExemption(string $rule, int $position, RuleExemption $exemption, Closure $problems, bool $observed): void
+    {
+        $layers = $this->layers;
+        $root = $this->root;
+        $label = Text::shorten($exemption->reason, 50);
+
+        test("{$rule} exemption ".($position + 1)." by class ({$label})", function () use ($exemption, $problems, $observed, $layers, $root): void {
+            $effect = ClassExemptions::apply([$exemption], $problems(), $layers, $root)->effects[0];
+            $lines = [$effect->message(! $observed), ...$effect->warnings()];
+
+            if ($effect->warnings() !== []) {
+                test()->markTestIncomplete(implode("\n", $lines));
+            }
+
+            test()->markTestSkipped(implode("\n", $lines));
+        })->group('arch');
     }
 
     /**

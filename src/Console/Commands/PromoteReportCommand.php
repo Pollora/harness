@@ -65,7 +65,20 @@ final class PromoteReportCommand implements Command
                 default => $io->warning('no probe'),
             };
 
-            $io->line(sprintf('%-8s %s%s', $row['rule'], $label, $row['count'] > 0 ? sprintf(' (%d problem%s)', $row['count'], $row['count'] === 1 ? '' : 's') : ''));
+            $detail = $row['count'] > 0 ? sprintf(' (%d problem%s)', $row['count'], $row['count'] === 1 ? '' : 's') : '';
+
+            if ($row['exempted_problems'] > 0) {
+                $detail = sprintf(
+                    ' (%d found, %d exempted by allow_rules in %d %s: %d remaining)',
+                    $row['found'],
+                    $row['exempted_problems'],
+                    count($row['exempted_classes']),
+                    count($row['exempted_classes']) === 1 ? 'class' : 'classes',
+                    $row['count'],
+                );
+            }
+
+            $io->line(sprintf('%-8s %s%s', $row['rule'], $label, $detail));
 
             foreach ($row['first'] as $problem) {
                 $io->line('           '.$problem);
@@ -77,6 +90,10 @@ final class PromoteReportCommand implements Command
 
             if ($row['note'] !== '') {
                 $io->line('           '.$row['note']);
+            }
+
+            foreach ($row['stale'] as $warning) {
+                $io->line('           '.$warning);
             }
 
             if ($row['exempted'] !== null) {

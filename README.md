@@ -75,7 +75,7 @@ A package whose console commands are named for the tool itself (`new`, `self-upd
 
 `reason` is required, and an entry gives either `command` (the exact name) or `prefix` (the start of names), not both; anything else makes `.harness.json` invalid. The *Public surface* gate then prints these commands as `keeps its name (allow_commands: …)` instead of as a problem, so the exemption stays visible, and any other command that does not start with `pollora:` is still reported. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
 
-**An exemption of an observed rule is declared, not applied.** CONV-08, CONV-09 and CONV-12 may be listed under `allow_rules` before they become blocking, so that the repository that cannot satisfy them yet says so, with its reason, on the day they are promoted. While the catalogue lists the rule as `observed` the exemption changes nothing: the rule keeps running and reporting (an exemption would hide findings for a rule that blocks nothing), the gate says `declared, not applied while the rule is observed: CONV-08 — <reason> (allow_rules)` and does not count it in `exempted`, and the exemption is still counted by `exempted_rules`, so its ceiling is recorded and can only go down. The day the rule is `enforced`, the same line skips it with `exempted: CONV-08 — <reason>`.
+**An exemption of an observed rule is declared, not applied.** CONV-02, CONV-08, CONV-09 and CONV-12 may be listed under `allow_rules` before they become blocking, so that the repository that cannot satisfy them yet says so, with its reason, on the day they are promoted. While the catalogue lists the rule as `observed` the exemption changes nothing: the rule keeps running and reporting (an exemption would hide findings for a rule that blocks nothing), the gate says `declared, not applied while the rule is observed: CONV-08 — <reason> (allow_rules)` and does not count it in `exempted`, and the exemption is still counted by `exempted_rules`, so its ceiling is recorded and can only go down. The day the rule is `enforced`, the same line skips it with `exempted: CONV-08 — <reason>`.
 
 ### Services the tests need (`services`)
 
@@ -117,9 +117,9 @@ A repository can hold a rule it cannot satisfy without a breaking change: `Pollo
 
 The summary of `pollora-qa check` (console, job summary, `.harness/report.json`) does not read such a gate as a plain pass: it prints `✔ passed  Tests and architecture … (1 rule exempted: ARCH-08)`, and the JSON step carries `"exempted": ["ARCH-08"]`. The number of exemptions is also a metric of the ratchet, `exempted_rules` (see below): adding an exemption, or having more than the recorded ceiling, fails QA-01 in enforce mode; removing one lowers the ceiling with `ratchet --update`.
 
-`rule` must be a rule that `tests/Arch.php` evaluates (ARCH-01, ARCH-03, ARCH-08, ARCH-09, CONV-03, CONV-05, CONV-07, CONV-08, CONV-09, CONV-12) and `reason` is required: an unknown rule, a rule checked by another gate, a rule listed twice or an entry without a reason makes `.harness.json` invalid, with a message that names the entry. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
+`rule` must be a rule that `tests/Arch.php` evaluates (ARCH-01, ARCH-03, ARCH-08, ARCH-09, CONV-02, CONV-03, CONV-05, CONV-07, CONV-08, CONV-09, CONV-12) and `reason` is required: an unknown rule, a rule checked by another gate, a rule listed twice or an entry without a reason makes `.harness.json` invalid, with a message that names the entry. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not. `init` and `ratchet --update` keep it.
 
-**An exemption of an observed rule is declared, not applied.** CONV-08, CONV-09 and CONV-12 may be listed under `allow_rules` before they become blocking, so that the repository that cannot satisfy them yet says so, with its reason, on the day they are promoted. While the catalogue lists the rule as `observed` the exemption changes nothing: the rule keeps running and reporting (an exemption would hide findings for a rule that blocks nothing), the gate says `declared, not applied while the rule is observed: CONV-08 — <reason> (allow_rules)` and does not count it in `exempted`, and the exemption is still counted by `exempted_rules`, so its ceiling is recorded and can only go down. The day the rule is `enforced`, the same line skips it with `exempted: CONV-08 — <reason>`.
+**An exemption of an observed rule is declared, not applied.** CONV-02, CONV-08, CONV-09 and CONV-12 may be listed under `allow_rules` before they become blocking, so that the repository that cannot satisfy them yet says so, with its reason, on the day they are promoted. While the catalogue lists the rule as `observed` the exemption changes nothing: the rule keeps running and reporting (an exemption would hide findings for a rule that blocks nothing), the gate says `declared, not applied while the rule is observed: CONV-08 — <reason> (allow_rules)` and does not count it in `exempted`, and the exemption is still counted by `exempted_rules`, so its ceiling is recorded and can only go down. The day the rule is `enforced`, the same line skips it with `exempted: CONV-08 — <reason>`.
 
 ### An npm advisory with no fix yet (`npm_audit`)
 
@@ -180,9 +180,33 @@ A gate whose tool is not installed does not run, and is not a pass: the summary 
 
 `check --fast` takes the changed files from git. Where git cannot answer (a worktree created on the host and opened from DDEV, whose `.git` points outside the container; no git binary; a directory git does not trust), it says so and checks the whole tree: Pint without `--dirty`, PHPStan on every configured path. It is slower, and may report a file you did not touch, but the style gate no longer fails for a reason that is not style.
 
+### Exempting some classes only (`classes`)
+
+An exemption of a whole rule is too coarse for a rule that judges classes one by one: exempting CONV-08 because a few classes are extension points would also stop judging the hundreds that are not. CONV-02, CONV-08 and CONV-09, which read the classes from the files, take an optional `classes` list that limits the exemption to some of them:
+
+```json
+{
+    "allow_rules": [
+        {
+            "rule": "CONV-08",
+            "reason": "Colt models are extended by projects",
+            "classes": ["Pollora\\Colt\\Model\\*", "Pollora\\Colt\\Database"]
+        }
+    ]
+}
+```
+
+A pattern is a fully qualified class name (`Acme\Foo`) or a namespace prefix ending in `\*` (`Acme\Models\*`, every class below that namespace at any depth): nothing else, no regular expression and no bare `*` (leave `classes` out for the whole rule). The rule keeps judging every other class; the exempted ones are removed from its problems and named, by a skipped test and by the *Architecture* and *Tests and architecture* gates: `exempted: CONV-08 — <reason> — 3 classes: A, B, C`. While the rule is `observed` the exemption is declared and not applied (`declared, not applied while the rule is observed: …`), like a whole-rule exemption. Several entries may name the same rule, each with its own reason (the first that covers a class takes it); an entry for a rule can not be mixed with a whole-rule entry for that rule. `ARCH-08` and the rules judged by Pest's engine take no `classes`: the first loads the classes by reflection, which a repository without its dependencies cannot do, the others have no per-class list.
+
+**A pattern that exempts nothing is reported, never silent.** A pattern that matches no class of the repository (the class was renamed or removed) is `stale exemption: <rule> — "<pattern>" matches no class of the repository (remove it).`, and one that matches classes the rule does not report any more (they became `final`) says it matches no class that the rule reports. Both are warnings for now: the test is `incomplete`, the gate prints the line, nothing fails. The attribution of a problem to a class is read from its line (`Acme\Foo is not final…`, `Acme\Foo::bar() is logic of its own…`, or the file of a CONV-02 line).
+
+`pollora-qa promote-report` takes the exemptions into account: `CONV-08  would block (15 found, 12 exempted by allow_rules in 4 classes: 3 remaining)`, `clean` when nothing remains, with the stale patterns listed; the JSON rows gain `found`, `exempted_problems`, `exempted_classes` and `stale` (`count` is what remains).
+
 ### Exempted rules in the ratchet
 
 `exempted_rules` counts the architecture rules `allow_rules` exempts, and lower is better, like `phpstan_baseline`. It is only measured where it matters: a repository without `allow_rules` and without the key in `ratchet` shows it as `unmeasured` and nothing is recorded, so an existing `.harness.json` keeps passing as it is. In a repository that uses `allow_rules`, the first `pollora-qa ratchet --update` records the current count; from then on a count above the recorded one is `regressed` (QA-01 fails in enforce mode), and `ratchet --update` lowers the ceiling when an exemption is removed, down to `0`, never raises it. To exempt one more rule on purpose, a person raises the number by hand in `.harness.json`, a protected file (QA-02). `allow_commands` is not tracked by the ratchet.
+
+`exempted_classes` counts the per-class exemptions: the number of (rule, class) pairs that `classes` entries remove from a rule, a class counting once per rule and only when the rule reports it. So a `final` class under an exempted namespace costs nothing, a new open class there raises the figure and fails QA-01 against the recorded ceiling (a namespace prefix cannot widen unnoticed), and a class made `final` lowers it. Lower is better, like `exempted_rules`; `exempted_rules` counts only the whole-rule entries. It is measured only where it matters: without a `classes` entry and without the key in `ratchet`, it reads `unmeasured`, so an existing `.harness.json` is unchanged. The first `ratchet --update` after adding a `classes` entry records it; a declared exemption of an observed rule counts too.
 
 ### Coverage and the ratchet
 

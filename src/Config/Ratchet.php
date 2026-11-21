@@ -9,7 +9,7 @@ namespace Pollora\Harness\Config;
  *
  * A metric that has never been measured is null and is not compared. Once
  * recorded, a metric may only improve: a higher PHPStan level, fewer baseline
- * entries, fewer exempted architecture rules, more coverage, a higher
+ * entries, fewer exempted architecture rules, fewer classes exempted from one, more coverage, a higher
  * mutation or type coverage score.
  */
 final readonly class Ratchet
@@ -29,6 +29,7 @@ final readonly class Ratchet
         'type_coverage' => ['better' => 'higher', 'label' => 'Type coverage (%)'],
         'msi' => ['better' => 'higher', 'label' => 'Mutation score indicator (%)'],
         'exempted_rules' => ['better' => 'lower', 'label' => 'Architecture rules exempted'],
+        'exempted_classes' => ['better' => 'lower', 'label' => 'Classes exempted from an architecture rule'],
     ];
 
     /** PHPStan 2 has ten levels; "max" is the highest. */
@@ -60,14 +61,14 @@ final readonly class Ratchet
 
             $valid = match ($metric) {
                 'phpstan_level' => $value === 'max' || (is_int($value) && $value >= 0 && $value <= self::MAX_PHPSTAN_LEVEL),
-                'phpstan_baseline', 'exempted_rules' => is_int($value) && $value >= 0,
+                'phpstan_baseline', 'exempted_rules', 'exempted_classes' => is_int($value) && $value >= 0,
                 default => (is_int($value) || is_float($value)) && $value >= 0 && $value <= 100,
             };
 
             if (! $valid) {
                 throw InvalidConfig::ratchetValue($path, $metric, $value, match ($metric) {
                     'phpstan_level' => 'an integer from 0 to 10, or "max"',
-                    'phpstan_baseline', 'exempted_rules' => 'a whole number, 0 or more',
+                    'phpstan_baseline', 'exempted_rules', 'exempted_classes' => 'a whole number, 0 or more',
                     default => 'a number from 0 to 100 (a percentage)',
                 });
             }

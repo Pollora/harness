@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Pollora\Harness\Metrics;
 
 use DOMDocument;
+use Pollora\Harness\Architecture\ClassExemptions;
+use Pollora\Harness\Architecture\Layers;
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Config\RuleExemption;
 
 /**
  * Measures the metrics the ratchet tracks, from the files the tools already
@@ -28,7 +31,7 @@ final readonly class Collector
      * @param  array<string, int|float|null>  $overrides  Values passed on the command line (--metric name=value), or measured elsewhere (null: not measured)
      * @return array<string, int|float|null>
      */
-    public function collect(?string $cloverPath = null, ?string $infectionPath = null, array $overrides = [], ?int $exemptedRules = null): array
+    public function collect(?string $cloverPath = null, ?string $infectionPath = null, array $overrides = [], ?int $exemptedRules = null, ?int $exemptedClasses = null): array
     {
         $cloverPath ??= $this->findClover();
         // The static pass is the slowest source: skipped when the value is given.
@@ -41,20 +44,55 @@ final readonly class Collector
             'type_coverage' => $typeCoverage,
             'msi' => $infectionPath !== null ? self::infectionMsi($this->resolve($infectionPath)) : null,
             'exempted_rules' => $exemptedRules,
+            'exempted_classes' => $exemptedClasses,
         ], $overrides);
     }
 
     /**
-     * The number of architecture rules `allow_rules` exempts. Null (not
-     * measured) for a repository that has none and never recorded any, so the
-     * metric only exists where the feature is used; once recorded, it is
+     * The number of architecture rules `allow_rules` exempts as a whole (an entry with `classes` exempts
+     * classes, not the rule: see `exemptedClasses()`). Null (not measured) for a repository that has none and
+     * never recorded any, so the metric only exists where the feature is used; once recorded, it is
      * measured even at zero, so that removing the last exemption lowers it.
      */
     public static function exemptedRules(HarnessConfig $config): ?int
     {
-        $count = count($config->allowRules);
+        $count = count(array_filter($config->allowRules, static fn (RuleExemption $exemption): bool => ! $exemption->isPartial()));
 
         return $count > 0 || $config->ratchet->get('exempted_rules') !== null ? $count : null;
+    }
+
+    /**
+     * The number of (rule, class) pairs the per-class exemptions of `allow_rules` remove from a rule: each
+     * class an exemption actually covers, once per rule. Only a class that the rule reports counts, so a
+     * `final` class under an exempted namespace costs nothing, while a new open class there raises the figure
+     * (and a raise fails QA-01 against the recorded ceiling): a namespace prefix cannot widen unnoticed. A
+     * declared exemption of an observed rule counts too, like `exempted_rules`.
+     *
+     * Null (not measured) for a repository that has no per-class exemption and never recorded the key; once
+     * recorded, it is measured even at zero. Read from the files, so it needs no installed dependency.
+     */
+    public static function exemptedClasses(HarnessConfig $config, string $root): ?int
+    {
+        $partials = [];
+
+        foreach ($config->allowRules as $exemption) {
+            if ($exemption->isPartial()) {
+                $partials[$exemption->rule][] = $exemption;
+            }
+        }
+
+        if ($partials === []) {
+            return $config->ratchet->get('exempted_classes') !== null ? 0 : null;
+        }
+
+        $layers = Layers::discover($root);
+        $count = 0;
+
+        foreach ($partials as $rule => $exemptions) {
+            $count += count(ClassExemptions::apply($exemptions, ClassExemptions::problemsOf($rule, $layers, $root), $layers, $root)->classes());
+        }
+
+        return $count;
     }
 
     /**

@@ -242,19 +242,26 @@ final readonly class HarnessConfig
             return [];
         }
 
+        $whole = [];
+        $partial = [];
         $exemptions = [];
 
         foreach ($value as $entry) {
             $exemption = RuleExemption::fromArray(is_array($entry) ? $entry : [], $path);
 
-            if (array_key_exists($exemption->rule, $exemptions)) {
+            if (! $exemption->isPartial() && array_key_exists($exemption->rule, $whole)) {
                 throw InvalidConfig::duplicateRuleExemption($path, $exemption->rule);
             }
 
-            $exemptions[$exemption->rule] = $exemption;
+            if (($exemption->isPartial() && array_key_exists($exemption->rule, $whole)) || (! $exemption->isPartial() && array_key_exists($exemption->rule, $partial))) {
+                throw InvalidConfig::ruleExemptionConflict($path, $exemption->rule);
+            }
+
+            $exemption->isPartial() ? $partial[$exemption->rule] = true : $whole[$exemption->rule] = true;
+            $exemptions[] = $exemption;
         }
 
-        return array_values($exemptions);
+        return $exemptions;
     }
 
     /**
