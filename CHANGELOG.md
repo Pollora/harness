@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.34] - 2026-11-21
+
 ### Added
 
 - **`promote-report` reads PERF-01 and PERF-07.** It uses the same static assessment as the `Performance budgets` step (`PerformanceCheck::assess()`, which `run()` now shares): `would-block` with the problems of the budgets file or of the nightly measures, `clean`, or `not-applicable` when the repository declares neither. Without it the two rules showed as `no-probe` once PERF-01 and PERF-07 became observed.
