@@ -34,7 +34,7 @@ return [
     'CONV-06' => ['title' => 'Commands are named pollora:<verb> or pollora:<group>:<verb>, such as pollora:make:theme; the older dashed names stay as aliases', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'enforced'],
     'CONV-07' => ['title' => 'Domain and Application code never calls app() or resolve(); it receives contracts', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-08' => ['title' => 'A class is final unless it is an extension point (an abstract base, a builder or a facade-backed service, which use Macroable)', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'observed'],
-    'CONV-09' => ['title' => 'A facade is a thin front for an injectable service bound in the container, with no logic of its own; a new facade resolves a contract', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'observed'],
+    'CONV-09' => ['title' => 'A facade is a thin front for an injectable service bound in the container, with no logic of its own; a new facade resolves a contract', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-10' => ['title' => 'One named exception per business case; never throw a bare \\Exception', 'tool' => 'Semgrep', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-11' => ['title' => 'Native types everywhere; PHPDoc only for generics, array shapes, @internal, @deprecated', 'tool' => 'PHPStan + type_coverage ratchet (static count, no Pest plugin)', 'gate' => 'G1', 'status' => 'observed'],
     'CONV-12' => ['title' => 'Pest tests are it()/test() functions, one intention each, with datasets over copy-paste; no PHPUnit test class', 'tool' => 'Pest arch + review', 'gate' => 'G2', 'status' => 'observed'],
@@ -51,10 +51,10 @@ return [
     'SEC-09' => ['title' => 'No dependency with a known vulnerability', 'tool' => 'composer audit, npm audit (time-limited exceptions in npm_audit)', 'gate' => 'G1', 'status' => 'enforced'],
 
     // Performance
-    'PERF-01' => ['title' => 'SQL queries per page type never exceed the reference', 'tool' => 'Budgets file (check, Performance budgets)', 'gate' => 'G2', 'status' => 'observed'],
+    'PERF-01' => ['title' => 'SQL queries per page type never exceed the reference', 'tool' => 'Budgets file (check, Performance budgets)', 'gate' => 'G2', 'status' => 'enforced'],
     'PERF-02' => ['title' => 'Discovery reads no file when its cache is warm', 'tool' => 'Pest test with a file-access probe (discovery)', 'gate' => 'G1', 'status' => 'enforced'],
     'PERF-03' => ['title' => 'No N+1 query in Colt', 'tool' => 'Pest test counting SQL queries (colt)', 'gate' => 'G1', 'status' => 'enforced'],
-    'PERF-07' => ['title' => 'Boot, cold discovery and thumbnail timings tracked nightly, alert above 10 %', 'tool' => 'Scheduled workflow (check, Performance budgets)', 'gate' => 'G3', 'status' => 'observed'],
+    'PERF-07' => ['title' => 'Boot, cold discovery and thumbnail timings tracked nightly, alert above 10 %', 'tool' => 'Scheduled workflow (check, Performance budgets)', 'gate' => 'G3', 'status' => 'enforced'],
 
     // Process
     'QA-01' => ['title' => 'Ratchet: no metric gets worse (PHPStan level and baseline, coverage, mutation score)', 'tool' => 'pollora-qa ratchet', 'gate' => 'G2', 'status' => 'enforced'],

@@ -3,13 +3,20 @@
 declare(strict_types=1);
 
 use Pollora\Harness\Check\Plan;
+use Pollora\Harness\Check\Report;
+use Pollora\Harness\Check\Runner;
+use Pollora\Harness\Check\Step;
 use Pollora\Harness\Check\StepResult;
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\InvalidConfig;
+use Pollora\Harness\Config\Mode;
 use Pollora\Harness\Config\PerformanceSettings;
+use Pollora\Harness\Console\Io;
 use Pollora\Harness\Performance\Budgets;
 use Pollora\Harness\Performance\NightlyMeasures;
 use Pollora\Harness\Performance\PerformanceCheck;
+use Pollora\Harness\Profile;
+use Pollora\Harness\Rules\Catalogue;
 
 if (! defined('PERF_BUDGETS')) {
     define('PERF_BUDGETS', '{"pages":{"home":{"wordpress":24,"laravel":0},"rest":{"wordpress":19,"laravel":null}}}');
@@ -382,8 +389,40 @@ describe('the plan', function (): void {
             ->and(($step->action)()->detail)->toContain('compared with HEAD:');
     });
 
-    it('is observed by default', function (): void {
-        expect(Plan::OBSERVED_BY_DEFAULT)->toContain(Plan::PERFORMANCE);
+    it('is no longer observed by default: PERF-01 and PERF-07 are enforced', function (): void {
+        expect(Plan::OBSERVED_BY_DEFAULT)->not->toContain(Plan::PERFORMANCE)
+            ->and(Catalogue::all()['PERF-01']['status'])->toBe('enforced')
+            ->and(Catalogue::all()['PERF-07']['status'])->toBe('enforced');
+    });
+
+    it('blocks in enforce mode when a budget went up, like the other gates, and only reports in observe mode', function (): void {
+        $root = perfTwoCommits('{"pages":{"home":{"wordpress":24}}}', '{"pages":{"home":{"wordpress":25}}}');
+        $results = perfRun($root);
+
+        expect($results[0]['result']->isFailed())->toBeTrue()
+            ->and($results[0]['result']->detail)->toContain('PERF-01:')
+            ->and((new Report(Profile::Core, Mode::Enforce, false, $results, Plan::OBSERVED_BY_DEFAULT))->hasBlockingFailures())->toBeTrue()
+            ->and((new Report(Profile::Core, Mode::Observe, false, $results, Plan::OBSERVED_BY_DEFAULT))->hasBlockingFailures())->toBeFalse()
+            ->and((new Report(Profile::Core, Mode::Enforce, false, $results, ['Performance budgets']))->hasBlockingFailures())->toBeFalse();
+    });
+
+    it('blocks when the nightly measures are declared and not wired', function (): void {
+        $root = perfRepository(perfFiles(perfWorkflow(trigger: "on:\n  push:\n    branches: [main]\n")));
+        $results = perfRun($root);
+
+        expect($results[0]['result']->isFailed())->toBeTrue()
+            ->and($results[0]['result']->detail)->toContain('PERF-07:')
+            ->and((new Report(Profile::Core, Mode::Enforce, false, $results, Plan::OBSERVED_BY_DEFAULT))->hasBlockingFailures())->toBeTrue();
+    });
+
+    it('passes a repository that holds its budgets, and never fails a repository without budgets (skipped stays skipped)', function (): void {
+        $clean = perfRun(perfTwoCommits('{"pages":{"home":{"wordpress":24}}}', '{"pages":{"home":{"wordpress":24}}}'));
+        $none = perfRun(perfRepository([]));
+
+        expect($clean[0]['result']->isFailed())->toBeFalse()
+            ->and($none[0]['result']->status)->toBe(StepResult::SKIPPED)
+            ->and($none[0]['result']->isFailed())->toBeFalse()
+            ->and((new Report(Profile::Core, Mode::Enforce, false, [...$clean, ...$none], Plan::OBSERVED_BY_DEFAULT))->hasBlockingFailures())->toBeFalse();
     });
 
     it('is in the full plan only, once', function (): void {
@@ -394,6 +433,21 @@ describe('the plan', function (): void {
             ->and(array_map(static fn ($step): string => $step->name, $plan->fast([])))->not->toContain(Plan::PERFORMANCE);
     });
 });
+
+if (! function_exists('perfRun')) {
+    /**
+     * Runs the Performance budgets step of a repository as `check` does.
+     *
+     * @return list<array{step: Step, result: StepResult}>
+     */
+    function perfRun(string $cwd): array
+    {
+        $out = fopen('php://memory', 'w+');
+
+        return (new Runner(new Io($cwd, [], [], $out, $out), $cwd))->run([perfPlanStep($cwd)]);
+    }
+
+}
 
 if (! function_exists('perfPlanStep')) {
     function perfPlanStep(string $cwd, ?string $base = null): object
