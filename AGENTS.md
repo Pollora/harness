@@ -55,6 +55,10 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **SEC-07** Every administration action checks a capability: an admin_post_* / wp_ajax_* closure calls current_user_can(), and a menu page never uses the read capability _(Semgrep (closures and menu pages only), G1)_
 - **SEC-08** No secret in the repository _(gitleaks, G1)_
 - **SEC-09** No dependency with a known vulnerability _(composer audit, npm audit (time-limited exceptions in npm_audit), G1)_
+- **SEC-10** A redirect target never comes from the request unchecked: wp_redirect(), redirect() and a Location header take wp_validate_redirect(), home_url() or an allow-list _(Semgrep (taint, observed), G1)_
+- **SEC-11** An outgoing HTTP request never targets a URL taken from the request: wp_safe_remote_*(), wp_http_validate_url() or an allow-list (SSRF) _(Semgrep (taint, observed), G1)_
+- **SEC-12** A filesystem path, an include or a stream never comes from the request unchecked: basename(), an allow-listed key or a realpath() check _(Semgrep (taint, observed), G1)_
+- **SEC-13** What a request sent is escaped where it is printed: esc_html(), esc_attr(), esc_url() or wp_kses_post() before echo, printf() or wp_die() _(Semgrep (taint, observed), G1)_
 - **PERF-01** SQL queries per page type never exceed the reference _(Budgets file (check, Performance budgets), G2)_
 - **PERF-02** Discovery reads no file when its cache is warm _(Pest test with a file-access probe (discovery), G1)_
 - **PERF-03** No N+1 query in Colt _(Pest test counting SQL queries (colt), G1)_

@@ -1,0 +1,321 @@
+# Pollora harness — Semgrep rules that are reported but do not block.
+#
+# These four rules follow what a request sends to a dangerous call (taint
+# analysis, inside one function): SEC-10 a redirect, SEC-11 an outgoing HTTP
+# request, SEC-12 a filesystem path, SEC-13 an output without escaping. They are
+# `observed`: the measure over the 45 repositories of the ecosystem found
+# nothing to report, which proves nothing about the sites built on top of them,
+# so they run in a gate of their own ("Security patterns (observed)") that never
+# blocks. A deliberate exception is a `nosemgrep` comment with the reason, as in
+# common.yml.
+#
+# A source is what the visitor controls: $_GET, $_POST, $_REQUEST, $_COOKIE, the
+# request headers and URL of $_SERVER, filter_input(), and a Laravel request read
+# with ->input(), ->query(), ->get(), ->post(), ->all(), ->header(), ->cookie(),
+# the request() helper or the Request facade. Comparisons, booleans and numbers are not tainted.
+
+rules:
+  - id: pollora.sec-10.request-redirect
+    languages: [php]
+    severity: WARNING
+    message: >-
+      [SEC-10] A redirect target comes from the request: an attacker can send a
+      victim from this site to theirs (open redirect, phishing). Check it with
+      wp_validate_redirect($url, home_url('/')), build it from home_url() /
+      admin_url(), or compare it with an allow-list before redirecting.
+    metadata:
+      rule: SEC-10
+      cwe: "CWE-601: URL Redirection to Untrusted Site (Open Redirect)"
+    options:
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: true
+      taint_assume_safe_comparisons: true
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](?:HTTP_[A-Z_]+|REQUEST_URI|QUERY_STRING|PHP_SELF|PATH_INFO)["']$
+          - pattern: filter_input(...)
+          - patterns:
+              - pattern: $REQ->$M(...)
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(?:this->)?request$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+          - pattern: request($KEY)
+          - patterns:
+              - pattern: Request::$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+          - patterns:
+              - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: wp_validate_redirect(...)
+          - pattern: home_url(...)
+          - pattern: site_url(...)
+          - pattern: admin_url(...)
+          - pattern: network_admin_url(...)
+          - pattern: network_home_url(...)
+          - pattern: get_permalink(...)
+          - pattern: get_term_link(...)
+          - pattern: get_edit_post_link(...)
+          - pattern: route(...)
+          - pattern: url(...)
+          - pattern: in_array(...)
+          - pattern: absint(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+          - pattern: (bool) $X
+          - pattern: (float) $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: wp_redirect($URL, ...)
+              - pattern: redirect($URL, ...)
+              - pattern: redirect()->away($URL, ...)
+              - pattern: redirect()->to($URL, ...)
+              - pattern: Redirect::away($URL, ...)
+              - pattern: Redirect::to($URL, ...)
+              - pattern: 'header("Location: ..." . $URL)'
+              - pattern: "header('Location: ' . $URL)"
+              - pattern: 'header("Location: $URL")'
+              - pattern: 'header("Location: {$URL}")'
+          - focus-metavariable: $URL
+
+  - id: pollora.sec-11.request-http-call
+    languages: [php]
+    severity: WARNING
+    message: >-
+      [SEC-11] The URL of an outgoing HTTP request comes from the request: the
+      server can be made to call an internal address (SSRF: cloud metadata,
+      localhost services). Use wp_safe_remote_get() / wp_safe_remote_post()
+      (they refuse private addresses), check wp_http_validate_url(), or only
+      accept a host from an allow-list.
+    metadata:
+      rule: SEC-11
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    options:
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: true
+      taint_assume_safe_comparisons: true
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](?:HTTP_[A-Z_]+|REQUEST_URI|QUERY_STRING|PHP_SELF|PATH_INFO)["']$
+          - pattern: filter_input(...)
+          - patterns:
+              - pattern: $REQ->$M(...)
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(?:this->)?request$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+          - pattern: request($KEY)
+          - patterns:
+              - pattern: Request::$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+          - patterns:
+              - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: wp_http_validate_url(...)
+          - pattern: home_url(...)
+          - pattern: site_url(...)
+          - pattern: admin_url(...)
+          - pattern: rest_url(...)
+          - pattern: in_array(...)
+          - pattern: absint(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+          - pattern: (bool) $X
+          - pattern: (float) $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: wp_remote_get($URL, ...)
+              - pattern: wp_remote_post($URL, ...)
+              - pattern: wp_remote_head($URL, ...)
+              - pattern: wp_remote_request($URL, ...)
+              - pattern: curl_init($URL)
+              - pattern: curl_setopt($HANDLE, CURLOPT_URL, $URL)
+              - pattern: Http::get($URL, ...)
+              - pattern: Http::post($URL, ...)
+              - pattern: Http::put($URL, ...)
+              - pattern: Http::patch($URL, ...)
+              - pattern: Http::delete($URL, ...)
+              - pattern: Http::head($URL, ...)
+              - pattern: Http::withHeaders(...)->get($URL, ...)
+              - pattern: Http::withHeaders(...)->post($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: pollora.sec-12.request-path
+    languages: [php]
+    severity: WARNING
+    message: >-
+      [SEC-12] A filesystem path, an include or a stream comes from the request:
+      `../` reads or writes outside the intended directory, and a URL or a
+      `php://` wrapper turns file_get_contents() into a request (SSRF) or a read
+      of the source. Take basename() of it, map an allow-listed key to a fixed
+      path, or compare realpath() with the directory it must stay in.
+    metadata:
+      rule: SEC-12
+      cwe: "CWE-22: Path Traversal"
+    options:
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: true
+      taint_assume_safe_comparisons: true
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](?:HTTP_[A-Z_]+|REQUEST_URI|QUERY_STRING|PHP_SELF|PATH_INFO)["']$
+          - pattern: filter_input(...)
+          - patterns:
+              - pattern: $REQ->$M(...)
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^\$(?:this->)?request$
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+          - pattern: request($KEY)
+          - patterns:
+              - pattern: Request::$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+          - patterns:
+              - pattern: request()->$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(?:input|query|get|post|all|header|cookie|string|str)$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: basename(...)
+          - pattern: sanitize_file_name(...)
+          - pattern: sanitize_key(...)
+          - pattern: sanitize_title(...)
+          - pattern: in_array(...)
+          - pattern: absint(...)
+          - pattern: intval(...)
+          - pattern: md5(...)
+          - pattern: sha1(...)
+          - pattern: hash(...)
+          - pattern: wp_hash(...)
+          - pattern: (int) $X
+          - pattern: (bool) $X
+          - pattern: (float) $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: file_get_contents($PATH, ...)
+              - pattern: file_put_contents($PATH, ...)
+              - pattern: file($PATH, ...)
+              - pattern: fopen($PATH, ...)
+              - pattern: readfile($PATH, ...)
+              - pattern: unlink($PATH)
+              - pattern: wp_delete_file($PATH)
+              - pattern: copy($PATH, ...)
+              - pattern: rename($PATH, ...)
+              - pattern: mkdir($PATH, ...)
+              - pattern: rmdir($PATH)
+              - pattern: include $PATH
+              - pattern: include_once $PATH
+              - pattern: require $PATH
+              - pattern: require_once $PATH
+              - pattern: load_template($PATH, ...)
+              - pattern: get_template_part($PATH, ...)
+          - focus-metavariable: $PATH
+
+  - id: pollora.sec-13.request-echo
+    languages: [php]
+    severity: WARNING
+    message: >-
+      [SEC-13] Something the request sent is printed without escaping
+      (reflected XSS). Escape it where it is printed: esc_html(), esc_attr(),
+      esc_url(), wp_kses_post() or wp_json_encode(). sanitize_text_field()
+      cleans an input, it does not escape an output.
+    metadata:
+      rule: SEC-13
+      cwe: "CWE-79: Cross-site Scripting"
+    options:
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: true
+      taint_assume_safe_comparisons: true
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](?:HTTP_[A-Z_]+|REQUEST_URI|QUERY_STRING|PHP_SELF|PATH_INFO)["']$
+          - pattern: filter_input(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: esc_html(...)
+          - pattern: esc_attr(...)
+          - pattern: esc_url(...)
+          - pattern: esc_js(...)
+          - pattern: esc_textarea(...)
+          - pattern: wp_kses(...)
+          - pattern: wp_kses_post(...)
+          - pattern: wp_kses_data(...)
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+          - pattern: wp_json_encode(...)
+          - pattern: json_encode(...)
+          - pattern: absint(...)
+          - pattern: intval(...)
+          - pattern: sanitize_key(...)
+          - pattern: in_array(...)
+          - pattern: count(...)
+          - pattern: (int) $X
+          - pattern: (bool) $X
+          - pattern: (float) $X
+    pattern-sinks:
+      - pattern-either:
+          - pattern: echo $X;
+          - pattern: printf($X, ...)
+          - pattern: wp_die($X, ...)
+          - pattern: die($X)
+          - pattern: exit($X)

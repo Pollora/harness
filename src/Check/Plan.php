@@ -40,6 +40,9 @@ final readonly class Plan
 
     public const string MUTATION = 'Mutation testing';
 
+    /** The Semgrep rules that follow request data to a dangerous call (SEC-10 to SEC-13): reported, never blocking. */
+    public const string SEMGREP_OBSERVED = 'Security patterns (observed)';
+
     /**
      * The mutation gate of a repository that declares `mutation.scope: "changed"`. Unlike the whole-repository one
      * it is not observed by default: the repository chose a minimum, and a change below it blocks (in enforce mode).
@@ -70,7 +73,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION, self::PERFORMANCE];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION, self::PERFORMANCE, self::SEMGREP_OBSERVED];
 
     public function __construct(
         private HarnessConfig $config,
@@ -119,6 +122,7 @@ final readonly class Plan
             $this->dependencyPolicy(),
             $this->dependencyAnalysis(),
             $this->semgrep(),
+            $this->semgrepObserved(),
             $this->audit(),
             $this->npmAudit(),
             $this->publicSurface(),
@@ -372,6 +376,29 @@ final readonly class Plan
         }
 
         return new Step('Security patterns', $rules, [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--error', '--quiet', ...$configs, ...$targets]);
+    }
+
+    /**
+     * The Semgrep rules that are measured but do not block (SEC-10 to SEC-13: what a request sends to a redirect, an
+     * outgoing HTTP call, a filesystem path or an echo), in a gate of their own so that an observed rule never turns the
+     * blocking "Security patterns" gate red. It joins the blocking gate when a rule is promoted to `enforced`.
+     */
+    private function semgrepObserved(): Step
+    {
+        $rules = ['SEC-10', 'SEC-11', 'SEC-12', 'SEC-13'];
+        $semgrep = Paths::which('semgrep');
+
+        if ($semgrep === null) {
+            return Step::missingTool(self::SEMGREP_OBSERVED, $rules, 'semgrep is not installed, so these rules were not checked (CI runs it)', 'pipx install semgrep');
+        }
+
+        $targets = $this->semgrepTargets();
+
+        if ($targets === []) {
+            return Step::skipped(self::SEMGREP_OBSERVED, $rules, 'no source directory to scan');
+        }
+
+        return new Step(self::SEMGREP_OBSERVED, $rules, [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--error', '--quiet', '--config', Paths::preset('semgrep/observed.yml'), ...$targets]);
     }
 
     /**

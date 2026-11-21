@@ -56,7 +56,7 @@ composer qa
 }
 ```
 
-The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis`, `Rector`, `Tests and architecture`, `Dependency policy`, `Dependency analysis`, `Security patterns`, `Dependency audit`, `Public surface`, `Performance budgets`, `Ratchet`. Shorten the list as each gate comes clean.
+The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis`, `Rector`, `Tests and architecture`, `Dependency policy`, `Dependency analysis`, `Security patterns`, `Security patterns (observed)`, `Dependency audit`, `Public surface`, `Performance budgets`, `Ratchet`. Shorten the list as each gate comes clean.
 
 The **Code style** gate checks with the repository's own `pint.json` when that file already requires `declare_strict_types` (ARCH-09), so a package keeps the style it chose; without one, or with one that does not require it, the harness preset applies.
 
@@ -408,6 +408,31 @@ In a repository that declares neither, the step is `skipped` with its reason (ne
 
 `nightly: {}` declares the nightly measures with the default paths, so a repository that lost the files is told so instead of being skipped. Paths are relative to the repository, without `..`; anything else makes `.harness.json` invalid. Without `workflow`, every file of `.github/workflows` is read.
 
+## Observed Semgrep rules (SEC-10 to SEC-13)
+
+`presets/semgrep/observed.yml` holds four rules that follow what a request sends to a dangerous call. They run in the *Security patterns (observed)* step of `pollora-qa check`, which reports and never blocks (it is observed by default), and are `observed` in the catalogue. A new Semgrep rule is born here; it moves to `common.yml` (and joins *Security patterns*) when the measure over the repositories is clean and a promotion is decided. The rules are taint rules: they follow a value inside one function (an assignment, a concatenation, a `wp_unslash()` or `sanitize_text_field()` in between), not across functions or files.
+
+A **source** is what the visitor controls: `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, `$_SERVER['HTTP_*']`, `REQUEST_URI`, `QUERY_STRING`, `PHP_SELF` and `PATH_INFO`, `filter_input()`, and (SEC-10 to SEC-12) a Laravel request: `$request->input()`, `query()`, `get()`, `post()`, `all()`, `header()`, `cookie()`, the `request()` helper and the `Request` facade. A comparison, a boolean or a number is not tainted (`$_GET['tab'] === 'a'`, `isset()`, `(int)`).
+
+| Rule | Reports | Does not report |
+| --- | --- | --- |
+| SEC-10 | the request in `wp_redirect()`, `redirect()`, `redirect()->away()` / `->to()`, `Redirect::to()` / `::away()`, or a `Location` header (open redirect) | the value after `wp_validate_redirect()`, `home_url()`, `site_url()`, `admin_url()`, `get_permalink()`, `route()`, `url()`, `in_array()`, `absint()` or a cast; `wp_safe_redirect()` |
+| SEC-11 | the request as the **URL** (first argument) of `wp_remote_get/post/head/request()`, `curl_init()`, `CURLOPT_URL`, `Http::get/post/…()` (SSRF) | `wp_safe_remote_*()`, the value after `wp_http_validate_url()`, `home_url()`, `rest_url()`, `absint()` or a cast; the request in the *body* or the headers |
+| SEC-12 | the request as the path of `file_get_contents()`, `file_put_contents()`, `file()`, `fopen()`, `readfile()`, `unlink()`, `wp_delete_file()`, `copy()`, `rename()`, `mkdir()`, `rmdir()`, `include`/`require`, `load_template()`, `get_template_part()` (traversal, `php://`, a URL) | the value after `basename()`, `sanitize_file_name()`, `sanitize_key()`, `sanitize_title()`, a hash, `absint()` or a cast |
+| SEC-13 | the request in `echo`, `printf()`, `wp_die()`, `die()`, `exit()` without escaping (`print` is not looked at: Pint forbids it next to `echo`) (reflected XSS); `sanitize_text_field()` is not an escape | the value after `esc_html()`, `esc_attr()`, `esc_url()`, `esc_js()`, `esc_textarea()`, `wp_kses*()`, `htmlspecialchars()`, `wp_json_encode()`, `absint()` or a cast |
+
+An exception is a `// nosemgrep -- reason` on the line.
+
+**Measure (45 repositories, whole tree without `vendor`, `node_modules` and `tests`, 2,684 PHP files read by Semgrep 1.186.0): no report for any of the four rules.** The 20 syntax errors are the `%placeholder%` files of the three theme templates, which Semgrep cannot parse and which `common.yml` skips the same way. The count is not a proof of absence: the ecosystem reads very little from the request (80 uses of `$_GET`, `$_POST`, `$_REQUEST` and `$_COOKIE` in 45 repositories, 9 `wp_redirect`, 10 `wp_remote_*`, 4 `Http::` calls, 4 `filter_input()`, 12 Laravel request reads), and each was read by hand: every value is validated, compared or used as an array key, and the OAuth redirect of `mcp-connector` goes through the registered redirect URI of the client before any `Location`. Each rule has a positive and a negative fixture (`tests/Fixtures/semgrep/src/Request*.php`), which is the witness that it detects.
+
+Candidates of the issue that are **not** shipped as new rules:
+
+- *A `$_GET` / `$_POST` / `$_REQUEST` read with no `sanitize_*` / `wp_unslash` before a sink*: without the sink it is noise. A syntactic version (the superglobal not inside `sanitize_*`, `wp_unslash()`, `absint()`, `isset()`, `empty()`, a cast or a nonce check) reported 6 places in the 45 repositories and all 6 were false positives (the value goes to a helper that sanitizes it, to a nonce check or to a `hash_equals()`): 100 %. The taint rules above are its useful form.
+- *`wp_ajax_nopriv_` without a nonce*: SEC-02 already blocks every hand-registered `wp_ajax_*` hook.
+- *`json_decode` then `extract`*: SEC-05 already blocks `extract()`.
+- *`header()` with request data*: PHP refuses a header with a line break, so only `Location` matters (SEC-10).
+- *`add_filter` / `add_action` callbacks that echo unescaped output*: the echo of a request value is SEC-13; an echo of any other variable cannot be told from an escaped one by a pattern (it would report the whole of every view).
+
 ## Rules
 
 `vendor/bin/pollora-qa rules` prints the catalogue, from `resources/rules.php`. Each rule is `enforced` (fails the gate), `observed` (reported only) or `planned` (not checked by this version yet).
@@ -421,7 +446,7 @@ The harness no longer only measures: every repository that adopted it runs the g
 | | Rules | Which |
 | --- | --- | --- |
 | Enforced | 32 | style, PHPStan, architecture tests, dependency policy, Semgrep patterns (SEC-01 to SEC-07, CONV-10, and ARCH-05 on the framework), the names of hooks and commands (CONV-04, CONV-06), the downstream job (QA-03, which keeps the framework green), secrets, `composer audit`, the ratchet, the public surface, backward compatibility, the distribution archive, the warm-cache and query-count tests of discovery and Colt (PERF-02, PERF-03, which run in those packages' own suites) |
-| Observed | 7 | CONV-02 (no raw registration arrays), CONV-08 (final classes), CONV-09 (thin facades), CONV-11 (native types), CONV-12 (Pest functions), PERF-01 (query budgets), PERF-07 (nightly measures) |
+| Observed | 11 | CONV-02 (no raw registration arrays), CONV-08 (final classes), CONV-09 (thin facades), CONV-11 (native types), CONV-12 (Pest functions), SEC-10 to SEC-13 (request data reaching a redirect, an HTTP call, a path or an echo), PERF-01 (query budgets), PERF-07 (nightly measures) |
 | Planned | 1 | CONV-01 |
 
 **Why CONV-01 stays `planned`.** The rule ("the common case needs no configuration") was read four ways over the 45 repositories, with `nikic/php-parser`, and none is precise enough to report without noise. (1) A public static factory, or a public method of a `*Builder` / `*Factory` / `*Registry` / `*Registrar` / `*Manager`, with 4 required parameters (3 when one is a required `bool`), exceptions, interfaces, callbacks, `@internal`, Infrastructure, Console and Providers left out: 22 reports in 8 repositories, about 1 s; 5 were real (`Ability::create()` and `AbilityDefinition::reading()` / `writing()` with 7 required arguments, `Registry::table()` / `variables()`), 17 were not (12 view helpers of an admin screen, internal factories of the harness, a three-boolean predicate). Without the admin screens and from 5 required parameters: 6 reports, 3 real. (2) A public constructor with 3 or more required scalars: 55 reports, nearly all value objects, events and DTOs, whose fields are required by nature. (3) A required `bool` next to another required parameter: 10 reports, 3 real (`put($path, $contents, $dryRun)`), the others WordPress callbacks and setters. (4) Any public method with 4 or more required parameters: 62 outside constructors, about half of them WordPress hook callbacks or signatures imposed by a contract. Deciding that a parameter has an "obvious default" is a judgment on meaning, not on syntax, and the few real cases (6 to 10 in 45 repositories) are too few to show a false-positive rate under 10 %. The rule stays with its present tool: review, and the documentation examples run as tests.
