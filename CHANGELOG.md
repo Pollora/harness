@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Integration tests against a real WordPress: an optional `WordPress integration` job in `php-package.yml`.** Three new optional inputs, all off or neutral by default: `wordpress-integration` (the suite directory, for example `tests/Integration`; empty, the default, skips the job), `wordpress-version` (`latest`, `nightly` or a version number) and `wordpress-plugins` (wordpress.org slugs). The job, named `WordPress integration PHP <version>`, installs WordPress with WP-CLI against a digest-pinned MySQL 8.0 service container, caches the downloads, and starts the `test:integration` script, `phpunit.integration.xml` or the directory, on PHP 8.3 and 8.4, with a 20-minute timeout. It is skipped while the input is empty and no other job depends on it: no job name, `needs`, `if` or input of the existing jobs changes. `stubs/wordpress/` holds the bootstrap, the PHPUnit configuration and a test that proves a real WordPress is loaded; the README explains the cost and when to turn it on.
+
 ## [0.1.34] - 2026-11-21
 
 ### Added
