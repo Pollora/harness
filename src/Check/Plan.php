@@ -390,7 +390,7 @@ final readonly class Plan
 
         return $composer === null
             ? Step::missingTool('Dependency audit', ['SEC-09'], 'composer is not on the PATH', 'https://getcomposer.org/download/')
-            : new Step('Dependency audit', ['SEC-09'], [$composer, 'audit', '--no-interaction']);
+            : new Step('Dependency audit', ['SEC-09'], (new ComposerAudit($this->cwd, $composer))->run(...));
     }
 
     /**

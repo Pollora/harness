@@ -193,3 +193,132 @@ it('reports a malformed .harness.json instead of guessing', function (): void {
 
     expect(fn () => PromotionReport::build($root))->toThrow(InvalidConfig::class, 'ratchet.type_coverage');
 });
+
+/**
+ * A directory holding several repositories, one sub-directory each.
+ *
+ * @param  array<string, string>  $repositories  Name => root of an existing project
+ */
+function promoteWorkspace(array $repositories): string
+{
+    $workspace = harnessTempDir();
+
+    foreach ($repositories as $name => $source) {
+        exec('cp -R '.escapeshellarg($source).' '.escapeshellarg("{$workspace}/{$name}"));
+    }
+
+    return $workspace;
+}
+
+it('reports several repositories as one matrix, with the verdict of each rule, from paths', function (): void {
+    $open = promoteProject(['src/Open.php' => "namespace Acme\\Promo;\n\nclass Open {}"]);
+    $closed = promoteProject(['src/Closed.php' => "namespace Acme\\Promo;\n\nfinal class Closed {}"]);
+
+    [$code, $out] = harnessRun(new PromoteReportCommand, harnessTempDir(), $open, $closed, '--json');
+    $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
+    $cells = [];
+
+    foreach ($data['matrix'] as $cell) {
+        $cells[$cell['repository']][$cell['rule']] = [$cell['verdict'], $cell['count']];
+    }
+
+    expect($code)->toBe(0)
+        ->and(array_keys($data['repositories']))->toBe([basename($open), basename($closed)])
+        ->and($cells[basename($open)]['CONV-08'])->toBe(['would-block', 1])
+        ->and($cells[basename($closed)]['CONV-08'])->toBe(['clean', 0])
+        ->and($cells[basename($closed)]['CONV-12'])->toBe(['not-applicable', 0])
+        ->and($data['repositories'][basename($open)]['rules'][1]['first'][0])->toContain('Open is not final');
+});
+
+it('walks --root, keeps the --only repositories, and prints a text matrix', function (): void {
+    $workspace = promoteWorkspace([
+        'beta' => promoteProject(['src/B.php' => "namespace Acme\\Promo;\n\nclass B {}"]),
+        'alpha' => promoteProject(['src/A.php' => "namespace Acme\\Promo;\n\nfinal class A {}"]),
+        'gamma' => promoteProject(['src/G.php' => "namespace Acme\\Promo;\n\nclass G {}"]),
+    ]);
+    mkdir("{$workspace}/notes");
+
+    [$all, $text] = harnessRun(new PromoteReportCommand, harnessTempDir(), "--root={$workspace}", '--no-ansi');
+    [$some, $json] = harnessRun(new PromoteReportCommand, harnessTempDir(), "--root={$workspace}", '--only=gamma,notes', '--json');
+    $repositories = array_keys(json_decode($json, true, 512, JSON_THROW_ON_ERROR)['repositories']);
+
+    expect($all)->toBe(0)
+        ->and($text)->toContain('repository')->toContain('CONV-08')
+        ->and(strpos($text, 'alpha'))->toBeLessThan(strpos($text, 'beta'))
+        ->and($text)->not->toContain('notes')
+        ->and($some)->toBe(0)
+        ->and($repositories)->toBe(['gamma', 'notes']);
+});
+
+it('measures a directory without composer.json as not applicable instead of dropping it', function (): void {
+    $workspace = promoteWorkspace([]);
+    mkdir("{$workspace}/assets-only");
+
+    [$code, $out] = harnessRun(new PromoteReportCommand, harnessTempDir(), "--root={$workspace}", '--only=assets-only', '--json');
+    $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($code)->toBe(0)
+        ->and(array_unique(array_column($data['matrix'], 'verdict')))->toBe(['not-applicable'])
+        ->and($data['repositories']['assets-only']['type_coverage'])->toBeNull();
+});
+
+it('gives the type coverage floor to record, rounded down to a tenth of a point', function (): void {
+    $root = promoteProject(['src/Mixed.php' => "namespace Acme\\Promo;\n\nfinal class Mixed\n{\n    public function a(\$x): void {}\n\n    public function b(int \$y) {}\n}"]);
+
+    [, $out] = harnessRun(new PromoteReportCommand, harnessTempDir(), $root, '--json');
+    $entry = json_decode($out, true, 512, JSON_THROW_ON_ERROR)['repositories'][basename($root)];
+
+    expect((float) $entry['type_coverage'])->toBe(50.0)->and((float) $entry['floor'])->toBe(50.0);
+
+    $odd = promoteProject(['src/Odd.php' => "namespace Acme\\Promo;\n\nfinal class Odd\n{\n    public function a(int \$x): void {}\n\n    public function b(\$y) {}\n\n    public function c(\$z) {}\n}"]);
+    [, $out] = harnessRun(new PromoteReportCommand, harnessTempDir(), $odd, '--json');
+    $entry = json_decode($out, true, 512, JSON_THROW_ON_ERROR)['repositories'][basename($odd)];
+
+    // 2 typed declarations out of 6: 33.33 % measured, 33.3 recorded (never 33.4, which a re-measure would fail).
+    expect($entry['type_coverage'])->toBe(33.33)->and($entry['floor'])->toBe(33.3);
+});
+
+it('says which repository could not be read and fails, after printing the others', function (): void {
+    $good = promoteProject(['src/A.php' => "namespace Acme\\Promo;\n\nfinal class A {}"]);
+    $bad = promoteProject([], ['profile' => 'core', 'ratchet' => ['type_coverage' => 120]]);
+
+    [$code, $out, $err] = harnessRun(new PromoteReportCommand, harnessTempDir(), $good, $bad, '/does/not/exist', '--json');
+    $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($code)->toBe(1)
+        ->and($err)->toContain('ratchet.type_coverage')->toContain('not a directory')
+        ->and($data['repositories'][basename($bad)]['error'])->toContain('ratchet.type_coverage')
+        ->and($data['repositories'][basename($bad)]['rules'])->toBe([])
+        ->and($data['repositories'][basename($good)]['error'])->toBeNull()
+        ->and(array_column($data['matrix'], 'repository'))->not->toContain(basename($bad));
+});
+
+it('fails on a --root that is not a directory, on --root without value and on an unknown --only name', function (): void {
+    $workspace = promoteWorkspace(['a' => promoteProject([])]);
+
+    [$missing, , $missingErr] = harnessRun(new PromoteReportCommand, harnessTempDir(), '--root=/does/not/exist');
+    [$bare, , $bareErr] = harnessRun(new PromoteReportCommand, harnessTempDir(), '--root');
+    [$unknown, , $unknownErr] = harnessRun(new PromoteReportCommand, harnessTempDir(), "--root={$workspace}", '--only=a,zzz');
+
+    expect($missing)->toBe(1)->and($missingErr)->toContain('is not a directory')
+        ->and($bare)->toBe(1)->and($bareErr)->toContain('--root needs a directory')
+        ->and($unknown)->toBe(1)->and($unknownErr)->toContain('zzz');
+});
+
+it('resolves relative paths against the current directory and changes nothing in the repositories', function (): void {
+    $workspace = promoteWorkspace(['a' => promoteProject(['src/A.php' => "namespace Acme\\Promo;\n\nclass A {}"])]);
+    $before = md5((string) shell_exec('find '.escapeshellarg($workspace).' -type f -exec md5 -q {} + 2>/dev/null || find '.escapeshellarg($workspace).' -type f -exec md5sum {} +'));
+
+    [$code, $out] = harnessRun(new PromoteReportCommand, $workspace, 'a', '--json');
+    $after = md5((string) shell_exec('find '.escapeshellarg($workspace).' -type f -exec md5 -q {} + 2>/dev/null || find '.escapeshellarg($workspace).' -type f -exec md5sum {} +'));
+
+    expect($code)->toBe(0)->and(array_keys(json_decode($out, true, 512, JSON_THROW_ON_ERROR)['repositories']))->toBe(['a'])
+        ->and($after)->toBe($before);
+});
+
+it('keeps the report of the current repository unchanged when no path is given', function (): void {
+    [, $out] = harnessRun(new PromoteReportCommand, promoteProject(['src/A.php' => "namespace Acme\\Promo;\n\nclass A {}"]), '--json');
+    $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
+
+    expect(array_keys($data))->toBe(['rules'])->and($data['rules'][1]['verdict'])->toBe('would-block');
+});

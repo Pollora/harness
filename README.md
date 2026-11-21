@@ -123,6 +123,8 @@ The summary of `pollora-qa check` (console, job summary, `.harness/report.json`)
 
 ### An npm advisory with no fix yet (`npm_audit`)
 
+Both dependency audits call a service of the network (the Packagist advisory API, the npm registry) and tolerate its incidents without ever hiding a finding. A failure of the transport (timeout, DNS, refused or reset connection, HTTP 5xx or 429) is attempted again: 3 attempts in all, 5 s then 15 s apart (20 s at most). A vulnerability is a result and fails at once, without a second attempt; so does any other error. A service still unreachable after the attempts fails the step, with `advisory API unreachable after 3 attempts` and the last error, so that a network incident reads differently from a vulnerability and is never a pass. `pollora-qa composer-audit [--locked]` runs the same code for the reusable workflow of the templates.
+
 The *Dependency audit (npm)* gate runs `npm audit --json` over every `package-lock.json` (the root and the directories two levels down, without `node_modules`, `vendor` or `.worktrees`) and blocks on every high or critical advisory. An advisory can have no patched version: `GHSA-fc5q-39xc-vjpf` (ReDoS in `picomatch`, vulnerable up to 4.0.7, no `first_patched_version`) turns every project that uses Vite red, and downgrading Vite to avoid it would trade a theoretical ReDoS for known fixed flaws. Instead of turning the gate off, list the advisory under `npm_audit.allow` in `.harness.json`, with a reason and an expiry:
 
 ```json
@@ -156,12 +158,13 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
 | `pollora-qa check --mutation` | Also runs Pest's mutation testing (`pest --mutate --everything --covered-only`) and compares its score with the ratchet's `msi`; reported, never blocking by itself |
 | `pollora-qa check --mutation --mutation-base=REF` | With `"mutation": {"scope": "changed"}` in `.harness.json`, the commit the changed files are counted from (default `HEAD^1`) |
-| `pollora-qa promote-report [--json]` | For each observed rule, what would block here if it became enforced (read only, see [Promoting a rule](#promoting-a-rule)) |
+| `pollora-qa promote-report [--json] [<path>... \| --root=<dir> [--only=a,b]]` | For each observed rule, what would block here if it became enforced (read only, see [Promoting a rule](#promoting-a-rule)); with paths or `--root`, one rule x repository matrix |
 | `pollora-qa check --mutation --mutation-scope=all\|changed\|added` | What `--mutation` mutates in this run, over the `mutation.scope` of `.harness.json`. A limited scope is held to `mutation.min`, or to 50 % when the file sets none; an unknown value fails before any gate runs |
 | `pollora-qa ratchet [--update]` | Compares the metrics with `.harness.json`; `--update` records improvements, never regressions |
 | `pollora-qa deps` | Checks the declared dependencies against the profile |
 | `pollora-qa surface [--update]` | Compares the public surface with `api-surface.json`; `--update` records it |
 | `pollora-qa archive [--fix]` | Checks that development files stay out of the release archive (QA-06); `--fix` writes the missing `export-ignore` lines |
+| `pollora-qa composer-audit [--locked]` | The Composer dependency audit alone (SEC-09), which tries again when Packagist cannot be reached; same code as the `check` step, used by the reusable workflow of the templates |
 | `pollora-qa npm-audit [--config=FILE]` | The npm dependency audit alone (SEC-09), for a template that cannot carry the harness; same code as the `check` step |
 | `pollora-qa rules [ID]` | Lists the rules, or explains one |
 | `pollora-qa agents` | Regenerates the harness block of `AGENTS.md` |
@@ -293,6 +296,45 @@ It runs the gates that need nothing but the source: the secrets in the history (
 
 A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%plugin_name%`). They are not PHP, so Pint would fail to parse the file: it runs on a copy where each one is an identifier. `observed` lists the gates a template reports without blocking, the way `.harness.json` does for a package: a theme with hundreds of `{!! !!}` it has not yet been through is `observed: security` until it has.
 
+## Integration tests against a real WordPress
+
+Pollora packages test against Brain Monkey, which doubles WordPress. That is fast, and it proves the logic, but a defect that only a real WordPress shows passes the CI: `register_post_meta()` called before WordPress is loaded was found by the framework's downstream job, not by the package's own tests. The reusable workflow has an **optional** job for that. It is off by default: while the input is empty the job is skipped, nothing starts, and no other job, `needs` or required status changes.
+
+### Turning it on
+
+```yaml
+jobs:
+  harness:
+    uses: Pollora/harness/.github/workflows/php-package.yml@main
+    with:
+      wordpress-integration: tests/Integration # the suite; empty (default) = off
+      wordpress-version: latest # latest (default), nightly, 6.9, 6.9.1
+      wordpress-plugins: action-scheduler # optional, wordpress.org slugs, comma-separated
+    permissions:
+      contents: read
+```
+
+The job is named `WordPress integration PHP <version>` (one per version of `php-versions`, 8.3 and 8.4 by default). It installs WordPress with WP-CLI under `$RUNNER_TEMP/wordpress` (outside the repository, so no linter reads it), against a MySQL 8.0 service container (digest-pinned), installs the plugins asked for, then exports `WP_PATH` and `WP_CORE_DIR` (the directory holding `wp-load.php`) and `WP_TESTS_DB_HOST`, `WP_TESTS_DB_NAME`, `WP_TESTS_DB_USER`, `WP_TESTS_DB_PASSWORD` to the tests. `WP_DEBUG` is on and cron is off. It then starts the suite, in this order: the `test:integration` script of `composer.json` when there is one (the repository owns the command, as `hook` does with `composer test:wordpress`); otherwise `vendor/bin/pest -c phpunit.integration.xml` when that file exists; otherwise `vendor/bin/pest <wordpress-integration>`. The inputs are validated (a path inside the repository, a version, plugin slugs) before anything runs. Like the *Tests* job it only reports in observe mode and blocks in enforce mode; no other job needs it, so it is a status to require when the repository wants it.
+
+### The bootstrap and a first test
+
+`stubs/wordpress/` holds a bootstrap, a PHPUnit configuration and a test that proves a real WordPress is loaded. Copy them:
+
+```bash
+mkdir -p tests/Integration
+cp vendor/pollora/harness/stubs/wordpress/bootstrap.php.stub tests/Integration/bootstrap.php
+cp vendor/pollora/harness/stubs/wordpress/WordPressLoadedTest.php.stub tests/Integration/WordPressLoadedTest.php
+cp vendor/pollora/harness/stubs/wordpress/phpunit.integration.xml.stub phpunit.integration.xml
+```
+
+The bootstrap loads Composer's autoloader, then `wp-load.php` from `WP_PATH`, and stops with a clear message when it is missing. `phpunit.integration.xml` keeps the suite apart from `phpunit.xml`: **exclude `tests/Integration` from the suites of `phpunit.xml`**, otherwise the unit run would load WordPress too. The example test checks `function_exists('register_post_meta')`, `get_bloginfo()`, the database, a real hook and a real meta registration; if the bootstrap did not load WordPress, or a Brain Monkey stub were standing in, it fails. Locally: install WordPress anywhere (WP-CLI, SQLite or MySQL) and run `WP_PATH=/path/to/wordpress vendor/bin/pest -c phpunit.integration.xml`.
+
+### What it costs, and when to turn it on
+
+Expect roughly 2 to 3 minutes added per PHP version before the tests themselves (MySQL start, WordPress download and install, Composer), 30 to 60 seconds less once the caches are warm; the jobs run in parallel with the others, so a pull request waits only if this job is the slowest. These figures are estimates: they have not been measured on a pilot repository yet. WordPress archives and plugin archives are cached (restored on every run, written only by runs that are not pull requests, like Composer's cache), and `latest` is resolved to a version number first so the cache key is exact.
+
+Turn it on for a repository whose code calls WordPress functions, hooks or the database in ways a double cannot reproduce: hook registration order, `register_*`, queries, options, cron, REST routes, anything that depends on WordPress being loaded. Leave it off for pure-PHP packages with no WordPress call (the ones that already pass on doubles prove nothing more here), and keep the suite small: what a double already proves belongs in the unit suite. MySQL 8.0 is used because it is what hosts run and what `hook` already tests on; it is past its upstream support, so the image will move to 8.4 once a pilot shows the authentication plugin of the client works with it.
+
 ## Reliability and security of the workflows
 
 `php-package.yml`, `template.yml` and the harness's own `ci.yml` follow the same rules. Their contract does not change: same inputs, same job names (they are the status contexts the repositories require).
@@ -301,14 +343,14 @@ A template holds placeholders the scaffolder fills in (`%theme_namespace%`, `%pl
 - **Least privilege.** `permissions: {}` at the top, `contents: read` per job, `persist-credentials: false` on every checkout, no `pull_request_target`, and no `${{ }}` of a value a third party controls inside a `run:` (they go through `env:`).
 - **Composer authenticated with the job's token.** The steps that run Composer set `COMPOSER_AUTH='{"github-oauth": {"github.com": "${{ github.token }}"}}'`. Without it Composer downloads archives from `codeload.github.com` anonymously, and many jobs starting together on the same IPs get `HTTP/2 429` (seen on 20 November). `github.token` exists in a reusable workflow called from another repository: it is the calling run's token, with the permissions of the calling job (`contents: read`). The variable is set on the install step only, never at job level, and GitHub masks the token in the logs. A repository's `composer.json` scripts run in that step, so the token is one a collaborator's workflow already has.
 - **Composer cache.** The download cache is restored for every run, and written only by runs that are not pull requests (`main`, `develop`, tags): a pull request cannot plant an archive that another branch later installs. The key is the PHP version, the stability and the hash of `composer.json` and `composer.lock`, with a prefix fallback.
-- **Time limits.** Every job has a `timeout-minutes` (setup 5, quality 30, tests 15, contract 15, secrets 10, downstream 20), several times the longest duration observed (4 minutes for the slowest job).
+- **Time limits.** Every job has a `timeout-minutes` (setup 5, quality 30, tests 15, WordPress integration 20, contract 15, secrets 10, downstream 20), several times the longest duration observed (4 minutes for the slowest job).
 - **Concurrency.** A new push to a pull request cancels the run in progress for it; `main`, other branches, tags and manual runs have a group per run and are never cancelled.
 
 ## Promoting a rule
 
 A rule is born `observed` (`resources/rules.php`): it reports and never blocks. Moving it to `enforced` turns every repository that still breaks it red, so the move is prepared first. For the maintainer, in this order:
 
-1. **Measure.** `vendor/bin/pollora-qa promote-report` (or `--json`) prints, for each observed rule, what would block in the current repository if it were enforced: `would block (N problems)` with the first five, `clean`, `not applicable (nothing to read)` (a repository with no class or no test file: not a pass), or `no probe` (an observed rule the report cannot measure, listed rather than left out). It reads files and the recorded ratchet only: it runs no tool, writes nothing and always exits 0. CONV-08, CONV-09 and CONV-12 run the code of their Pest tests; CONV-11 compares the static type count with `ratchet.type_coverage` (the PHPStan half is the static analysis gate). Run it on every repository of the list before deciding.
+1. **Measure.** `vendor/bin/pollora-qa promote-report` (or `--json`) prints, for each observed rule, what would block in the current repository if it were enforced: `would block (N problems)` with the first five, `clean`, `not applicable (nothing to read)` (a repository with no class or no test file: not a pass), or `no probe` (an observed rule the report cannot measure, listed rather than left out). It reads files and the recorded ratchet only: it runs no tool, writes nothing and always exits 0. CONV-08, CONV-09 and CONV-12 run the code of their Pest tests; CONV-11 compares the static type count with `ratchet.type_coverage` (the PHPStan half is the static analysis gate). Run it on every repository of the list before deciding: `vendor/bin/pollora-qa promote-report --root=/path/to/workspace [--only=a,b,c] [--json]` (or `promote-report <path>...`) measures every repository in one run and prints a rule x repository matrix (a number is the count of problems that would block, `n/a` nothing to read); `--json` gives `repositories` (the rows of each one, its static `type_coverage` and the `floor` to record in `ratchet.type_coverage`: the measure rounded down to 0.1 point) and `matrix` (`rule`, `repository`, `verdict`, `count`). A directory without `composer.json` is measured as not applicable, never dropped; a directory that does not exist or an invalid `.harness.json` is named on stderr and ends with status 1 after the matrix is printed. Without argument the report of the current repository is unchanged.
 2. **Declare the motivated exemptions.** A repository that cannot satisfy a rule yet (published attribute classes that cannot become `final`) adds `{ "rule": "CONV-08", "reason": "…" }` to `allow_rules` (see above). The reason is required, the number of exemptions is the `exempted_rules` ceiling of the ratchet, and the exemption only takes effect when the rule is enforced.
 3. **Record the floors.** `vendor/bin/pollora-qa ratchet --update` writes the metrics that have a floor, `type_coverage` for CONV-11 and `exempted_rules` for the exemptions. From then on a drop fails QA-01 in `enforce` mode and only warns in `observe`. `type_coverage` must be a number from 0 to 100 and every other ratchet key is validated too: a value the ratchet could not compare makes `.harness.json` invalid instead of being ignored.
 4. **Promote.** Change the `status` of the rule to `enforced` in `resources/rules.php`, then run `php bin/pollora-qa agents` and commit `AGENTS.md` (the CI checks that its block matches the catalogue). Nothing else in the code changes: the test that was incomplete now fails.
@@ -380,7 +422,9 @@ The harness no longer only measures: every repository that adopted it runs the g
 | Observed | 7 | CONV-02 (no raw registration arrays), CONV-08 (final classes), CONV-09 (thin facades), CONV-11 (native types), CONV-12 (Pest functions), PERF-01 (query budgets), PERF-07 (nightly measures) |
 | Planned | 1 | CONV-01 |
 
-`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress and adapter contract tests. The performance budgets are checked from their files (see [Performance budgets](#performance-budgets)); the measuring itself stays in the repository that owns a site.
+**Why CONV-01 stays `planned`.** The rule ("the common case needs no configuration") was read four ways over the 45 repositories, with `nikic/php-parser`, and none is precise enough to report without noise. (1) A public static factory, or a public method of a `*Builder` / `*Factory` / `*Registry` / `*Registrar` / `*Manager`, with 4 required parameters (3 when one is a required `bool`), exceptions, interfaces, callbacks, `@internal`, Infrastructure, Console and Providers left out: 22 reports in 8 repositories, about 1 s; 5 were real (`Ability::create()` and `AbilityDefinition::reading()` / `writing()` with 7 required arguments, `Registry::table()` / `variables()`), 17 were not (12 view helpers of an admin screen, internal factories of the harness, a three-boolean predicate). Without the admin screens and from 5 required parameters: 6 reports, 3 real. (2) A public constructor with 3 or more required scalars: 55 reports, nearly all value objects, events and DTOs, whose fields are required by nature. (3) A required `bool` next to another required parameter: 10 reports, 3 real (`put($path, $contents, $dryRun)`), the others WordPress callbacks and setters. (4) Any public method with 4 or more required parameters: 62 outside constructors, about half of them WordPress hook callbacks or signatures imposed by a contract. Deciding that a parameter has an "obvious default" is a judgment on meaning, not on syntax, and the few real cases (6 to 10 in 45 repositories) are too few to show a false-positive rate under 10 %. The rule stays with its present tool: review, and the documentation examples run as tests.
+
+`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Integration tests against a real WordPress are an opt-in job (see [Integration tests against a real WordPress](#integration-tests-against-a-real-wordpress)). Still to come: adapter contract tests. The performance budgets are checked from their files (see [Performance budgets](#performance-budgets)); the measuring itself stays in the repository that owns a site.
 
 ## Contributing
 

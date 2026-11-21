@@ -6,6 +6,8 @@ namespace Pollora\Harness\Console\Commands;
 
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\Mode;
+use Pollora\Harness\Config\MutationSettings;
+use Pollora\Harness\Config\NpmAuditSettings;
 use Pollora\Harness\Config\PerformanceSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Console\Command;
@@ -71,6 +73,11 @@ final class InitCommand implements Command
             observed: $existing->observed ?? [],
             allowCommands: $existing->allowCommands ?? [],
             allowRules: $existing->allowRules ?? [],
+            // What init does not decide is carried over whole: running it again must never erase a setting.
+            mutation: $existing->mutation ?? new MutationSettings,
+            npmAudit: $existing->npmAudit ?? new NpmAuditSettings,
+            services: $existing->services ?? [],
+            slowStepShare: $existing?->slowStepShare,
             performance: $existing->performance ?? new PerformanceSettings,
         );
 
