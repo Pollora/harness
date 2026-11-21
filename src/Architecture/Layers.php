@@ -113,7 +113,7 @@ final readonly class Layers
      */
     private static function psr4(string $root): array
     {
-        $composer = json_decode((string) @file_get_contents(rtrim($root, '/').'/composer.json'), true);
+        $composer = is_file(rtrim($root, '/').'/composer.json') ? json_decode((string) file_get_contents(rtrim($root, '/').'/composer.json'), true) : null;
         $autoload = is_array($composer) && is_array($composer['autoload'] ?? null) ? $composer['autoload'] : [];
         $map = is_array($autoload['psr-4'] ?? null) ? $autoload['psr-4'] : [];
         $resolved = [];
