@@ -50,6 +50,14 @@ final readonly class Plan
     public const string ARCH_OUTSIDE_SUITES = 'tests/Arch.php is in no test suite of phpunit.xml, so vendor/bin/pest alone would skip the architecture rules: running it explicitly too (add it to a suite to run it once).';
 
     /**
+     * The rules the architecture steps name in the summary: those `Architecture::register()` evaluates.
+     * `RuleExemption::EXEMPTIBLE` lists the same rules (a test keeps them aligned).
+     *
+     * @var list<string>
+     */
+    public const array ARCHITECTURE_RULES = ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07', 'CONV-08', 'CONV-09', 'CONV-12'];
+
+    /**
      * Gates reported but never blocking, whatever `.harness.json` says: a new
      * gate starts here so that a release does not turn a green repository red.
      *
@@ -75,7 +83,7 @@ final readonly class Plan
             $changedFiles === null ? $this->staticAnalysis([], $note) : ($changedFiles === []
                 ? Step::skipped('Static analysis', ['ARCH-02', 'CONV-11'], 'no PHP file changed')
                 : $this->staticAnalysis($changedFiles)),
-            new Step('Architecture', ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'], ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest'], note: $this->exemptedRules(), exempted: $this->exemptedRuleIds()),
+            new Step('Architecture', self::ARCHITECTURE_RULES, ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest'], note: $this->exemptedRules(), exempted: $this->exemptedRuleIds()),
             $this->dependencyPolicy(),
         ];
     }
@@ -94,7 +102,7 @@ final readonly class Plan
             new Step('Rector', ['CONV-11'], ['vendor/bin/rector', 'process', '--dry-run', '--no-progress-bar'], requires: ['rector.php', 'vendor/bin/rector']),
             new Step(
                 'Tests and architecture',
-                ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'],
+                self::ARCHITECTURE_RULES,
                 $this->tests($coverage),
                 requires: ['vendor/bin/pest'],
                 note: $this->joinNotes($this->architectureOutsideSuites() ? self::ARCH_OUTSIDE_SUITES : null, $this->exemptedRules()),
@@ -113,7 +121,8 @@ final readonly class Plan
     }
 
     /**
-     * The rules `.harness.json` exempts (allow_rules), one line each, so the gate says what it does not evaluate.
+     * The rules `.harness.json` exempts (allow_rules), one line each, so the gate says what it does not evaluate
+     * (and which declared exemptions it does not apply yet, because the rule is observed).
      */
     private function exemptedRules(): ?string
     {
@@ -125,11 +134,16 @@ final readonly class Plan
     }
 
     /**
+     * The exemptions that take effect now: a declared exemption of an observed rule is not one.
+     *
      * @return list<string>
      */
     private function exemptedRuleIds(): array
     {
-        return array_map(static fn (RuleExemption $exemption): string => $exemption->rule, $this->config->allowRules);
+        return array_values(array_map(
+            static fn (RuleExemption $exemption): string => $exemption->rule,
+            array_filter($this->config->allowRules, static fn (RuleExemption $exemption): bool => $exemption->applies()),
+        ));
     }
 
     private function joinNotes(?string ...$notes): ?string

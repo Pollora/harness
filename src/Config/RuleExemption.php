@@ -18,7 +18,7 @@ use Pollora\Harness\Rules\Catalogue;
 final readonly class RuleExemption
 {
     /** The rules `Architecture::register()` evaluates; the others belong to another gate. */
-    public const array EXEMPTIBLE = ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07'];
+    public const array EXEMPTIBLE = ['ARCH-01', 'ARCH-03', 'ARCH-08', 'ARCH-09', 'CONV-03', 'CONV-05', 'CONV-07', 'CONV-08', 'CONV-09', 'CONV-12'];
 
     public function __construct(
         public string $rule,
@@ -57,10 +57,26 @@ final readonly class RuleExemption
     }
 
     /**
+     * Whether the exemption changes what the rule does today.
+     *
+     * A rule the catalogue lists as `observed` never blocks, so exempting it would hide its findings for
+     * nothing: the exemption is accepted and counted by the ratchet (so a repository can declare it, with its
+     * reason, before the rule is promoted) but the rule keeps running and reporting until it is `enforced`.
+     */
+    public function applies(): bool
+    {
+        return (Catalogue::all()[$this->rule]['status'] ?? 'enforced') !== 'observed';
+    }
+
+    /**
      * What the gate and the skipped test say.
      */
     public function message(): string
     {
+        if (! $this->applies()) {
+            return "declared, not applied while the rule is observed: {$this->rule} — {$this->reason}";
+        }
+
         return "exempted: {$this->rule} — {$this->reason}";
     }
 

@@ -40,6 +40,41 @@ final readonly class Ratchet
     public function __construct(public array $values = []) {}
 
     /**
+     * Refuses a recorded value the ratchet could not compare, instead of reading it as "never measured".
+     *
+     * The percentages (`coverage`, `type_coverage`, `msi`) are numbers from 0 to 100, the PHPStan level an
+     * integer from 0 to 10 or "max", and the two counts non-negative integers. A key that is absent or null is fine.
+     *
+     * @param  array<mixed>  $data  The `ratchet` object of .harness.json
+     *
+     * @throws InvalidConfig
+     */
+    public static function validate(array $data, string $path): void
+    {
+        foreach (array_keys(self::METRICS) as $metric) {
+            $value = $data[$metric] ?? null;
+
+            if ($value === null) {
+                continue;
+            }
+
+            $valid = match ($metric) {
+                'phpstan_level' => $value === 'max' || (is_int($value) && $value >= 0 && $value <= self::MAX_PHPSTAN_LEVEL),
+                'phpstan_baseline', 'exempted_rules' => is_int($value) && $value >= 0,
+                default => (is_int($value) || is_float($value)) && $value >= 0 && $value <= 100,
+            };
+
+            if (! $valid) {
+                throw InvalidConfig::ratchetValue($path, $metric, $value, match ($metric) {
+                    'phpstan_level' => 'an integer from 0 to 10, or "max"',
+                    'phpstan_baseline', 'exempted_rules' => 'a whole number, 0 or more',
+                    default => 'a number from 0 to 100 (a percentage)',
+                });
+            }
+        }
+    }
+
+    /**
      * @param  array<mixed>  $data
      */
     public static function fromArray(array $data): self
