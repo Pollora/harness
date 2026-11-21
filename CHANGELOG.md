@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`promote-report` measures many repositories in one run.** `pollora-qa promote-report <path>...` or `--root=<dir> [--only=a,b]` prints a rule x repository matrix (text) or, with `--json`, `{repositories, matrix}`: for each repository the rows of the single report, its static `type_coverage` and the `floor` to record in `ratchet.type_coverage` (rounded down to 0.1 point so that measurement noise cannot fail the ratchet), and one `{rule, repository, verdict, count}` cell per rule. A directory without `composer.json` is `not-applicable`; an unreadable directory or an invalid `.harness.json` is named and gives status 1 (never counted clean). Without argument the report of the current repository is unchanged. The promotion study of the 45 repositories is now replayable without an agent.
+
+### Fixed
+
+- `Layers::psr4()` no longer reads a missing `composer.json` through a suppressed warning (a directory without one is simply empty).
+
 ## [0.1.34] - 2026-11-21
 
 ### Added

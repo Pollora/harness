@@ -10,6 +10,7 @@ use Pollora\Harness\Architecture\Layers;
 use Pollora\Harness\Architecture\RawRegistrationArrays;
 use Pollora\Harness\Architecture\TestClasses;
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Config\InvalidConfig;
 use Pollora\Harness\Config\PerformanceSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Metrics\TypeCoverage;
@@ -86,6 +87,62 @@ final class PromotionReport
         }
 
         return $rows;
+    }
+
+    /**
+     * The same report over several repositories, as one matrix (`promote-report <path>... | --root=<dir>`).
+     *
+     * A repository that cannot be read (missing directory, invalid `.harness.json`) gets an `error` and no rows:
+     * it is never counted as clean, so the matrix cannot hide a repository it did not measure.
+     *
+     * `type_coverage` is the static CONV-11 measure of each repository and `floor` the value to record in
+     * `ratchet.type_coverage`: the measure rounded DOWN to 0.1 point, so that the noise of a later
+     * measurement cannot fail the ratchet.
+     *
+     * @param  list<string>  $roots  Repository directories
+     * @return array{
+     *     repositories: array<string, array{path: string, error: string|null, type_coverage: float|null, floor: float|null, rules: list<array{rule: string, title: string, verdict: string, count: int, first: list<string>, note: string, exempted: string|null}>}>,
+     *     matrix: list<array{rule: string, repository: string, verdict: string, count: int}>
+     * }
+     */
+    public static function buildMany(array $roots): array
+    {
+        $repositories = [];
+        $matrix = [];
+
+        foreach ($roots as $root) {
+            $name = basename(rtrim($root, '/'));
+            if ($name === '') {
+                $name = $root;
+            }
+
+            if (isset($repositories[$name])) {
+                $name = $root;
+            }
+
+            $entry = ['path' => $root, 'error' => null, 'type_coverage' => null, 'floor' => null, 'rules' => []];
+
+            if (! is_dir($root)) {
+                $entry['error'] = 'not a directory';
+            } else {
+                try {
+                    $entry['rules'] = self::build($root);
+                    $measured = TypeCoverage::measure($root)->percentage();
+                    $entry['type_coverage'] = $measured;
+                    $entry['floor'] = $measured === null ? null : floor(round($measured * 10, 6)) / 10;
+                } catch (InvalidConfig $invalidConfig) {
+                    $entry['error'] = $invalidConfig->getMessage();
+                }
+            }
+
+            foreach ($entry['rules'] as $row) {
+                $matrix[] = ['rule' => $row['rule'], 'repository' => $name, 'verdict' => $row['verdict'], 'count' => $row['count']];
+            }
+
+            $repositories[$name] = $entry;
+        }
+
+        return ['repositories' => $repositories, 'matrix' => $matrix];
     }
 
     /**
