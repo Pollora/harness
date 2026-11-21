@@ -6,6 +6,10 @@
 
 - **Integration tests against a real WordPress: an optional `WordPress integration` job in `php-package.yml`.** Three new optional inputs, all off or neutral by default: `wordpress-integration` (the suite directory, for example `tests/Integration`; empty, the default, skips the job), `wordpress-version` (`latest`, `nightly` or a version number) and `wordpress-plugins` (wordpress.org slugs). The job, named `WordPress integration PHP <version>`, installs WordPress with WP-CLI against a digest-pinned MySQL 8.0 service container, caches the downloads, and starts the `test:integration` script, `phpunit.integration.xml` or the directory, on PHP 8.3 and 8.4, with a 20-minute timeout. It is skipped while the input is empty and no other job depends on it: no job name, `needs`, `if` or input of the existing jobs changes. `stubs/wordpress/` holds the bootstrap, the PHPUnit configuration and a test that proves a real WordPress is loaded; the README explains the cost and when to turn it on.
 
+### Documentation
+
+- **CONV-01 stays `planned`, and the README says why.** Four readings of "the common case needs no configuration" were measured over the 45 repositories (long required parameter lists on public factories and registries, constructors with many scalars, required boolean flags, any public method with 4 or more required parameters): the best one reports 22 methods, 5 real, so no code was added. The figures are in the README, under *Status*.
+
 ## [0.1.34] - 2026-11-21
 
 ### Added
