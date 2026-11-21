@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **CONV-01 stays `planned`, and the README says why.** Four readings of "the common case needs no configuration" were measured over the 45 repositories (long required parameter lists on public factories and registries, constructors with many scalars, required boolean flags, any public method with 4 or more required parameters): the best one reports 22 methods, 5 real, so no code was added. The figures are in the README, under *Status*.
+
 ## [0.1.34] - 2026-11-21
 
 ### Added
