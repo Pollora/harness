@@ -73,7 +73,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION, self::PERFORMANCE, self::SEMGREP_OBSERVED];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION, self::SEMGREP_OBSERVED];
 
     public function __construct(
         private HarnessConfig $config,
@@ -131,6 +131,21 @@ final readonly class Plan
             ...($mutation ? [$this->config->mutation->limited() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
             $this->ratchet($coverage, $infection, $score, $mutation && $this->config->mutation->limited()),
         ];
+    }
+
+    /**
+     * What `template.yml` runs for a template that declares a `.harness.json`: the ratchet alone.
+     *
+     * A template installs nothing, so PHPStan, Rector, the tests and the rest of `full()` do not apply; the
+     * ratchet reads the source with nikic/php-parser (no autoloader, no `composer install` of the template),
+     * and the Clover report only when the template produced one. Each step it does not run stays the job of
+     * the other jobs of `template.yml`.
+     *
+     * @return list<Step>
+     */
+    public function template(?string $coverage = null): array
+    {
+        return [$this->ratchet($coverage, null)];
     }
 
     /**

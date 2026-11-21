@@ -57,11 +57,10 @@ it('says what would block for each observed rule, with the first problems', func
     ]);
     $rows = promoteRows($root);
 
-    expect(array_keys($rows))->toBe(['CONV-02', 'CONV-08', 'CONV-09', 'CONV-11', 'CONV-12', 'SEC-10', 'SEC-11', 'SEC-12', 'SEC-13', 'PERF-01', 'PERF-07'])
+    expect(array_keys($rows))->toBe(['CONV-02', 'CONV-08', 'CONV-11', 'CONV-12', 'SEC-10', 'SEC-11', 'SEC-12', 'SEC-13'])
         ->and($rows['CONV-08']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($rows['CONV-08']['count'])->toBe(1)
         ->and($rows['CONV-08']['first'][0])->toContain('Acme\\Promo\\Open is not final')
-        ->and($rows['CONV-09']['verdict'])->toBe(PromotionReport::CLEAN)
         ->and($rows['CONV-02']['verdict'])->toBe(PromotionReport::CLEAN)
         ->and($rows['CONV-12']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($rows['CONV-12']['first'][0])->toContain('OldTest is a PHPUnit test class');
@@ -78,16 +77,33 @@ it('says CONV-02 would block a public method that takes a raw registration array
         ->and($row['first'][0])->toContain('src/PostTypes/Registrar.php');
 });
 
+/**
+ * The rows of a repository while PERF-01, PERF-07 and CONV-09 are listed as observed again: their probes stay, for the next rule that is born observed.
+ *
+ * @param  array<string, string>  $files
+ * @return array<string, array{rule: string, title: string, verdict: string, count: int, first: list<string>, note: string, exempted: string|null}>
+ */
+function promoteRowsObserved(array $files): array
+{
+    return withCatalogueStatus('PERF-01', 'observed', fn (): array => withCatalogueStatus('PERF-07', 'observed', fn (): array => withCatalogueStatus('CONV-09', 'observed', fn (): array => promoteRows(promoteProject($files)))));
+}
+
+it('leaves out CONV-09, PERF-01 and PERF-07 now that they are enforced', function (): void {
+    $rows = promoteRows(promoteProject(['src/Open.php' => "namespace Acme\\Promo;\n\nfinal class Open {}"]));
+
+    expect($rows)->not->toHaveKey('CONV-09')->not->toHaveKey('PERF-01')->not->toHaveKey('PERF-07');
+});
+
 it('says PERF-01 and PERF-07 are not applicable when the repository declares neither, and reads them when it does', function (): void {
-    $bare = promoteRows(promoteProject(['src/Open.php' => "namespace Acme\\Promo;\n\nfinal class Open {}"]));
+    $bare = promoteRowsObserved(['src/Open.php' => "namespace Acme\\Promo;\n\nfinal class Open {}"]);
 
     expect($bare['PERF-01']['verdict'])->toBe(PromotionReport::NOT_APPLICABLE)
         ->and($bare['PERF-07']['verdict'])->toBe(PromotionReport::NOT_APPLICABLE);
 
-    $declared = promoteRows(promoteProject([
+    $declared = promoteRowsObserved([
         'src/Open.php' => "namespace Acme\\Promo;\n\nfinal class Open {}",
         'tests/e2e/budgets.json' => '{"pages": {"home": {"wp": "many"}}}',
-    ]));
+    ]);
 
     expect($declared['PERF-01']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($declared['PERF-01']['first'][0])->toContain('PERF-01:')
@@ -111,7 +127,7 @@ it('quotes five problems at most and counts the others', function (): void {
 });
 
 it('says "not applicable" when there is nothing to read, which is not a pass', function (): void {
-    $rows = promoteRows(promoteProject([]));
+    $rows = promoteRowsObserved([]);
 
     foreach (['CONV-02', 'CONV-08', 'CONV-09', 'CONV-12', 'CONV-11'] as $rule) {
         expect($rows[$rule]['verdict'])->toBe(PromotionReport::NOT_APPLICABLE)->and($rows[$rule]['note'])->not->toBe('');
@@ -162,7 +178,7 @@ it('prints the same report as JSON', function (): void {
     $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
 
     expect($code)->toBe(0)
-        ->and(array_column($data['rules'], 'rule'))->toBe(['CONV-02', 'CONV-08', 'CONV-09', 'CONV-11', 'CONV-12', 'SEC-10', 'SEC-11', 'SEC-12', 'SEC-13', 'PERF-01', 'PERF-07'])
+        ->and(array_column($data['rules'], 'rule'))->toBe(['CONV-02', 'CONV-08', 'CONV-11', 'CONV-12', 'SEC-10', 'SEC-11', 'SEC-12', 'SEC-13'])
         ->and($data['rules'][1])->toHaveKeys(['rule', 'title', 'verdict', 'count', 'first', 'note', 'exempted'])
         ->and($data['rules'][1]['verdict'])->toBe('would-block');
 });

@@ -40,12 +40,18 @@ final class CheckCommand implements Command
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
               --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
+              --template          Check a template (what template.yml runs): the ratchet of its optional .harness.json (or .github/harness.json), nothing at all without one
+              --config=FILE       With --template, the file to read instead of .harness.json, then .github/harness.json
               --report=FILE       Where to write the JSON report (default .harness/report.json)
             TXT;
     }
 
     public function run(Io $io): int
     {
+        if ($io->flag('template')) {
+            return $this->template($io);
+        }
+
         $config = HarnessConfig::load($io->cwd);
         $mode = match (true) {
             $io->flag('enforce') => Mode::Enforce,
@@ -87,10 +93,45 @@ final class CheckCommand implements Command
     }
 
     /**
+     * `check --template`: the gates `template.yml` cannot run as separate jobs, read from the optional file of
+     * the template. Without a file it does nothing and succeeds, so that a template that never adopted one
+     * behaves exactly as before. The mode is the workflow's (--enforce / --observe), not the file's.
+     */
+    private function template(Io $io): int
+    {
+        $file = $io->option('config') ?? HarnessConfig::locateForTemplate($io->cwd);
+
+        if ($file === null) {
+            $io->line('No .harness.json (or .github/harness.json) in this template: nothing to check beyond the other gates.');
+
+            return self::SUCCESS;
+        }
+
+        $config = HarnessConfig::loadForTemplate($io->cwd, $file);
+
+        $mode = $io->flag('enforce') ? Mode::Enforce : Mode::Observe;
+        $steps = (new Plan($config, $io->cwd))->template($this->coverageReport($io, false));
+
+        $io->line(sprintf('Pollora harness · template (%s) · %s mode', $file, $mode->value));
+
+        $report = new Report($config->profile, $mode, false, (new Runner($io, $io->cwd))->run($steps), [...$config->observed, ...Plan::OBSERVED_BY_DEFAULT], $io->flag('strict'), $config->slowStepShare);
+        $report->print($io);
+        $report->writeJson($io->cwd.'/'.($io->option('report') ?? '.harness/report.json'));
+
+        $summary = getenv('GITHUB_STEP_SUMMARY');
+
+        if (is_string($summary) && $summary !== '') {
+            file_put_contents($summary, $report->markdown(), FILE_APPEND);
+        }
+
+        return $report->hasBlockingFailures() ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
      * The Clover report to write and read: the file given, or the conventional one for a bare --coverage.
      */
-    private function coverageReport(Io $io): ?string
+    private function coverageReport(Io $io, bool $bare = true): ?string
     {
-        return $io->option('coverage') ?? ($io->flag('coverage') ? Collector::CLOVER_LOCATIONS[0] : null);
+        return $io->option('coverage') ?? ($bare && $io->flag('coverage') ? Collector::CLOVER_LOCATIONS[0] : null);
     }
 }

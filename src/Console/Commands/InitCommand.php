@@ -14,6 +14,7 @@ use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
 use Pollora\Harness\Deps\DependencyPolicy;
 use Pollora\Harness\Metrics\Collector;
+use Pollora\Harness\Metrics\TypeCoverage;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Scaffold\Scaffolder;
 
@@ -37,6 +38,7 @@ final class InitCommand implements Command
         return <<<'TXT'
               --profile=PROFILE   core, framework, integration, wp-plugin, template or project
               --mode=MODE         observe (default) or enforce
+              --config=FILE       With --profile=template, where to write the file (default .harness.json; .github/harness.json is read too)
               --downstream=LIST   Repositories to run against this one (none by default, for instance framework)
             TXT;
     }
@@ -50,6 +52,10 @@ final class InitCommand implements Command
             $io->error('Choose a profile: --profile='.implode('|', Profile::values()));
 
             return self::FAILURE;
+        }
+
+        if ($profile === Profile::Template) {
+            return $this->template($io);
         }
 
         $collector = new Collector($io->cwd);
@@ -90,6 +96,33 @@ final class InitCommand implements Command
         $io->line();
         $io->line($io->success("Harness applied (profile {$profile->value}, {$config->mode->value} mode)."));
         $io->line('Next: composer require --dev pollora/harness, then composer qa.');
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * `init --profile=template`: the one file a template can carry, `template.yml` reading it, and nothing else.
+     *
+     * A template cannot hold the rest of the harness (no `pollora/harness`, no `AGENTS.md`, no workflow of its own
+     * but the one that calls `template.yml`), so this writes the profile and the type coverage floor measured now,
+     * rounded down to a tenth. A file that already exists keeps everything it has: only a floor it lacks is added.
+     */
+    private function template(Io $io): int
+    {
+        $file = $io->option('config') ?? HarnessConfig::locateForTemplate($io->cwd) ?? HarnessConfig::FILE;
+        $existing = is_file(HarnessConfig::path($io->cwd, $file)) ? HarnessConfig::loadAny($io->cwd, $file) : null;
+        $config = $existing ?? new HarnessConfig(Profile::Template);
+        $measured = TypeCoverage::measure($io->cwd)->percentage();
+
+        if ($measured !== null && $config->ratchet->get('type_coverage') === null) {
+            $config = $config->withRatchet(new Ratchet([...$config->ratchet->values, 'type_coverage' => floor($measured * 10) / 10]));
+        }
+
+        $config->save($io->cwd, $file, template: true);
+
+        $io->line('  · wrote '.$file.($measured === null ? ' (no PHP to measure: no type coverage floor recorded)' : ''));
+        $io->line();
+        $io->line($io->success("Template file written ({$file}). Nothing else was created: template.yml reads it."));
 
         return self::SUCCESS;
     }
