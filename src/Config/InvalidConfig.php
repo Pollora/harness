@@ -141,4 +141,9 @@ final class InvalidConfig extends RuntimeException
     {
         return new self("{$path}: npm_audit.allow lists {$advisory} twice.");
     }
+
+    public static function performance(string $path, string $reason): self
+    {
+        return new self("{$path}: performance is malformed: {$reason}.");
+    }
 }

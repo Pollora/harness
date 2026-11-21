@@ -56,7 +56,7 @@ composer qa
 }
 ```
 
-The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis`, `Rector`, `Tests and architecture`, `Dependency policy`, `Dependency analysis`, `Security patterns`, `Dependency audit`, `Public surface`, `Ratchet`. Shorten the list as each gate comes clean.
+The names are the ones `pollora-qa check` prints: `Code style`, `Static analysis`, `Rector`, `Tests and architecture`, `Dependency policy`, `Dependency analysis`, `Security patterns`, `Dependency audit`, `Public surface`, `Performance budgets`, `Ratchet`. Shorten the list as each gate comes clean.
 
 The **Code style** gate checks with the repository's own `pint.json` when that file already requires `declare_strict_types` (ARCH-09), so a package keeps the style it chose; without one, or with one that does not require it, the harness preset applies.
 
@@ -146,7 +146,7 @@ The **Dependency analysis** gate uses the repository's `composer-dependency-anal
 
 | Command | Does |
 | --- | --- |
-| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed, with the time-limited exceptions of `npm_audit`), the public surface (and the names of its hooks and commands), ratchet |
+| `pollora-qa check` | Every gate (G1 and G2): style, PHPStan, Rector, tests and architecture, dependency policy and analysis, Semgrep, `composer audit`, `npm audit` (observed, with the time-limited exceptions of `npm_audit`), the public surface (and the names of its hooks and commands), the performance budgets and nightly measures (observed), ratchet |
 | `pollora-qa check --fast` | The fast gates (G0) on the files changed in the working tree; the whole tree where git is not usable |
 | `pollora-qa check --strict` | Also fails when a gate could not run because a tool is missing (Semgrep, a `vendor/bin/` tool) |
 | `pollora-qa check --coverage[=FILE]` | Runs the tests with coverage and compares the Clover report with the ratchet (default `.harness/coverage.xml`) |
@@ -283,6 +283,35 @@ A directory ignored with `/tests export-ignore` cannot be seen file by file, whi
 
 The gate **blocks** in `enforce` mode, like the others; a repository that is not ready lists `Distribution archive` under `observed` in `.harness.json`. It started observed in 0.1.15, so that raising the harness turned no repository red, and blocks since 0.1.16 now that the repositories are aligned.
 
+## Performance budgets
+
+The **Performance budgets** gate (PERF-01 and PERF-07) reads files; it never starts a site. The framework measures the SQL queries of each type of page and the boot, cold discovery and thumbnail timings in its own browser tests (`tests/e2e`); the gate checks that those measures are still declared, still wired and never loosened. It is `observed`: it reports, and only blocks once it has been measured on every repository and promoted.
+
+**PERF-01, the query budgets.** The gate applies when the repository has a budgets file (default `tests/e2e/budgets.json`) and checks:
+
+- the shape: `{ "pages": { "home": { "wordpress": 24, "laravel": 0 } } }`, every budget a whole number of queries (0 is a real limit) or `null`;
+- the `null` budgets, listed as `measured only`: a page with no budget is not held to anything;
+- the ratchet: a budget that **went up**, was turned into `null` or was removed since the base commit fails the gate. A budget never goes up without a written decision. The base is `HEAD^1` (the target branch on a pull request's merge commit, so the checkout needs `fetch-depth: 2`; the reusable workflow does that), or `--budgets-base=REF`. When the base is not in the checkout, the file is new there or the file of the base is unreadable, the gate says `not compared with <base>: <why>` and passes on the other checks: it never reports a comparison that did not happen.
+
+**PERF-07, the nightly measures.** The gate applies when the repository has the measuring file (default `tests/e2e/specs/perf-metrics.spec.ts`) or declares `performance.nightly`. It checks that the measuring file and the comparing file (default `tests/e2e/bin/perf-compare.ts`) exist, that a workflow has an `on: schedule` trigger with a `cron`, that this workflow runs the measure and the comparison, and that the `--tolerance` it gives the comparison is at most 0.1 (an alert above 10 %); with no `--tolerance` it says the script's default applies and that it did not verify it. The reference a night is compared with is a CI cache entry in the framework, not a file, so the comparing script stands for it. This is a static reading: it proves the wiring is declared, not that last night passed.
+
+In a repository that declares neither, the step is `skipped` with its reason (never `passed`). Where to look is set under `performance` in `.harness.json`, every key optional:
+
+```json
+{
+    "performance": {
+        "budgets": "tests/e2e/budgets.json",
+        "nightly": {
+            "measure": "tests/e2e/specs/perf-metrics.spec.ts",
+            "compare": "tests/e2e/bin/perf-compare.ts",
+            "workflow": ".github/workflows/ci.yml"
+        }
+    }
+}
+```
+
+`nightly: {}` declares the nightly measures with the default paths, so a repository that lost the files is told so instead of being skipped. Paths are relative to the repository, without `..`; anything else makes `.harness.json` invalid. Without `workflow`, every file of `.github/workflows` is read.
+
 ## Rules
 
 `vendor/bin/pollora-qa rules` prints the catalogue, from `resources/rules.php`. Each rule is `enforced` (fails the gate), `observed` (reported only) or `planned` (not checked by this version yet).
@@ -296,10 +325,10 @@ The harness no longer only measures: every repository that adopted it runs the g
 | | Rules | Which |
 | --- | --- | --- |
 | Enforced | 32 | style, PHPStan, architecture tests, dependency policy, Semgrep patterns (SEC-01 to SEC-07, CONV-10, and ARCH-05 on the framework), the names of hooks and commands (CONV-04, CONV-06), the downstream job (QA-03, which keeps the framework green), secrets, `composer audit`, the ratchet, the public surface, backward compatibility, the distribution archive, the warm-cache and query-count tests of discovery and Colt (PERF-02, PERF-03, which run in those packages' own suites) |
-| Observed | 4 | CONV-08 (final classes), CONV-09 (thin facades), CONV-11 (native types), CONV-12 (Pest functions) |
-| Planned | 4 | CONV-01, CONV-02, PERF-01, PERF-07 |
+| Observed | 6 | CONV-08 (final classes), CONV-09 (thin facades), CONV-11 (native types), CONV-12 (Pest functions), PERF-01 (query budgets), PERF-07 (nightly measures) |
+| Planned | 2 | CONV-01, CONV-02 |
 
-`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress, adapter contract tests and performance budgets, which are what the planned PERF-01 and PERF-07 rules wait for.
+`pollora-qa rules` prints the catalogue. Done since the first phase: the mutation score (`check --mutation`, see [Mutation score and the ratchet](#mutation-score-and-the-ratchet)) and the blocking Semgrep rules. Still to come: integration tests against a real WordPress and adapter contract tests. The performance budgets are checked from their files (see [Performance budgets](#performance-budgets)); the measuring itself stays in the repository that owns a site.
 
 ## Contributing
 

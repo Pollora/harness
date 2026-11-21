@@ -51,10 +51,10 @@ return [
     'SEC-09' => ['title' => 'No dependency with a known vulnerability', 'tool' => 'composer audit, npm audit (time-limited exceptions in npm_audit)', 'gate' => 'G1', 'status' => 'enforced'],
 
     // Performance
-    'PERF-01' => ['title' => 'SQL queries per page type never exceed the reference', 'tool' => 'Golden project', 'gate' => 'G2', 'status' => 'planned'],
+    'PERF-01' => ['title' => 'SQL queries per page type never exceed the reference', 'tool' => 'Budgets file (check, Performance budgets)', 'gate' => 'G2', 'status' => 'observed'],
     'PERF-02' => ['title' => 'Discovery reads no file when its cache is warm', 'tool' => 'Pest test with a file-access probe (discovery)', 'gate' => 'G1', 'status' => 'enforced'],
     'PERF-03' => ['title' => 'No N+1 query in Colt', 'tool' => 'Pest test counting SQL queries (colt)', 'gate' => 'G1', 'status' => 'enforced'],
-    'PERF-07' => ['title' => 'Boot, cold discovery and thumbnail timings tracked nightly, alert above 10 %', 'tool' => 'PHPBench', 'gate' => 'G3', 'status' => 'planned'],
+    'PERF-07' => ['title' => 'Boot, cold discovery and thumbnail timings tracked nightly, alert above 10 %', 'tool' => 'Scheduled workflow (check, Performance budgets)', 'gate' => 'G3', 'status' => 'observed'],
 
     // Process
     'QA-01' => ['title' => 'Ratchet: no metric gets worse (PHPStan level and baseline, coverage, mutation score)', 'tool' => 'pollora-qa ratchet', 'gate' => 'G2', 'status' => 'enforced'],

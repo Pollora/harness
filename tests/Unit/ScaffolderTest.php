@@ -164,8 +164,8 @@ it('replaces only its own block in AGENTS.md', function (): void {
 it('lists every enforced and observed rule in AGENTS.md, and no planned one', function (): void {
     $block = AgentsFile::block(HarnessConfig::fromArray(['profile' => 'core']));
 
-    expect($block)->toContain('**ARCH-02**', '**SEC-03**', '**QA-01**')
-        ->not->toContain('**PERF-01**');
+    expect($block)->toContain('**ARCH-02**', '**SEC-03**', '**QA-01**', '**PERF-01**', '**PERF-07**')
+        ->not->toContain('**CONV-01**');
 });
 
 it('pins the generated workflow to the given release tag', function (): void {

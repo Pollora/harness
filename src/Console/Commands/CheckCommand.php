@@ -34,6 +34,7 @@ final class CheckCommand implements Command
               --infection=FILE    Infection JSON log to compare with the ratchet
               --mutation          Run Pest's mutation testing (pest --mutate) and compare its score with the ratchet's msi
               --mutation-base=REF With mutation.scope "changed", the commit the changed files are counted from (default HEAD^1: a pull request's merge commit needs fetch-depth 2)
+              --budgets-base=REF  The commit the query budgets (PERF-01) are compared with, to refuse a budget that went up (default HEAD^1; "not compared" when it is not in the checkout)
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
               --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
@@ -54,7 +55,7 @@ final class CheckCommand implements Command
         $fast = $io->flag('fast');
         $steps = $fast
             ? $plan->fast(Paths::changedPhpFiles($io->cwd))
-            : $plan->full($this->coverageReport($io), $io->option('infection'), $io->flag('mutation'), $io->option('mutation-base'));
+            : $plan->full($this->coverageReport($io), $io->option('infection'), $io->flag('mutation'), $io->option('mutation-base'), $io->option('budgets-base'));
 
         $io->line(sprintf('Pollora harness · profile %s · %s mode · %s gates', $config->profile->value, $mode->value, $fast ? 'fast' : 'full'));
 

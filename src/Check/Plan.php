@@ -15,6 +15,7 @@ use Pollora\Harness\Metrics\Collector;
 use Pollora\Harness\Metrics\MissingReports;
 use Pollora\Harness\Metrics\TypeCoverage;
 use Pollora\Harness\Npm\NpmAudit;
+use Pollora\Harness\Performance\PerformanceCheck;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Support\ChangedSources;
 use Pollora\Harness\Support\InterpreterFlags;
@@ -45,6 +46,9 @@ final readonly class Plan
     /** The same gate for `mutation.scope: "added"`: only the files a change adds are mutated. */
     public const string MUTATION_ADDED = 'Mutation testing (new files)';
 
+    /** PERF-01 and PERF-07: the query budgets and the nightly measures, read from the files. */
+    public const string PERFORMANCE = 'Performance budgets';
+
     public const string GIT_UNUSABLE = 'git is not usable here (a worktree whose .git points outside this environment, no git, or an untrusted directory): checking the whole tree instead of the changed files.';
 
     public const string ARCH_OUTSIDE_SUITES = 'tests/Arch.php is in no test suite of phpunit.xml, so vendor/bin/pest alone would skip the architecture rules: running it explicitly too (add it to a suite to run it once).';
@@ -55,7 +59,7 @@ final readonly class Plan
      *
      * @var list<string>
      */
-    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION];
+    public const array OBSERVED_BY_DEFAULT = [self::NPM_AUDIT, self::MUTATION, self::PERFORMANCE];
 
     public function __construct(
         private HarnessConfig $config,
@@ -82,9 +86,10 @@ final readonly class Plan
 
     /**
      * @param  string|null  $mutationBase  The commit the changed files are counted from (`mutation.scope: "changed"`); `HEAD^1` when null
+     * @param  string|null  $budgetsBase  The commit the query budgets are compared with (PERF-01); `HEAD^1` when null
      * @return list<Step>
      */
-    public function full(?string $coverage = null, ?string $infection = null, bool $mutation = false, ?string $mutationBase = null): array
+    public function full(?string $coverage = null, ?string $infection = null, bool $mutation = false, ?string $mutationBase = null, ?string $budgetsBase = null): array
     {
         $score = new MutationScore;
 
@@ -107,6 +112,7 @@ final readonly class Plan
             $this->npmAudit(),
             $this->publicSurface(),
             $this->distributionArchive(),
+            $this->performanceBudgets($budgetsBase),
             ...($mutation ? [$this->config->mutation->limited() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
             $this->ratchet($coverage, $infection, $score),
         ];
@@ -211,6 +217,23 @@ final readonly class Plan
 
             return $result['passed'] ? StepResult::passed($detail) : StepResult::failed($detail);
         });
+    }
+
+    /**
+     * PERF-01 and PERF-07: the budgets file and the nightly measures, checked statically. Skipped, with the reason,
+     * in a repository that declares neither: a skipped step is never a pass.
+     */
+    private function performanceBudgets(?string $base): Step
+    {
+        $rules = ['PERF-01', 'PERF-07'];
+        $check = new PerformanceCheck($this->cwd, $this->config->performance, $base ?? ChangedSources::DEFAULT_BASE);
+        $reason = $check->skipReason();
+
+        if ($reason !== null) {
+            return Step::skipped(self::PERFORMANCE, $rules, $reason);
+        }
+
+        return new Step(self::PERFORMANCE, $rules, $check->run(...));
     }
 
     /**
