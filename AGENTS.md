@@ -55,8 +55,10 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **SEC-07** Every administration action checks a capability: an admin_post_* / wp_ajax_* closure calls current_user_can(), and a menu page never uses the read capability _(Semgrep (closures and menu pages only), G1)_
 - **SEC-08** No secret in the repository _(gitleaks, G1)_
 - **SEC-09** No dependency with a known vulnerability _(composer audit, npm audit (time-limited exceptions in npm_audit), G1)_
+- **PERF-01** SQL queries per page type never exceed the reference _(Budgets file (check, Performance budgets), G2)_
 - **PERF-02** Discovery reads no file when its cache is warm _(Pest test with a file-access probe (discovery), G1)_
 - **PERF-03** No N+1 query in Colt _(Pest test counting SQL queries (colt), G1)_
+- **PERF-07** Boot, cold discovery and thumbnail timings tracked nightly, alert above 10 % _(Scheduled workflow (check, Performance budgets), G3)_
 - **QA-01** Ratchet: no metric gets worse (PHPStan level and baseline, coverage, mutation score) _(pollora-qa ratchet, G2)_
 - **QA-02** The harness files are protected: baseline, .harness.json and api-surface.json change only through a human _(Agent hooks + CODEOWNERS, G0)_
 - **QA-04** The public surface (attributes, hooks fired, configuration keys, commands) changes only with a label: api-change to add, breaking to remove or change _(pollora-qa surface, G2)_

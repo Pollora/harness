@@ -6,6 +6,7 @@ namespace Pollora\Harness\Console\Commands;
 
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\Mode;
+use Pollora\Harness\Config\PerformanceSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
@@ -70,6 +71,7 @@ final class InitCommand implements Command
             observed: $existing->observed ?? [],
             allowCommands: $existing->allowCommands ?? [],
             allowRules: $existing->allowRules ?? [],
+            performance: $existing->performance ?? new PerformanceSettings,
         );
 
         $changes = (new Scaffolder($io->cwd, $config))->apply($level ?? self::DEFAULT_LEVEL);

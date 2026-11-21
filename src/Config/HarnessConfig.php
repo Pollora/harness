@@ -39,6 +39,7 @@ final readonly class HarnessConfig
      * @param  NpmAuditSettings  $npmAudit  The npm advisories tolerated for a limited time (the `npm_audit` key, SEC-09)
      * @param  list<string>  $services  Services the CI starts for the tests and the quality gates, among `SERVICES` (the `services` key)
      * @param  float|null  $slowStepShare  A step that takes more than this share (0 to 1, exclusive of 0) of the run's total time is flagged as slow in the report; null disables the warning (the `slow_step_share` key)
+     * @param  PerformanceSettings  $performance  Where the query budgets and the nightly measures are (the `performance` key, PERF-01 and PERF-07)
      */
     public function __construct(
         public Profile $profile,
@@ -54,6 +55,7 @@ final readonly class HarnessConfig
         public NpmAuditSettings $npmAudit = new NpmAuditSettings,
         public array $services = [],
         public ?float $slowStepShare = null,
+        public PerformanceSettings $performance = new PerformanceSettings,
     ) {}
 
     public static function exists(string $root): bool
@@ -126,6 +128,7 @@ final readonly class HarnessConfig
             npmAudit: NpmAuditSettings::fromArray($data['npm_audit'] ?? null, $path),
             services: self::services($data['services'] ?? [], $path),
             slowStepShare: self::slowStepShare($data['slow_step_share'] ?? null, $path),
+            performance: PerformanceSettings::fromArray($data['performance'] ?? null, $path),
         );
     }
 
@@ -139,7 +142,7 @@ final readonly class HarnessConfig
 
     public function withRatchet(Ratchet $ratchet): self
     {
-        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit, $this->services, $this->slowStepShare);
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit, $this->services, $this->slowStepShare, $this->performance);
     }
 
     /**
@@ -161,6 +164,7 @@ final readonly class HarnessConfig
             'npm_audit' => $this->npmAudit->toArray(),
             'services' => $this->services,
             'slow_step_share' => $this->slowStepShare,
+            'performance' => $this->performance->toArray(),
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
 

@@ -10,8 +10,10 @@ use Pollora\Harness\Architecture\Layers;
 use Pollora\Harness\Architecture\RawRegistrationArrays;
 use Pollora\Harness\Architecture\TestClasses;
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Config\PerformanceSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Metrics\TypeCoverage;
+use Pollora\Harness\Performance\PerformanceCheck;
 
 /**
  * What would block in a repository if each `observed` rule of the catalogue became `enforced` (`pollora-qa promote-report`).
@@ -67,6 +69,7 @@ final class PromotionReport
                 'CONV-08' => self::fromFiles($layers->files === [], 'no class under the PSR-4 roots of composer.json', static fn (): array => FinalClasses::problems($layers)),
                 'CONV-09' => self::fromFiles($layers->files === [], 'no class under the PSR-4 roots of composer.json', static fn (): array => FacadeClasses::problems($layers)),
                 'CONV-12' => self::fromFiles(TestClasses::files($root) === [], 'no test file under tests/ or the autoload-dev roots', static fn (): array => TestClasses::problems($root)),
+                'PERF-01', 'PERF-07' => self::performance($rule, $root, $config),
                 'CONV-11' => self::typeCoverage($root, $config instanceof HarnessConfig ? $config->ratchet : new Ratchet),
                 default => [self::NO_PROBE, [], 'the catalogue lists this rule as observed, but promote-report has no probe for it: measure it another way'],
             };
@@ -96,6 +99,30 @@ final class PromotionReport
         }
 
         $found = $problems();
+
+        return [$found === [] ? self::CLEAN : self::WOULD_BLOCK, $found, ''];
+    }
+
+    /**
+     * PERF-01 and PERF-07 are judged by the same static read as the `Performance budgets` step: what is raised or
+     * missing in the budgets file, what is missing from the nightly measures. A rule the repository does not declare
+     * is "not applicable", which is not a pass. Nothing runs and nothing is written.
+     *
+     * @return array{string, list<string>, string}
+     */
+    private static function performance(string $rule, string $root, ?HarnessConfig $config): array
+    {
+        $check = new PerformanceCheck($root, $config instanceof HarnessConfig ? $config->performance : new PerformanceSettings);
+        $declared = $rule === 'PERF-01' ? $check->hasBudgets() : $check->hasNightly();
+
+        if (! $declared) {
+            return [self::NOT_APPLICABLE, [], $rule === 'PERF-01' ? 'no budgets file declared' : 'no nightly measures declared'];
+        }
+
+        $found = array_values(array_filter(
+            $check->assess()['problems'],
+            static fn (string $problem): bool => str_starts_with($problem, $rule.':'),
+        ));
 
         return [$found === [] ? self::CLEAN : self::WOULD_BLOCK, $found, ''];
     }

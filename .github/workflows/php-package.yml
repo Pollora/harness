@@ -93,13 +93,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      # The mutation gate of the changed files compares HEAD with its first parent: on a pull request's merge commit
-      # that is the target branch, so the checkout keeps two commits instead of one. A pull request that mutates only what
-      # it changes (inputs.mutation-on-pull-request, the default) needs that history too.
+      # The mutation gate of the changed files (a pull request mutates only what it changes, inputs.mutation-on-pull-request)
+      # and the budgets of PERF-01 compare HEAD with its first parent: on a pull request's merge commit that is the target
+      # branch, so the checkout keeps two commits instead of one.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ (needs.setup.outputs.mutation-scope != 'all' || (github.event_name == 'pull_request' && inputs.mutation-on-pull-request != 'all')) && 2 || 1 }}
+          fetch-depth: 2
 
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
