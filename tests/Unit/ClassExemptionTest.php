@@ -263,7 +263,7 @@ it('says in promote-report what is exempted and what remains', function (): void
         ->and($rows['CONV-08']['exempted_classes'])->toBe(['Acme\\Lib\\Models\\Post', 'Acme\\Lib\\Models\\Term'])
         ->and($rows['CONV-08']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($rows['CONV-08']['exempted'])->toBeNull()
-        ->and($rows['CONV-09']['found'])->toBe($rows['CONV-09']['count'])
+        ->and($rows['CONV-02']['found'])->toBe($rows['CONV-02']['count'])
         ->and($code)->toBe(0)
         ->and($out)->toContain('CONV-08  would block (3 found, 2 exempted by allow_rules in 2 classes: 1 remaining)')
         ->and($out)->toContain('Acme\\Lib\\Services\\Mailer is not final');
