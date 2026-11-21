@@ -180,7 +180,7 @@ jobs:
       - name: The report lists every step
         working-directory: hook
         run: |
-          jq -e '.steps | length == 13' .harness/report.json
+          jq -e '.steps | length == 14' .harness/report.json
           jq -r '.steps[] | "\(.status)\t\(.name)"' .harness/report.json
 
       - name: Agent hooks behave

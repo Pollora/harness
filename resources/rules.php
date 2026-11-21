@@ -49,6 +49,10 @@ return [
     'SEC-07' => ['title' => 'Every administration action checks a capability: an admin_post_* / wp_ajax_* closure calls current_user_can(), and a menu page never uses the read capability', 'tool' => 'Semgrep (closures and menu pages only)', 'gate' => 'G1', 'status' => 'enforced'],
     'SEC-08' => ['title' => 'No secret in the repository', 'tool' => 'gitleaks', 'gate' => 'G1', 'status' => 'enforced'],
     'SEC-09' => ['title' => 'No dependency with a known vulnerability', 'tool' => 'composer audit, npm audit (time-limited exceptions in npm_audit)', 'gate' => 'G1', 'status' => 'enforced'],
+    'SEC-10' => ['title' => 'A redirect target never comes from the request unchecked: wp_redirect(), redirect() and a Location header take wp_validate_redirect(), home_url() or an allow-list', 'tool' => 'Semgrep (taint, observed)', 'gate' => 'G1', 'status' => 'observed'],
+    'SEC-11' => ['title' => 'An outgoing HTTP request never targets a URL taken from the request: wp_safe_remote_*(), wp_http_validate_url() or an allow-list (SSRF)', 'tool' => 'Semgrep (taint, observed)', 'gate' => 'G1', 'status' => 'observed'],
+    'SEC-12' => ['title' => 'A filesystem path, an include or a stream never comes from the request unchecked: basename(), an allow-listed key or a realpath() check', 'tool' => 'Semgrep (taint, observed)', 'gate' => 'G1', 'status' => 'observed'],
+    'SEC-13' => ['title' => 'What a request sent is escaped where it is printed: esc_html(), esc_attr(), esc_url() or wp_kses_post() before echo, printf() or wp_die()', 'tool' => 'Semgrep (taint, observed)', 'gate' => 'G1', 'status' => 'observed'],
 
     // Performance
     'PERF-01' => ['title' => 'SQL queries per page type never exceed the reference', 'tool' => 'Budgets file (check, Performance budgets)', 'gate' => 'G2', 'status' => 'enforced'],

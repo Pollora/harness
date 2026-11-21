@@ -40,7 +40,7 @@ it('reports exactly the annotated lines', function (): void {
         }
     }
 
-    $command = [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--quiet', '--json', '--config', Paths::preset('semgrep/common.yml'), 'src'];
+    $command = [$semgrep, 'scan', '--metrics=off', '--disable-version-check', '--quiet', '--json', '--config', Paths::preset('semgrep/common.yml'), '--config', Paths::preset('semgrep/observed.yml'), 'src'];
     $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $copy);
     $json = json_decode((string) stream_get_contents($pipes[1]), true);
     fclose($pipes[1]);

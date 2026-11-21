@@ -57,7 +57,7 @@ it('says what would block for each observed rule, with the first problems', func
     ]);
     $rows = promoteRows($root);
 
-    expect(array_keys($rows))->toBe(['CONV-02', 'CONV-08', 'CONV-11', 'CONV-12'])
+    expect(array_keys($rows))->toBe(['CONV-02', 'CONV-08', 'CONV-11', 'CONV-12', 'SEC-10', 'SEC-11', 'SEC-12', 'SEC-13'])
         ->and($rows['CONV-08']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($rows['CONV-08']['count'])->toBe(1)
         ->and($rows['CONV-08']['first'][0])->toContain('Acme\\Promo\\Open is not final')
@@ -178,7 +178,7 @@ it('prints the same report as JSON', function (): void {
     $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
 
     expect($code)->toBe(0)
-        ->and(array_column($data['rules'], 'rule'))->toBe(['CONV-02', 'CONV-08', 'CONV-11', 'CONV-12'])
+        ->and(array_column($data['rules'], 'rule'))->toBe(['CONV-02', 'CONV-08', 'CONV-11', 'CONV-12', 'SEC-10', 'SEC-11', 'SEC-12', 'SEC-13'])
         ->and($data['rules'][1])->toHaveKeys(['rule', 'title', 'verdict', 'count', 'first', 'note', 'exempted'])
         ->and($data['rules'][1]['verdict'])->toBe('would-block');
 });
@@ -274,7 +274,7 @@ it('measures a directory without composer.json as not applicable instead of drop
     $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
 
     expect($code)->toBe(0)
-        ->and(array_unique(array_column($data['matrix'], 'verdict')))->toBe(['not-applicable'])
+        ->and(array_values(array_unique(array_column($data['matrix'], 'verdict'))))->toBe(['not-applicable', 'no-probe'])
         ->and($data['repositories']['assets-only']['type_coverage'])->toBeNull();
 });
 
