@@ -18,6 +18,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\RuleExemption;
 use Pollora\Harness\Profile;
 use Pollora\Harness\Rules\Catalogue;
+use Pollora\Harness\Support\Text;
 
 /**
  * Registers the architecture rules as Pest tests.
@@ -270,7 +271,7 @@ final readonly class Architecture
     {
         $layers = $this->layers;
         $root = $this->root;
-        $label = mb_strimwidth($exemption->reason, 0, 50, '…');
+        $label = Text::shorten($exemption->reason, 50);
 
         test("{$rule} exemption ".($position + 1)." by class ({$label})", function () use ($exemption, $problems, $observed, $layers, $root): void {
             $effect = ClassExemptions::apply([$exemption], $problems(), $layers, $root)->effects[0];
