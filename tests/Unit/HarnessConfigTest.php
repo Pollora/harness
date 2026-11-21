@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\InvalidConfig;
 use Pollora\Harness\Config\Mode;
+use Pollora\Harness\Config\MutationSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Profile;
 
@@ -136,3 +137,9 @@ it('reads the share of the total time above which a step is flagged slow, and wr
 it('refuses a slow-step share that is not above 0 and up to 1', function (mixed $share): void {
     HarnessConfig::fromArray(['profile' => 'core', 'slow_step_share' => $share]);
 })->with([[0], [-0.2], [1.5], ['0.5'], [true], [[0.5]]])->throws(InvalidConfig::class, 'slow_step_share');
+
+it('keeps the performance settings when the mutation settings are replaced', function (): void {
+    $config = HarnessConfig::fromArray(['profile' => 'core', 'performance' => ['budgets' => 'tests/e2e/budgets.json']]);
+
+    expect($config->withMutation(new MutationSettings)->performance)->toEqual($config->performance);
+});

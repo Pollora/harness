@@ -322,3 +322,58 @@ it('keeps the recorded number of exempted rules on init', function (): void {
 
     expect(recordedRatchet($cwd)['exempted_rules'])->toBe(1);
 });
+
+it('keeps every key of a complete .harness.json, the unknown ones too, when init runs again', function (): void {
+    $cwd = harnessTempDir();
+    file_put_contents($cwd.'/composer.json', '{"name": "pollora/example", "require": {"php": "^8.3"}}');
+    $before = [
+        'profile' => 'framework',
+        'mode' => 'enforce',
+        'downstream' => ['framework'],
+        'allow_laravel' => ['illuminate/support'],
+        'protected' => ['api-surface.json'],
+        'observed' => ['Rector'],
+        'allow_commands' => [['command' => 'make-thing', 'reason' => 'historical name']],
+        'allow_rules' => [['rule' => 'CONV-08', 'reason' => 'extension points']],
+        'ratchet' => ['phpstan_level' => 6, 'phpstan_baseline' => 3, 'coverage' => 91.5],
+        'mutation' => ['min' => 70, 'scope' => 'changed'],
+        'npm_audit' => ['allow' => []],
+        'services' => ['redis'],
+        'slow_step_share' => 0.5,
+        'performance' => ['budgets' => 'tests/e2e/budgets.json'],
+        'future_key' => ['nested' => ['kept' => true]],
+    ];
+    file_put_contents($cwd.'/.harness.json', json_encode($before));
+
+    [$code] = polloraQa($cwd, 'init');
+    $after = json_decode((string) file_get_contents($cwd.'/.harness.json'), true);
+
+    // `npm_audit` with an empty allow list is the default and may be written as nothing: it is not a loss.
+    unset($before['npm_audit']);
+
+    expect($code)->toBe(0);
+
+    foreach ($before as $key => $value) {
+        expect($after[$key] ?? null)->toEqual($value, "key {$key} survives init");
+    }
+});
+
+it('prints the help of every command in a column as wide as the longest name', function (): void {
+    [$code, $output] = polloraQa(harnessTempDir(), 'help');
+    // Where each description starts: the width of "  <name> " up to the capital letter that opens it.
+    $starts = [];
+
+    foreach (explode("\n", $output) as $line) {
+        if (preg_match('/^(  [a-z-]+ +)(?=[A-Z])/', $line, $match) === 1) {
+            $starts[] = strlen($match[1]);
+        }
+    }
+
+    $lines = $starts;
+    $columns = array_unique($starts);
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('promote-report', 'composer-audit')
+        ->and($lines)->not->toBeEmpty()
+        ->and($columns)->toHaveCount(1);
+});

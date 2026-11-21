@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Npm;
 
+use Closure;
 use DateTimeImmutable;
 use Pollora\Harness\Config\NpmAuditException;
 use Pollora\Harness\Config\NpmAuditSettings;
+use Pollora\Harness\Support\TransportErrors;
 
 /**
  * `npm audit` over the lock files of a repository, with the tolerated advisories set aside (SEC-09).
@@ -30,6 +32,8 @@ final readonly class NpmAudit
         private string $npm,
         private NpmAuditSettings $settings,
         private DateTimeImmutable $today,
+        private int $attempts = TransportErrors::ATTEMPTS,
+        private ?Closure $sleep = null,
     ) {}
 
     /**
@@ -111,14 +115,47 @@ final readonly class NpmAudit
      * The decoded `npm audit --json` report of a directory, or why there is none: npm exits non-zero both
      * when it finds advisories and when it cannot reach the registry, so only the JSON tells them apart.
      *
+     * A failure of the transport (timeout, DNS, refused or reset connection, HTTP 5xx or 429) is attempted
+     * again, a few times with a growing wait; a registry still unreachable afterwards is a failure, never
+     * a pass. Any other failure (no JSON, an unknown error) is reported at once.
+     *
      * @return array<mixed>|string
      */
     private function report(string $directory): array|string
     {
+        $attempt = 0;
+
+        do {
+            $attempt++;
+            $outcome = $this->attempt($directory);
+
+            if (is_array($outcome['report'])) {
+                return $outcome['report'];
+            }
+
+            if (! $outcome['transport']) {
+                return $outcome['report'];
+            }
+
+            if ($attempt < $this->attempts) {
+                TransportErrors::wait($attempt, $this->sleep);
+            }
+        } while ($attempt < $this->attempts);
+
+        return str_replace('could not audit '.$directory, sprintf('could not audit %s (advisory API unreachable after %d attempts, a network failure and not a vulnerability)', $directory, $this->attempts), $outcome['report']);
+    }
+
+    /**
+     * One run of `npm audit --json` for a directory.
+     *
+     * @return array{report: array<mixed>|string, transport: bool} The report or why there is none, and whether that is a network failure
+     */
+    private function attempt(string $directory): array
+    {
         $process = proc_open([$this->npm, 'audit', '--json', '--prefix', $directory], [1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, $this->cwd);
 
         if (! is_resource($process)) {
-            return "could not start npm for {$directory}";
+            return ['report' => "could not start npm for {$directory}", 'transport' => false];
         }
 
         $output = (string) stream_get_contents($pipes[1]);
@@ -128,7 +165,7 @@ final readonly class NpmAudit
         $report = json_decode($output, true);
 
         if (! is_array($report)) {
-            return "npm audit printed no JSON report for {$directory}";
+            return ['report' => "npm audit printed no JSON report for {$directory}", 'transport' => false];
         }
 
         $vulnerabilities = $report['vulnerabilities'] ?? null;
@@ -136,11 +173,15 @@ final readonly class NpmAudit
         if (isset($report['error']) || ! is_array($vulnerabilities)) {
             $error = is_array($report['error'] ?? null) ? ($report['error']['summary'] ?? $report['error']['code'] ?? null) : null;
             $why = is_string($error) && $error !== '' ? $error : ($report['message'] ?? null);
+            $code = is_array($report['error'] ?? null) && is_string($report['error']['code'] ?? null) ? $report['error']['code'] : '';
 
-            return "npm audit could not audit {$directory}".(is_string($why) ? ": {$why}" : '');
+            return [
+                'report' => "npm audit could not audit {$directory}".(is_string($why) ? ": {$why}" : ''),
+                'transport' => TransportErrors::matches($code.' '.(is_string($why) ? $why : '')),
+            ];
         }
 
-        return $report;
+        return ['report' => $report, 'transport' => false];
     }
 
     /**
