@@ -34,14 +34,21 @@ final class MissingReports
 
     /**
      * @param  list<array{metric: string, label: string, recorded: int|float|null, verdict: string}>  $rows
+     * @param  bool  $mutationLimited  The mutation run was limited to some files: `msi` is then left unmeasured on purpose, whatever the reports
      * @return list<string>
      */
-    public static function notes(array $rows): array
+    public static function notes(array $rows, bool $mutationLimited = false): array
     {
         $notes = [];
 
         foreach ($rows as $row) {
             if (! self::isMissing($row)) {
+                continue;
+            }
+
+            if ($row['metric'] === 'msi' && $mutationLimited) {
+                $notes[] = sprintf('  %s: not measured in this run, which mutated only the files of the change (the whole-repository score is measured on the main branch); nothing was compared with the recorded %s.', $row['label'], $row['recorded']);
+
                 continue;
             }
 

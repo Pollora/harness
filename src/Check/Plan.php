@@ -114,7 +114,7 @@ final readonly class Plan
             $this->distributionArchive(),
             $this->performanceBudgets($budgetsBase),
             ...($mutation ? [$this->config->mutation->limited() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
-            $this->ratchet($coverage, $infection, $score),
+            $this->ratchet($coverage, $infection, $score, $mutation && $this->config->mutation->limited()),
         ];
     }
 
@@ -482,12 +482,15 @@ final readonly class Plan
         );
     }
 
-    private function ratchet(?string $coverage, ?string $infection, ?MutationScore $mutation = null): Step
+    /**
+     * @param  bool  $mutationLimited  The mutation run covered some files only, so `msi` is not measured on purpose
+     */
+    private function ratchet(?string $coverage, ?string $infection, ?MutationScore $mutation = null, bool $mutationLimited = false): Step
     {
         $config = $this->config;
         $cwd = $this->cwd;
 
-        return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection, $mutation): StepResult {
+        return new Step('Ratchet', ['QA-01'], static function () use ($config, $cwd, $coverage, $infection, $mutation, $mutationLimited): StepResult {
             $collector = new Collector($cwd);
             $measured = $mutation?->value;
             $types = TypeCoverage::measure($cwd);
@@ -507,7 +510,9 @@ final readonly class Plan
                 $lines[] = sprintf('  Line coverage read from %s (no --coverage given); run `check --coverage` to refresh it.', $source);
             }
 
-            array_push($lines, ...$types->lines(), ...MissingReports::notes($rows));
+            $notes = MissingReports::notes($rows, $mutationLimited);
+
+            array_push($lines, ...$types->lines(), ...$notes);
 
             return $regressions === []
                 ? StepResult::passed(implode("\n", $lines))

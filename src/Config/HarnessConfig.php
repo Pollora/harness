@@ -129,6 +129,14 @@ final readonly class HarnessConfig
         );
     }
 
+    /**
+     * The same configuration with other mutation settings (a scope the command line chose for one run).
+     */
+    public function withMutation(MutationSettings $mutation): self
+    {
+        return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $this->ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $mutation, $this->npmAudit, $this->services, $this->slowStepShare);
+    }
+
     public function withRatchet(Ratchet $ratchet): self
     {
         return new self($this->profile, $this->mode, $this->downstream, $this->allowLaravel, $ratchet, $this->protected, $this->observed, $this->allowCommands, $this->allowRules, $this->mutation, $this->npmAudit, $this->services, $this->slowStepShare, $this->performance);

@@ -27,7 +27,7 @@ return [
 
     // Coding conventions
     'CONV-01' => ['title' => 'Expressive API: the common case needs no configuration; options are chained methods or named arguments', 'tool' => 'Review + documentation examples run as tests', 'gate' => 'G2', 'status' => 'planned'],
-    'CONV-02' => ['title' => 'A WordPress registration (post type, taxonomy, block, REST route, menu page) is described by an attribute or a typed object, never by a raw argument array in the public API', 'tool' => 'PHPStan (custom rule) + review', 'gate' => 'G1', 'status' => 'planned'],
+    'CONV-02' => ['title' => 'A WordPress registration (post type, taxonomy, block, REST route, menu page) is described by an attribute or a typed object, never by a raw argument array in the public API', 'tool' => 'Pest arch (files, AST) + review', 'gate' => 'G1', 'status' => 'observed'],
     'CONV-03' => ['title' => 'Laravel naming: ServiceProvider, Command, Exception, Repository, Factory suffixes', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],
     'CONV-04' => ['title' => 'Hooks fired by Pollora are named pollora/<module>/<event_snake_case>', 'tool' => 'pollora-qa surface', 'gate' => 'G2', 'status' => 'enforced'],
     'CONV-05' => ['title' => 'Configuration lives under pollora.<package>; env() is only called in config/', 'tool' => 'Pest arch', 'gate' => 'G1', 'status' => 'enforced'],

@@ -9,6 +9,7 @@ use Pollora\Harness\Check\Report;
 use Pollora\Harness\Check\Runner;
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\Mode;
+use Pollora\Harness\Config\MutationSettings;
 use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
 use Pollora\Harness\Metrics\Collector;
@@ -35,6 +36,7 @@ final class CheckCommand implements Command
               --mutation          Run Pest's mutation testing (pest --mutate) and compare its score with the ratchet's msi
               --mutation-base=REF With mutation.scope "changed", the commit the changed files are counted from (default HEAD^1: a pull request's merge commit needs fetch-depth 2)
               --budgets-base=REF  The commit the query budgets (PERF-01) are compared with, to refuse a budget that went up (default HEAD^1; "not compared" when it is not in the checkout)
+              --mutation-scope=S  all, changed or added: what --mutation mutates in this run, over .harness.json (a limited scope is held to mutation.min, 50 % without one)
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
               --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
@@ -50,6 +52,18 @@ final class CheckCommand implements Command
             $io->flag('observe') => Mode::Observe,
             default => $config->mode,
         };
+
+        $scope = $io->option('mutation-scope');
+
+        if ($scope !== null || $io->flag('mutation-scope')) {
+            if ($scope === null || ! MutationSettings::isScope($scope)) {
+                $io->error(sprintf('--mutation-scope is "%s". Use "all", "changed" or "added".', $scope ?? ''));
+
+                return self::FAILURE;
+            }
+
+            $config = $config->withMutation($config->mutation->withScope($scope));
+        }
 
         $plan = new Plan($config, $io->cwd);
         $fast = $io->flag('fast');
