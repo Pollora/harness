@@ -2,12 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Integration tests against a real WordPress: an optional `WordPress integration` job in `php-package.yml`.** Three new optional inputs, all off or neutral by default: `wordpress-integration` (the suite directory, for example `tests/Integration`; empty, the default, skips the job), `wordpress-version` (`latest`, `nightly` or a version number) and `wordpress-plugins` (wordpress.org slugs). The job, named `WordPress integration PHP <version>`, installs WordPress with WP-CLI against a digest-pinned MySQL 8.0 service container, caches the downloads, and starts the `test:integration` script, `phpunit.integration.xml` or the directory, on PHP 8.3 and 8.4, with a 20-minute timeout. It is skipped while the input is empty and no other job depends on it: no job name, `needs`, `if` or input of the existing jobs changes. `stubs/wordpress/` holds the bootstrap, the PHPUnit configuration and a test that proves a real WordPress is loaded; the README explains the cost and when to turn it on.
+
 ### Fixed
 
 - **The dependency audits try again when the network fails, and never when they have found something (SEC-09).** `composer audit` failed twice in an hour on `curl error 28 while downloading https://packagist.org/api/security-advisories/: Connection timed out`, an incident of Packagist unrelated to the code. The *Dependency audit* step (`Check\ComposerAudit`) now attempts the call 3 times in all, 5 s then 15 s apart, only when the output is a transport failure (timeout, DNS, refused or reset connection, TLS handshake, HTTP 5xx or 429: `Support\TransportErrors`); advisories found, a lock file error or any other output fail at once, with no second attempt. An advisory API still unreachable after the attempts FAILS the step (never a pass) with `advisory API unreachable after 3 attempts`, a text that says it is a network failure and not a vulnerability. The npm audit (`Npm\NpmAudit`) does the same for a registry error (`EAI_AGAIN`, `ETIMEDOUT`, `ECONNRESET`, HTTP 5xx and so on); its other failures keep failing at once. New command `pollora-qa composer-audit [--locked]`, the same code, which the reusable workflow `template.yml` now runs (it checks the harness out as its npm audit job does); the job names and the inputs are unchanged. The other network calls of the workflows (the gitleaks image, `pipx install semgrep`) are not attempted again.
 - **`init` run again no longer erases settings.** It rebuilt the configuration without `mutation`, `npm_audit`, `services` and `slow_step_share`. It now keeps every key it does not decide, and `HarnessConfig::save()` (used by `init` and `ratchet --update`) carries over a top-level key this version does not know, as it was. `HarnessConfig::withMutation()` also dropped `performance`.
 - **`pollora-qa help` aligns the commands** whatever the length of their names: the column is as wide as the longest (`promote-report` overflowed the fixed 9 characters).
 - README: the *Status* section says the performance budgets are delivered and that integration tests against a real WordPress and adapter contract tests remain.
+
+### Documentation
+
+- **CONV-01 stays `planned`, and the README says why.** Four readings of "the common case needs no configuration" were measured over the 45 repositories (long required parameter lists on public factories and registries, constructors with many scalars, required boolean flags, any public method with 4 or more required parameters): the best one reports 22 methods, 5 real, so no code was added. The figures are in the README, under *Status*.
 
 ## [0.1.34] - 2026-11-21
 
