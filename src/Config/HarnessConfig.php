@@ -109,12 +109,15 @@ final readonly class HarnessConfig
             throw InvalidConfig::unknownMode($path, $data['mode']);
         }
 
+        $ratchet = is_array($data['ratchet'] ?? null) ? $data['ratchet'] : [];
+        Ratchet::validate($ratchet, $path);
+
         return new self(
             profile: $profile,
             mode: $mode,
             downstream: self::stringList($data['downstream'] ?? []),
             allowLaravel: self::stringList($data['allow_laravel'] ?? []),
-            ratchet: Ratchet::fromArray(is_array($data['ratchet'] ?? null) ? $data['ratchet'] : []),
+            ratchet: Ratchet::fromArray($ratchet),
             protected: array_key_exists('protected', $data) ? self::stringList($data['protected']) : self::DEFAULT_PROTECTED,
             observed: self::stringList($data['observed'] ?? []),
             allowCommands: self::commandExemptions($data['allow_commands'] ?? [], $path),

@@ -205,13 +205,14 @@ final readonly class Architecture
      */
     private function observed(string $rule, string $name, Closure $problems, ?string $nothingToRead = null): void
     {
-        if ($nothingToRead !== null && ! ($this->exemptions[$rule] ?? null) instanceof RuleExemption) {
+        $observed = (Catalogue::all()[$rule]['status'] ?? 'enforced') === 'observed';
+        $exempted = ($this->exemptions[$rule] ?? null) instanceof RuleExemption && ! $observed;
+
+        if ($nothingToRead !== null && ! $exempted) {
             test($name, fn (): null => null)->skip("not evaluated: {$rule} — {$nothingToRead}")->group('arch');
 
             return;
         }
-
-        $observed = (Catalogue::all()[$rule]['status'] ?? 'enforced') === 'observed';
 
         $this->rule($rule, $name, static function () use ($rule, $name, $problems, $observed): void {
             test($name, function () use ($rule, $problems, $observed): void {
@@ -223,7 +224,7 @@ final readonly class Architecture
 
                 expect($found)->toBeEmpty("{$rule}\n".implode("\n", $found));
             })->group('arch');
-        });
+        }, honourExemption: ! $observed);
     }
 
     /**
@@ -237,10 +238,11 @@ final readonly class Architecture
      *
      * @param  Closure(string|list<string>): mixed  $register  Registers the test, given the namespace or the list of classes to judge
      * @param  string|null  $namespace  The namespace the rule is about, when it is one the engine resolves
+     * @param  bool  $honourExemption  False for an observed rule: its exemption is declared but not applied, the rule keeps reporting
      */
-    private function rule(string $rule, string $name, Closure $register, ?string $namespace = null): void
+    private function rule(string $rule, string $name, Closure $register, ?string $namespace = null, bool $honourExemption = true): void
     {
-        $exemption = $this->exemptions[$rule] ?? null;
+        $exemption = $honourExemption ? ($this->exemptions[$rule] ?? null) : null;
 
         if ($exemption instanceof RuleExemption) {
             test($name, fn (): null => null)->skip($exemption->message())->group('arch');
