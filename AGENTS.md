@@ -35,6 +35,7 @@ This repository follows the Pollora harness (profile `core`, enforce mode). The 
 - **ARCH-07** Every dependency used is declared, none declared is unused _(composer-dependency-analyser, G1)_
 - **ARCH-08** Attribute classes are final, readonly and declare their targets _(Pest arch, G1)_
 - **ARCH-09** declare(strict_types=1) in every file _(Pest arch + Pint, G1)_
+- **CONV-02** A WordPress registration (post type, taxonomy, block, REST route, menu page) is described by an attribute or a typed object, never by a raw argument array in the public API _(Pest arch (files, AST) + review, G1)_
 - **CONV-03** Laravel naming: ServiceProvider, Command, Exception, Repository, Factory suffixes _(Pest arch, G1)_
 - **CONV-04** Hooks fired by Pollora are named pollora/<module>/<event_snake_case> _(pollora-qa surface, G2)_
 - **CONV-05** Configuration lives under pollora.<package>; env() is only called in config/ _(Pest arch, G1)_
