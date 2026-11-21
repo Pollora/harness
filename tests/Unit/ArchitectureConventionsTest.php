@@ -116,7 +116,7 @@ function runArchitectureOf(?string $source): array
     file_put_contents($root.'/phpunit.xml', '<?xml version="1.0"?><phpunit bootstrap="bootstrap.php"><testsuites><testsuite name="A"><file>tests/Arch.php</file></testsuite></testsuites></phpunit>');
     file_put_contents($root.'/tests/Arch.php', "<?php\n\nPollora\\Harness\\Pest\\Architecture::for(dirname(__DIR__), Pollora\\Harness\\Profile::Core, [])->register();\n");
 
-    $process = proc_open([PHP_BINARY, '-d', 'memory_limit=2G', dirname(__DIR__, 2).'/vendor/bin/pest', 'tests/Arch.php', '--filter=CONV-(08|09|12)', '--colors=never'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, [...getenv(), 'COLUMNS' => '200']);
+    $process = proc_open([PHP_BINARY, '-d', 'memory_limit=2G', dirname(__DIR__, 2).'/vendor/bin/pest', 'tests/Arch.php', '--filter=CONV-(02|08|09|12)', '--colors=never'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, [...getenv(), 'COLUMNS' => '200']);
     $output = (string) stream_get_contents($pipes[1]).(string) stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
@@ -134,13 +134,23 @@ it('reports an observed rule without failing the run, and passes a clean reposit
         ->and($output)->toContain('1 incomplete')
         ->and($cleanCode)->toBe(0)
         ->and($cleanOutput)->not->toContain('incomplete')
-        ->and($cleanOutput)->toContain('3 passed');
+        ->and($cleanOutput)->toContain('4 passed');
+});
+
+it('reports CONV-02 as incomplete with the list, without failing the run', function (): void {
+    [$code, $output] = runArchitectureOf("<?php\n\ndeclare(strict_types=1);\n\nnamespace Acme\\Obs;\n\nfinal class Thing\n{\n    public function register(string \$name, array \$args): void\n    {\n        register_post_type(\$name, \$args);\n    }\n}\n");
+
+    expect($code)->toBe(0)
+        ->and($output)->toContain('observed, not blocking: CONV-02')
+        ->and($output)->toContain('CONV-02 — 1 problem(s)')
+        ->and($output)->toContain('1 incomplete');
 });
 
 it('shows a rule with nothing to read as not evaluated, never as a pass', function (): void {
     [$code, $output] = runArchitectureOf(null);
 
     expect($code)->toBe(0)
+        ->and($output)->toContain('not evaluated: CONV-02 — no class under the PSR-4 roots of composer.json')
         ->and($output)->toContain('not evaluated: CONV-08 — no class under the PSR-4 roots of composer.json')
         ->and($output)->toContain('not evaluated: CONV-09 — no class under the PSR-4 roots of composer.json')
         ->and($output)->not->toContain('✓ CONV-08');

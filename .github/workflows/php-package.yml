@@ -31,6 +31,13 @@ on:
         description: Branch of Pollora/framework the downstream job runs
         type: string
         default: develop
+      mutation-on-pull-request:
+        description: >-
+          What the mutation gate mutates on a pull request when .harness.json sets no mutation.scope: `changed` (default)
+          only the source files the pull request changes, `all` the whole repository as before. Other events always mutate
+          everything. Ignored when the repository declares mutation.scope itself.
+        type: string
+        default: changed
 
 permissions: {}
 
@@ -87,11 +94,12 @@ jobs:
       contents: read
     steps:
       # The mutation gate of the changed files compares HEAD with its first parent: on a pull request's merge commit
-      # that is the target branch, so the checkout keeps two commits instead of one.
+      # that is the target branch, so the checkout keeps two commits instead of one. A pull request that mutates only what
+      # it changes (inputs.mutation-on-pull-request, the default) needs that history too.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: ${{ needs.setup.outputs.mutation-scope != 'all' && 2 || 1 }}
+          fetch-depth: ${{ (needs.setup.outputs.mutation-scope != 'all' || (github.event_name == 'pull_request' && inputs.mutation-on-pull-request != 'all')) && 2 || 1 }}
 
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
@@ -146,9 +154,29 @@ jobs:
         env:
           HARNESS_SURFACE_ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') && 'all' || (contains(github.event.pull_request.labels.*.name, 'api-change') && 'additions' || 'none') }}
           MUTATION: ${{ needs.setup.outputs.mutation }}
+          MUTATION_SCOPE: ${{ needs.setup.outputs.mutation-scope }}
+          MUTATION_ON_PR: ${{ inputs.mutation-on-pull-request }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           flags=""
-          if [ "$MUTATION" = "true" ]; then flags="--mutation"; fi
+          if [ "$MUTATION" = "true" ]; then
+            flags="--mutation"
+            case "$MUTATION_ON_PR" in
+              changed|all) ;;
+              *) echo "::error::mutation-on-pull-request is \"$MUTATION_ON_PR\": use \"changed\" or \"all\"."; exit 1 ;;
+            esac
+            # On a pull request, mutate only what the pull request changes (the whole score is measured on the main branch).
+            # A repository that declares mutation.scope keeps it. The base is the first parent of the merge commit the
+            # checkout holds; a checkout that is not a merge commit (another ref) has no such base, and counting from
+            # HEAD^1 would silently mutate only the last commit: the whole repository is mutated instead.
+            if [ "$EVENT_NAME" = "pull_request" ] && [ "$MUTATION_ON_PR" = "changed" ] && [ "$MUTATION_SCOPE" = "all" ]; then
+              if git rev-parse --verify --quiet 'HEAD^2' > /dev/null && git rev-parse --verify --quiet 'HEAD^1' > /dev/null; then
+                flags="$flags --mutation-scope=changed --mutation-base=HEAD^1"
+              else
+                echo "::warning::The checkout is not the pull request's merge commit: mutating the whole repository instead of the changed files."
+              fi
+            fi
+          fi
           vendor/bin/pollora-qa check --coverage=.harness/coverage.xml $flags
 
       - name: Keep the report

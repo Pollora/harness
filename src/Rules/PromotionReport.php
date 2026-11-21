@@ -7,6 +7,7 @@ namespace Pollora\Harness\Rules;
 use Pollora\Harness\Architecture\FacadeClasses;
 use Pollora\Harness\Architecture\FinalClasses;
 use Pollora\Harness\Architecture\Layers;
+use Pollora\Harness\Architecture\RawRegistrationArrays;
 use Pollora\Harness\Architecture\TestClasses;
 use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Config\Ratchet;
@@ -15,7 +16,7 @@ use Pollora\Harness\Metrics\TypeCoverage;
 /**
  * What would block in a repository if each `observed` rule of the catalogue became `enforced` (`pollora-qa promote-report`).
  *
- * It only reads: the rules judged from the files (CONV-08, CONV-09, CONV-12) run the same code as their Pest
+ * It only reads: the rules judged from the files (CONV-02, CONV-08, CONV-09, CONV-12) run the same code as their Pest
  * tests, CONV-11 compares the static type count with the recorded `type_coverage` floor, and nothing is
  * executed that needs an installed dependency, a database or a network. Nothing is written.
  *
@@ -62,6 +63,7 @@ final class PromotionReport
             $layers ??= Layers::discover($root);
 
             [$verdict, $problems, $note] = match ($rule) {
+                'CONV-02' => self::fromFiles($layers->files === [], 'no class under the PSR-4 roots of composer.json', static fn (): array => RawRegistrationArrays::problems($layers, $root)),
                 'CONV-08' => self::fromFiles($layers->files === [], 'no class under the PSR-4 roots of composer.json', static fn (): array => FinalClasses::problems($layers)),
                 'CONV-09' => self::fromFiles($layers->files === [], 'no class under the PSR-4 roots of composer.json', static fn (): array => FacadeClasses::problems($layers)),
                 'CONV-12' => self::fromFiles(TestClasses::files($root) === [], 'no test file under tests/ or the autoload-dev roots', static fn (): array => TestClasses::problems($root)),

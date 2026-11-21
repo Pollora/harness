@@ -57,13 +57,25 @@ it('says what would block for each observed rule, with the first problems', func
     ]);
     $rows = promoteRows($root);
 
-    expect(array_keys($rows))->toBe(['CONV-08', 'CONV-09', 'CONV-11', 'CONV-12'])
+    expect(array_keys($rows))->toBe(['CONV-02', 'CONV-08', 'CONV-09', 'CONV-11', 'CONV-12'])
         ->and($rows['CONV-08']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($rows['CONV-08']['count'])->toBe(1)
         ->and($rows['CONV-08']['first'][0])->toContain('Acme\\Promo\\Open is not final')
         ->and($rows['CONV-09']['verdict'])->toBe(PromotionReport::CLEAN)
+        ->and($rows['CONV-02']['verdict'])->toBe(PromotionReport::CLEAN)
         ->and($rows['CONV-12']['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
         ->and($rows['CONV-12']['first'][0])->toContain('OldTest is a PHPUnit test class');
+});
+
+it('says CONV-02 would block a public method that takes a raw registration array', function (): void {
+    $root = promoteProject([
+        'src/PostTypes/Registrar.php' => "<?php\n\nnamespace Acme\\Promo\\PostTypes;\n\nfinal class Registrar\n{\n    public function register(string \$slug, array \$args): void\n    {\n        register_post_type(\$slug, \$args);\n    }\n}\n",
+    ]);
+    $row = promoteRows($root)['CONV-02'];
+
+    expect($row['verdict'])->toBe(PromotionReport::WOULD_BLOCK)
+        ->and($row['count'])->toBe(1)
+        ->and($row['first'][0])->toContain('src/PostTypes/Registrar.php');
 });
 
 it('quotes five problems at most and counts the others', function (): void {
@@ -85,7 +97,7 @@ it('quotes five problems at most and counts the others', function (): void {
 it('says "not applicable" when there is nothing to read, which is not a pass', function (): void {
     $rows = promoteRows(promoteProject([]));
 
-    foreach (['CONV-08', 'CONV-09', 'CONV-12', 'CONV-11'] as $rule) {
+    foreach (['CONV-02', 'CONV-08', 'CONV-09', 'CONV-12', 'CONV-11'] as $rule) {
         expect($rows[$rule]['verdict'])->toBe(PromotionReport::NOT_APPLICABLE)->and($rows[$rule]['note'])->not->toBe('');
     }
 
@@ -134,9 +146,9 @@ it('prints the same report as JSON', function (): void {
     $data = json_decode($out, true, 512, JSON_THROW_ON_ERROR);
 
     expect($code)->toBe(0)
-        ->and(array_column($data['rules'], 'rule'))->toBe(['CONV-08', 'CONV-09', 'CONV-11', 'CONV-12'])
-        ->and($data['rules'][0])->toHaveKeys(['rule', 'title', 'verdict', 'count', 'first', 'note', 'exempted'])
-        ->and($data['rules'][0]['verdict'])->toBe('would-block');
+        ->and(array_column($data['rules'], 'rule'))->toBe(['CONV-02', 'CONV-08', 'CONV-09', 'CONV-11', 'CONV-12'])
+        ->and($data['rules'][1])->toHaveKeys(['rule', 'title', 'verdict', 'count', 'first', 'note', 'exempted'])
+        ->and($data['rules'][1]['verdict'])->toBe('would-block');
 });
 
 it('writes nothing in the repository and works without a .harness.json', function (): void {
