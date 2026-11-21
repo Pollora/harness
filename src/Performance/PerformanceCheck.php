@@ -54,7 +54,13 @@ final readonly class PerformanceCheck
         return sprintf('no budgets file (%s) and no nightly measures (%s) declared: nothing to check (performance.budgets and performance.nightly in .harness.json move them)', $this->settings->budgetsPath(), $this->settings->measurePath());
     }
 
-    public function run(): StepResult
+    /**
+     * What the step finds, split in the problems (each starts with its rule, `PERF-01:` or `PERF-07:`) and the facts
+     * that are only said. The step and `promote-report` read the same assessment.
+     *
+     * @return array{problems: list<string>, lines: list<string>}
+     */
+    public function assess(): array
     {
         $problems = [];
         $lines = [];
@@ -74,6 +80,13 @@ final readonly class PerformanceCheck
         } else {
             $lines[] = sprintf('  PERF-07 not declared: no %s and no performance.nightly', $this->settings->measurePath());
         }
+
+        return ['problems' => $problems, 'lines' => $lines];
+    }
+
+    public function run(): StepResult
+    {
+        ['problems' => $problems, 'lines' => $lines] = $this->assess();
 
         if ($problems === []) {
             return StepResult::passed(implode("\n", $lines));

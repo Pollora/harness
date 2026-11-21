@@ -101,6 +101,13 @@ final class InvalidConfig extends RuntimeException
         return new self("{$path}: services lists \"{$given}\". The CI can start: ".implode(', ', HarnessConfig::SERVICES).'.');
     }
 
+    public static function ratchetValue(string $path, string $metric, mixed $value, string $expected): self
+    {
+        $given = is_scalar($value) ? var_export($value, true) : get_debug_type($value);
+
+        return new self("{$path}: ratchet.{$metric} is {$given}. Give {$expected}. A value the ratchet cannot read would never be compared, so it is refused instead of ignored.");
+    }
+
     public static function slowStepShare(string $path, mixed $share): self
     {
         $given = is_scalar($share) ? var_export($share, true) : get_debug_type($share);
