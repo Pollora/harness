@@ -94,7 +94,7 @@ it('keeps a listed difference visible as a skip with its reason, and never as a 
     [$status, $output] = contractProject(withBroken: true, deviations: "['broken|missing key is null' => 'BrokenStore::get() answers an empty string', 'broken|forget' => 'same cause']");
 
     expect($status)->toBe(0)
-        ->and($output)->toContain('KNOWN DEVIATION: BrokenStore::get() answers an empty string')->toContain('2 skipped');
+        ->and($output)->toContain('KNOWN DEVIATION: BrokenStore::get() answers an empty string [now failing with: ')->toContain('2 skipped');
 });
 
 it('fails when a listed difference no longer exists, so a fix cannot hide in the list', function (): void {
