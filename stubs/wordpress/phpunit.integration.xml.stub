@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Configuration of the integration suite: `vendor/bin/pest -c phpunit.integration.xml`. It is kept apart from
-    phpunit.xml so that the unit suite (Brain Monkey doubles) never loads a real WordPress, and the other way round.
+    Configuration of the integration suite. Run it with
+        vendor/bin/pest -c phpunit.integration.xml, given the option test-directory=tests/Integration
+    (the `test:integration` script of composer.json): that option keeps Pest from loading tests/Pest.php and
+    tests/Helpers, whose doubles of WordPress would collide with the real one. It is kept apart from phpunit.xml so
+    that the unit suite (Brain Monkey doubles) never loads a real WordPress, and the other way round.
     Exclude tests/Integration from the suites of phpunit.xml.
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

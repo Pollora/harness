@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Bootstrap of the UNIT suite (copy it to tests/bootstrap.php and reference it from phpunit.xml.dist with
+ * `bootstrap="tests/bootstrap.php"`): Composer's autoloader, then the doubles of WordPress the unit tests need.
+ *
+ * Declare the doubles here (a WP_Error class, wp_parse_args(), a WP_CLI stand-in...), never in tests/Pest.php or in
+ * tests/Helpers/: Pest loads those two in EVERY run, the integration suite included, before the PHPUnit bootstrap, and
+ * a double declared there collides with the real WordPress that the integration bootstrap loads ("Cannot redeclare
+ * class WP_Error", and Pest exits without a message). The PHPUnit bootstrap is read from the configuration given to
+ * Pest: phpunit.xml.dist for the unit suite, phpunit.integration.xml (another bootstrap) for the integration suite.
+ */
+require_once dirname(__DIR__).'/vendor/autoload.php';
+
+// The files that declare the doubles, kept outside of Pest.php (for example tests/Fixtures/wordpress.php):
+// require_once __DIR__.'/Fixtures/wordpress.php';
