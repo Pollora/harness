@@ -353,7 +353,7 @@ jobs:
       contents: read
 ```
 
-The job is named `WordPress integration PHP <version>` (one per version of `php-versions`, 8.3 and 8.4 by default). It installs WordPress with WP-CLI under `$RUNNER_TEMP/wordpress` (outside the repository, so no linter reads it), against a MySQL 8.0 service container (digest-pinned), installs the plugins asked for, then exports `WP_PATH` and `WP_CORE_DIR` (the directory holding `wp-load.php`) and `WP_TESTS_DB_HOST`, `WP_TESTS_DB_NAME`, `WP_TESTS_DB_USER`, `WP_TESTS_DB_PASSWORD` to the tests. `WP_DEBUG` is on and cron is off. It then starts the suite, in this order: the `test:integration` script of `composer.json` when there is one (the repository owns the command, as `hook` does with `composer test:wordpress`); otherwise `vendor/bin/pest -c phpunit.integration.xml` when that file exists; otherwise `vendor/bin/pest <wordpress-integration>`. The inputs are validated (a path inside the repository, a version, plugin slugs) before anything runs. Like the *Tests* job it only reports in observe mode and blocks in enforce mode; no other job needs it, so it is a status to require when the repository wants it.
+The job is named `WordPress integration PHP <version>` (one per version of `php-versions`, 8.3 and 8.4 by default). It installs WordPress with WP-CLI under `$RUNNER_TEMP/wordpress` (outside the repository, so no linter reads it), against a MySQL 8.0 service container (digest-pinned), installs the plugins asked for, then exports `WP_PATH` and `WP_CORE_DIR` (the directory holding `wp-load.php`) and `WP_TESTS_DB_HOST`, `WP_TESTS_DB_NAME`, `WP_TESTS_DB_USER`, `WP_TESTS_DB_PASSWORD` to the tests. `WP_DEBUG` is on and cron is off (the `wp-config.php` constants are all guarded with `defined() ||`, so a bootstrap that defines them first, as the template does, never triggers a *Constant already defined* warning). It then starts the suite, in this order: the `test:integration` script of `composer.json` when there is one (the repository owns the command, as `hook` does with `composer test:wordpress`); otherwise `vendor/bin/pest --test-directory=<wordpress-integration> -c phpunit.integration.xml` when that file exists (see *Why `Pest.php` must not declare doubles of WordPress*); otherwise `vendor/bin/pest <wordpress-integration>`. The inputs are validated (a path inside the repository, a version, plugin slugs) before anything runs. Like the *Tests* job it only reports in observe mode and blocks in enforce mode; no other job needs it, so it is a status to require when the repository wants it.
 
 ### The bootstrap and a first test
 
@@ -364,9 +364,25 @@ mkdir -p tests/Integration
 cp vendor/pollora/harness/stubs/wordpress/bootstrap.php.stub tests/Integration/bootstrap.php
 cp vendor/pollora/harness/stubs/wordpress/WordPressLoadedTest.php.stub tests/Integration/WordPressLoadedTest.php
 cp vendor/pollora/harness/stubs/wordpress/phpunit.integration.xml.stub phpunit.integration.xml
+cp vendor/pollora/harness/stubs/wordpress/unit-bootstrap.php.stub tests/bootstrap.php # only when the unit suite has no bootstrap yet
 ```
 
-The bootstrap loads Composer's autoloader, then `wp-load.php` from `WP_PATH`, and stops with a clear message when it is missing. `phpunit.integration.xml` keeps the suite apart from `phpunit.xml`: **exclude `tests/Integration` from the suites of `phpunit.xml`**, otherwise the unit run would load WordPress too. The example test checks `function_exists('register_post_meta')`, `get_bloginfo()`, the database, a real hook and a real meta registration; if the bootstrap did not load WordPress, or a Brain Monkey stub were standing in, it fails. Locally: install WordPress anywhere (WP-CLI, SQLite or MySQL) and run `WP_PATH=/path/to/wordpress vendor/bin/pest -c phpunit.integration.xml`.
+The bootstrap loads Composer's autoloader, then `wp-load.php` from `WP_PATH`, and stops with a clear message when it is missing. `phpunit.integration.xml` keeps the suite apart from `phpunit.xml`: **exclude `tests/Integration` from the suites of `phpunit.xml`**, otherwise the unit run would load WordPress too. The example test checks `function_exists('register_post_meta')`, `get_bloginfo()`, the database, a real hook and a real meta registration; if the bootstrap did not load WordPress, or a Brain Monkey stub were standing in, it fails. Locally: install WordPress anywhere (WP-CLI, SQLite or MySQL) and run `WP_PATH=/path/to/wordpress composer test:integration`, with this script in `composer.json`:
+
+```json
+"test:integration": "pest --test-directory=tests/Integration -c phpunit.integration.xml"
+```
+
+### Why `Pest.php` must not declare doubles of WordPress, and where they go
+
+Pest loads `tests/Pest.php` and the files of `tests/Helpers/` **before** the PHPUnit bootstrap, in every run, even with `-c phpunit.integration.xml`. A unit suite that declares its doubles of WordPress there (`WP_Error`, `WP_REST_Request`, `WP_Query`, `WP_CLI`, `wp_doing_ajax()`, `wp_parse_args()`...) therefore has them declared when the integration bootstrap loads the real WordPress, which declares them again: `Cannot redeclare class WP_Error`, and Pest exits with 255 and no message. Found by deploying the job on eleven packages.
+
+Two rules, both applied by every package that runs the job:
+
+1. **Declare the doubles in `tests/bootstrap.php`**, referenced by `phpunit.xml.dist` (`bootstrap="tests/bootstrap.php"`); `stubs/wordpress/unit-bootstrap.php.stub` is the example. The unit suite reads that bootstrap and is unchanged; the integration suite reads `tests/Integration/bootstrap.php` (its own `phpunit.integration.xml`) and never sees the doubles. `Pest.php` keeps `pest()->extend(...)`, `beforeEach()` and the like.
+2. **Run the integration suite with `pest --test-directory=tests/Integration -c phpunit.integration.xml`** (the `test:integration` script above). With a test directory, Pest looks for `Pest.php` and the helpers in that directory, not in `tests/`, so what only the unit suite needs is not loaded. The job runs exactly this command when the repository has no `test:integration` script, and the script itself when it has one.
+
+The bootstrap template also guards `define('DISABLE_WP_CRON', ...)` with `defined() ||`, because the `wp-config.php` of the job defines it too: a second `define()` is a warning, which breaks the tests that compare the output of a sub-process and makes Pest exit without a test.
 
 **Keep the suite out of the release archive.** `phpunit.integration.xml` sits at the repository root, so the *Distribution archive* step (QA-06) reports it as a development file that would travel in the archive Composer downloads. Run `vendor/bin/pollora-qa archive --fix` once: it writes the missing `export-ignore` line (the `tests/` folder is already covered by `/tests export-ignore`). Found by the first pilot of this job, on `Pollora/hook`.
 

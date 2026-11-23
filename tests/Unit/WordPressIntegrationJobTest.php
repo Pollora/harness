@@ -60,7 +60,7 @@ it('skips the WordPress job while wordpress-integration is empty, and nothing wa
 it('ships the bootstrap templates the workflow and the README name', function (): void {
     $root = dirname(__DIR__, 2);
 
-    foreach (['bootstrap.php.stub', 'phpunit.integration.xml.stub', 'WordPressLoadedTest.php.stub'] as $file) {
+    foreach (['bootstrap.php.stub', 'phpunit.integration.xml.stub', 'WordPressLoadedTest.php.stub', 'unit-bootstrap.php.stub'] as $file) {
         expect($root.'/stubs/wordpress/'.$file)->toBeFile();
     }
 

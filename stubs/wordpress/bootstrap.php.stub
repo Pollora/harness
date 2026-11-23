@@ -11,6 +11,10 @@ declare(strict_types=1);
  *
  *     WP_PATH=/path/to/wordpress vendor/bin/pest -c phpunit.integration.xml
  *
+ * Run the suite with `pest --test-directory=tests/Integration -c phpunit.integration.xml` (the `test:integration` script of
+ * composer.json), so that Pest does not load tests/Pest.php and tests/Helpers, where the doubles of WordPress of the
+ * unit suite live, before this bootstrap: they would collide with the real WordPress (see the README of the harness).
+ *
  * Composer's autoloader is loaded first, by this file, so that the classes under test and Pest itself are available.
  * WordPress is then loaded with `wp-load.php`: the site is installed, its plugins are active, its hooks fire.
  */
@@ -30,8 +34,10 @@ if ($wordpressPath === '' || ! is_file($wordpressPath.'/wp-load.php')) {
     exit(1);
 }
 
-// No theme output, no cron request: a test starts what it needs itself.
-define('WP_USE_THEMES', false);
+// No theme output, no cron request: a test starts what it needs itself. Every define is guarded: the wp-config.php of
+// the harness job (and a local one) may define the same constants, and a second define() is a warning that breaks the
+// tests which compare the output of a sub-process.
+defined('WP_USE_THEMES') || define('WP_USE_THEMES', false);
 defined('DISABLE_WP_CRON') || define('DISABLE_WP_CRON', true);
 
 require_once $wordpressPath.'/wp-load.php';
