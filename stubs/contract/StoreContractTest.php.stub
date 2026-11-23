@@ -1,0 +1,66 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+ * The contract of the Store port: what every adapter does the same way, whatever it stores the values in.
+ * Run against each adapter listed in Datasets/Stores.php.
+ *
+ * Write here what a caller may rely on, and nothing an adapter is free to do differently (its format, its speed,
+ * its limits). A case that one adapter cannot honour is not removed or loosened to make it pass: it goes into
+ * STORE_KNOWN_DEVIATIONS with the reason, and stays visible in every run.
+ *
+ * Each test receives the adapter name and its factory from the dataset, then the cases of the next `with()`.
+ */
+
+it('gives back what was put', function (string $adapter, Closure $make): void {
+    $store = $make();
+    $store->put('key', 'value');
+
+    expect($store->get('key'))->toBe('value');
+})->with('stores');
+
+it('answers null, not an empty value, for a key it does not hold', function (string $adapter, Closure $make): void {
+    contractCase(STORE_KNOWN_DEVIATIONS, $adapter, 'missing key is null', function () use ($make): void {
+        expect($make()->get('missing'))->toBeNull();
+    });
+})->with('stores');
+
+it('keeps an empty string apart from a missing key', function (string $adapter, Closure $make): void {
+    contractCase(STORE_KNOWN_DEVIATIONS, $adapter, 'empty value', function () use ($make): void {
+        $store = $make();
+        $store->put('key', '');
+
+        expect($store->get('key'))->toBe('');
+    });
+})->with('stores');
+
+it('replaces a value that was already there', function (string $adapter, Closure $make): void {
+    $store = $make();
+    $store->put('key', 'first');
+    $store->put('key', 'second');
+
+    expect($store->get('key'))->toBe('second');
+})->with('stores');
+
+it('forgets a key, and forgetting twice or forgetting a stranger is not an error', function (string $adapter, Closure $make): void {
+    contractCase(STORE_KNOWN_DEVIATIONS, $adapter, 'forget', function () use ($make): void {
+        $store = $make();
+        $store->put('key', 'value');
+        $store->forget('key');
+        $store->forget('key');
+        $store->forget('never-there');
+
+        expect($store->get('key'))->toBeNull();
+    });
+})->with('stores');
+
+it('keeps keys apart, whatever characters they hold', function (string $adapter, Closure $make, string $key): void {
+    contractCase(STORE_KNOWN_DEVIATIONS, $adapter, 'key '.$key, function () use ($make, $key): void {
+        $store = $make();
+        $store->put($key, 'mine');
+        $store->put($key.'-other', 'not mine');
+
+        expect($store->get($key))->toBe('mine');
+    });
+})->with('stores')->with(['plain' => 'plain', 'slash' => 'a/b', 'dots' => '../a', 'space' => 'a b', 'accent' => 'été', 'long' => str_repeat('k', 300)]);

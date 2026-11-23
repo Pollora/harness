@@ -1,0 +1,28 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+ * The adapters of ONE port, as its contract suite (tests/Contract/StoreContractTest.php) runs them.
+ *
+ * Adding an adapter to the package = adding one row here: the whole contract then runs against it.
+ * A row is [name, factory]: the name is what the report shows and what a known deviation is keyed by,
+ * the factory builds the adapter when its test starts (nothing is built before).
+ *
+ * `Store`, `ArrayStore` and `FileStore` are the example: replace them with your port and your adapters.
+ */
+
+use Acme\Package\Contracts\Store;
+use Acme\Package\Infrastructure\ArrayStore;
+use Acme\Package\Infrastructure\FileStore;
+
+dataset('stores', [
+    'array' => ['array', static fn (): Store => new ArrayStore],
+    'file' => ['file', static fn (): Store => new FileStore(sys_get_temp_dir().'/contract-store-'.bin2hex(random_bytes(4)))],
+]);
+
+/**
+ * What the contract found and nobody has decided yet: `'adapter|case' => why`. Empty is the goal.
+ * A line says what differs and where (file and line of the code), so it can be fixed or accepted on purpose.
+ */
+const STORE_KNOWN_DEVIATIONS = [];
