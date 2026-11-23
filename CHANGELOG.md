@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.35] - 2026-11-23
+
 ### Added
 
 - **Adapter contract tests: a template and a pattern, `stubs/contract/` (issue #110).** A port with several adapters is tested once, against all of them: the adapters are a Pest dataset (one row each), the contract is a file of `it()` with `->with('adapters')`, and a new adapter is a new row; no abstract test class is needed (CONV-12 stays satisfied). The template is a worked example for a toy port (`Store`) with the three files to copy (`Datasets/Contract.php`, `Datasets/Stores.php`, `StoreContractTest.php`), and `contractCase()` for a difference the contract found and nobody has decided yet: the case still runs, is reported as skipped with its reason while it fails, and fails the day it passes, so a fix cannot hide in the list. `tests/Unit/ContractStubTest.php` runs a real Pest on the template (passes on good adapters, fails on a bad one, keeps a listed difference as a skip, fails on a listed difference that was fixed). The README has a chapter, the measured cost on `media` and the reason no static rule exists yet. Nothing runs by itself: no job, input or rule changes; a repository adds the suite to its `phpunit.xml` after copying the files.
