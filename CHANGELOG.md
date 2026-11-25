@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.36] - 2026-11-25
+
 ### Added
 
 - **A time limit the quality job can raise: `quality-timeout-minutes`.** The *Quality gates* job of `php-package.yml` had a fixed limit of 30 minutes. A repository whose whole mutation pass lasts longer on the runner (`media`: 30 minutes cancelled on `main` and every night once its `msi` floor was recorded, whereas the same pass takes 4 minutes on a developer's Mac) could not run it. The new optional input (a number, **30 by default, so no repository changes**; GitHub allows up to 360) sets the limit of that job only; the other jobs keep their own.

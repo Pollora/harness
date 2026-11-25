@@ -272,12 +272,12 @@ The *Quality gates* job stops after **30 minutes**. A repository whose whole mut
 ```yaml
 jobs:
   harness:
-    uses: Pollora/harness/.github/workflows/php-package.yml@<a version that has the input>
+    uses: Pollora/harness/.github/workflows/php-package.yml@v0.1.36
     with:
       quality-timeout-minutes: 90
 ```
 
-It is available from the first harness version published after 0.1.35. It is a number of minutes (GitHub accepts up to 360); the default is 30 and the other jobs keep their own limits. A timed-out job shows as **cancelled**, not failed, with the annotation "The job has exceeded the maximum execution time": read it before concluding that a gate failed. Measure first: the pass that takes a few minutes on a developer's machine can take several times longer on a two-core runner.
+It is available from 0.1.36. It is a number of minutes (GitHub accepts up to 360); the default is 30 and the other jobs keep their own limits. A timed-out job shows as **cancelled**, not failed, with the annotation "The job has exceeded the maximum execution time": read it before concluding that a gate failed. Measure first: the pass that takes a few minutes on a developer's machine can take several times longer on a two-core runner.
 
 ### Mutation on pull requests
 
