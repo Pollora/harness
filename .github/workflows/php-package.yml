@@ -27,6 +27,13 @@ on:
         description: PHP version of the quality job
         type: string
         default: '8.4'
+      quality-timeout-minutes:
+        description: >-
+          Maximum duration of the Quality gates job, in minutes (30 by default; GitHub allows up to 360). A repository whose
+          whole mutation pass lasts longer than 30 minutes on the runner raises it here, or limits the mutation to the files a
+          pull request changes. The other jobs keep their own limits.
+        type: number
+        default: 30
       framework-ref:
         description: Branch of Pollora/framework the downstream job runs
         type: string
@@ -108,7 +115,7 @@ jobs:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
     needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.quality-timeout-minutes }}
     permissions:
       contents: read
     steps:
