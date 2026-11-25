@@ -114,7 +114,14 @@ final class InvalidConfig extends RuntimeException
     {
         $given = is_scalar($scope) ? (string) $scope : get_debug_type($scope);
 
-        return new self("{$path}: mutation.scope is \"{$given}\". Use \"all\" (the whole repository, compared with ratchet.msi), \"changed\" (the files a change touches, held to mutation.min) or \"added\" (only the files it adds).");
+        return new self("{$path}: mutation.scope is \"{$given}\". Use \"all\" (the whole repository, compared with ratchet.msi), \"changed\" (the files a change touches, held to mutation.min), \"added\" (only the files it adds) or \"changed-relative\" (the files it touches, each compared with its score on the base).");
+    }
+
+    public static function invalidMutationOption(string $path, string $key, mixed $value, string $expected): self
+    {
+        $given = is_scalar($value) ? (string) $value : get_debug_type($value);
+
+        return new self("{$path}: mutation.{$key} is \"{$given}\". Give {$expected}.");
     }
 
     public static function invalidMutationMinimum(string $path, mixed $min): self

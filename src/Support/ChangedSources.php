@@ -75,6 +75,47 @@ final class ChangedSources
     }
 
     /**
+     * The files a change renames, as new path => path on the base, for the source files `since()` lists.
+     *
+     * A renamed file has no score on the base under its new name: the relative mutation gate measures its old path
+     * instead, so that a rename does not make an old file look new.
+     *
+     * @return array<string, string> Empty when nothing was renamed or git cannot say
+     */
+    public static function renamed(string $cwd, string $base = self::DEFAULT_BASE): array
+    {
+        if ($base === '' || str_starts_with($base, '-') || ! Paths::gitUsable($cwd)) {
+            return [];
+        }
+
+        $process = proc_open(['git', 'diff', '--name-status', '-M', '--diff-filter=R', $base, 'HEAD'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $cwd);
+
+        if (! is_resource($process)) {
+            return [];
+        }
+
+        $output = (string) stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        if (proc_close($process) !== 0) {
+            return [];
+        }
+
+        $renamed = [];
+
+        foreach (explode("\n", $output) as $line) {
+            $columns = explode("\t", $line);
+
+            if (count($columns) === 3 && str_starts_with($columns[0], 'R')) {
+                $renamed[$columns[2]] = $columns[1];
+            }
+        }
+
+        return $renamed;
+    }
+
+    /**
      * The directories Composer autoloads classes from (`autoload.psr-4`, `autoload.psr-0`, `autoload.classmap`), as
      * `dir/`; `src/` when composer.json names none.
      *
