@@ -265,6 +265,20 @@ Only `scope` is needed; the other keys are shown with their defaults. `check --m
 - **The cost is capped, and the cap fails.** Two passes per file: measured on the framework, a small file of 49 mutants takes about three minutes a pass (see the CHANGELOG), so the defaults are `max_files: 3` and `max_minutes: 15`. A change that touches more files than `max_files` fails **before anything runs**, naming the files and what to do (raise the key, split the change, measure by hand): measuring only some would let the others through. During the run, a pass that the passes so far say would run past `max_minutes` is not started; the gate then fails and lists each file it did not reach (`not measured: the time budget ran out`), never green. A pass already started is not interrupted, so the job can overrun by one pass; the `timeout-minutes: 30` of the quality job stays the hard limit.
 - **What it does not see.** A change that only edits tests touches no source file and measures nothing (as with the other scopes). A regression spread over files the change does not touch is invisible. A renamed file is found by git's similarity detection (`-M`); a copied file counts as new. A suite whose result depends on files git ignores, or on a classmap-authoritative autoloader of the change, may read `base unmeasured`. The parallel and the single-process runs do not give exactly the same counts (above), and the gate does not know which of the two measured each side: that is what the tolerance is for.
 
+### A longer time limit for the quality job
+
+The *Quality gates* job stops after **30 minutes**. A repository whose whole mutation pass lasts longer on the runner (it runs on `main` and every night, with the `msi` floor of the ratchet) raises the limit with the input `quality-timeout-minutes`, in the workflow that calls the harness:
+
+```yaml
+jobs:
+  harness:
+    uses: Pollora/harness/.github/workflows/php-package.yml@<a version that has the input>
+    with:
+      quality-timeout-minutes: 90
+```
+
+It is available from the first harness version published after 0.1.35. It is a number of minutes (GitHub accepts up to 360); the default is 30 and the other jobs keep their own limits. A timed-out job shows as **cancelled**, not failed, with the annotation "The job has exceeded the maximum execution time": read it before concluding that a gate failed. Measure first: the pass that takes a few minutes on a developer's machine can take several times longer on a two-core runner.
+
 ### Mutation on pull requests
 
 The mutation run is 80 to 90 % of the *Quality gates* job (measured on 101 jobs of 33 repositories on 20 November: median job 134 s, 90th percentile 389 s, longest 912 s). A repository without `mutation.scope` mutated everything on every push, even a push that changes no PHP. So the reusable workflow now runs it differently on a pull request:
