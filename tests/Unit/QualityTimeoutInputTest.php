@@ -22,7 +22,7 @@ it('keeps the fixed limits of every other job', function (): void {
     preg_match_all('/^    timeout-minutes: (.+)$/m', $text, $limits);
 
     // The quality job takes the input; every other job keeps its own number.
-    $fixed = array_values(array_filter($limits[1], static fn (string $limit): bool => ctype_digit($limit)));
+    $fixed = array_values(array_filter($limits[1], static fn (string $limit): bool => preg_match('/^\d+$/', $limit) === 1));
 
     expect($limits[1])->toContain('${{ inputs.quality-timeout-minutes }}')
         ->and(count($limits[1]))->toBeGreaterThan(count($fixed))
