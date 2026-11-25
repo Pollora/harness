@@ -52,6 +52,9 @@ final readonly class Plan
     /** The same gate for `mutation.scope: "added"`: only the files a change adds are mutated. */
     public const string MUTATION_ADDED = 'Mutation testing (new files)';
 
+    /** The same gate for `mutation.scope: "changed-relative"`: each modified file is compared with its score on the base. */
+    public const string MUTATION_RELATIVE = 'Mutation testing (changed files, relative)';
+
     /** PERF-01 and PERF-07: the query budgets and the nightly measures, read from the files. */
     public const string PERFORMANCE = 'Performance budgets';
 
@@ -128,7 +131,11 @@ final readonly class Plan
             $this->publicSurface(),
             $this->distributionArchive(),
             $this->performanceBudgets($budgetsBase),
-            ...($mutation ? [$this->config->mutation->limited() ? $this->mutationOfChangedFiles($mutationBase) : $this->mutation($score)] : []),
+            ...($mutation ? [match (true) {
+                $this->config->mutation->relative() => $this->mutationRelativeToBase($mutationBase),
+                $this->config->mutation->limited() => $this->mutationOfChangedFiles($mutationBase),
+                default => $this->mutation($score),
+            }] : []),
             $this->ratchet($coverage, $infection, $score, $mutation && $this->config->mutation->limited()),
         ];
     }
@@ -494,6 +501,18 @@ final readonly class Plan
             },
             requires: ['vendor/pestphp/pest-plugin-mutate'],
         );
+    }
+
+    /**
+     * Mutation testing of the files a change touches, each compared with its own score on the base (`changed-relative`).
+     *
+     * See `RelativeMutation` for the rules; the step only wires it to the settings and to `--mutation-base`.
+     */
+    private function mutationRelativeToBase(?string $base): Step
+    {
+        $gate = new RelativeMutation($this->cwd, $this->config->mutation, $base ?? ChangedSources::DEFAULT_BASE);
+
+        return new Step(self::MUTATION_RELATIVE, ['QA-01'], static fn (): StepResult => $gate->run(), requires: ['vendor/pestphp/pest-plugin-mutate']);
     }
 
     /**

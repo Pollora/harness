@@ -34,9 +34,9 @@ final class CheckCommand implements Command
               --coverage[=FILE]   Run the tests with coverage and compare the Clover report with the ratchet (default file .harness/coverage.xml)
               --infection=FILE    Infection JSON log to compare with the ratchet
               --mutation          Run Pest's mutation testing (pest --mutate) and compare its score with the ratchet's msi
-              --mutation-base=REF With mutation.scope "changed", the commit the changed files are counted from (default HEAD^1: a pull request's merge commit needs fetch-depth 2)
+              --mutation-base=REF With a limited mutation.scope, the commit the changed files are counted from (default HEAD^1: a pull request's merge commit needs fetch-depth 2)
               --budgets-base=REF  The commit the query budgets (PERF-01) are compared with, to refuse a budget that went up (default HEAD^1; "not compared" when it is not in the checkout)
-              --mutation-scope=S  all, changed or added: what --mutation mutates in this run, over .harness.json (a limited scope is held to mutation.min, 50 % without one)
+              --mutation-scope=S  all, changed, added or changed-relative: what --mutation mutates in this run, over .harness.json (a limited scope is held to mutation.min, 50 % without one)
               --observe           Report failures without failing (overrides .harness.json)
               --enforce           Fail on any failure (overrides .harness.json)
               --strict            Also fail when a gate could not run because a tool is missing (Semgrep, vendor/bin/*), in any mode
@@ -63,7 +63,7 @@ final class CheckCommand implements Command
 
         if ($scope !== null || $io->flag('mutation-scope')) {
             if ($scope === null || ! MutationSettings::isScope($scope)) {
-                $io->error(sprintf('--mutation-scope is "%s". Use "all", "changed" or "added".', $scope ?? ''));
+                $io->error(sprintf('--mutation-scope is "%s". Use "all", "changed", "added" or "changed-relative".', $scope ?? ''));
 
                 return self::FAILURE;
             }
