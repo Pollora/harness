@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Check;
 
+use Closure;
 use Pollora\Harness\Config\MutationSettings;
 use Pollora\Harness\Config\Ratchet;
 use Pollora\Harness\Support\BaseCheckout;
@@ -44,14 +45,14 @@ final class RelativeMutation
     /** The base and the change are compared as soon as it is clear that a file cannot have dropped. */
     private const float EPSILON = Ratchet::TOLERANCE;
 
-    /** @var callable(string, list<string>): array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool} */
-    private $runner;
+    /** @var Closure(string, list<string>): array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool} */
+    private readonly Closure $runner;
 
-    /** @var callable(): float */
-    private $clock;
+    /** @var Closure(): float */
+    private readonly Closure $clock;
 
-    /** @var (callable(string, string): bool)|null */
-    private $dependencies;
+    /** @var (Closure(string, string): bool)|null */
+    private readonly ?Closure $dependencies;
 
     /**
      * @param  string  $cwd  The repository, at the change
@@ -68,9 +69,9 @@ final class RelativeMutation
         ?callable $clock = null,
         ?callable $dependencies = null,
     ) {
-        $this->runner = $runner ?? MutationRun::run(...);
-        $this->clock = $clock ?? static fn (): float => microtime(true);
-        $this->dependencies = $dependencies;
+        $this->runner = $runner === null ? MutationRun::run(...) : Closure::fromCallable($runner);
+        $this->clock = $clock === null ? static fn (): float => microtime(true) : Closure::fromCallable($clock);
+        $this->dependencies = $dependencies === null ? null : Closure::fromCallable($dependencies);
     }
 
     /**
