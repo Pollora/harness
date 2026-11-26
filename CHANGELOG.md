@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **`check --fast` and the `post-edit` hook no longer hand PHPStan a file its configuration does not cover.** PHPStan analyses whatever it is given, so a change to a test file outside `paths` failed the fast gate, or blocked the agent, with errors the full analysis never reports (and a change to excluded files only ended in `No files found to analyse`). The changed files are now narrowed to `paths` minus `excludePaths`, as `phpstan dump-parameters` resolves them with the includes; when none is left the step is skipped with its reason. When it cannot be determined, every changed file is analysed as before.
 - **The harness's own `ArchitectureExemptionTest` passes with the default temporary directory of macOS.** Its throwaway project sat outside Pest's root, so Pest built a namespace from its absolute path, and a segment starting with a digit (`/var/folders/7f/…`) is a parse error. The project now holds its own copy of Pest's binary and is its own root. Tests only: nothing changes for a repository that uses the harness.
 
 ## [0.1.39] - 2026-11-26

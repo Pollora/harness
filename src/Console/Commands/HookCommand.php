@@ -8,6 +8,7 @@ use Pollora\Harness\Config\HarnessConfig;
 use Pollora\Harness\Console\Command;
 use Pollora\Harness\Console\Io;
 use Pollora\Harness\Support\Paths;
+use Pollora\Harness\Support\PhpStanScope;
 
 /**
  * The agent hooks (G0): what a coding agent runs before and after each edit,
@@ -101,7 +102,8 @@ final class HookCommand implements Command
             $this->exec($io->cwd, ['vendor/bin/pint', '--quiet', '--config', Paths::pintConfig($io->cwd), $file]);
         }
 
-        if (! is_file($io->cwd.'/vendor/bin/phpstan')) {
+        // A file PHPStan is not configured to analyse (a test, an excluded directory) is left alone
+        if (! is_file($io->cwd.'/vendor/bin/phpstan') || PhpStanScope::of($io->cwd)?->analysed([$file]) === []) {
             return self::SUCCESS;
         }
 
