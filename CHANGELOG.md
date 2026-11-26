@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`check --fast` and the `post-edit` hook no longer hand PHPStan a file its configuration does not cover.** PHPStan analyses whatever it is given, so a change to a test file outside `paths` failed the fast gate, or blocked the agent, with errors the full analysis never reports (and a change to excluded files only ended in `No files found to analyse`). The changed files are now narrowed to `paths` minus `excludePaths`, as `phpstan dump-parameters` resolves them with the includes; when none is left the step is skipped with its reason. When it cannot be determined, every changed file is analysed as before.
+
 ## [0.1.39] - 2026-11-26
 
 ### Fixed
