@@ -2,14 +2,19 @@
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- **Both reusable workflows end with a `Result` job**, the one status check a repository can require (`harness / Result`): the other job names carry the profile, the mode or a PHP version. It needs every job and runs with `if: always()`; it fails when one of them failed or was cancelled (observed or not), except a failure the job's `continue-on-error` already ignores (observe mode, an API break labelled `breaking`, the observed jobs of a template), and passes the jobs that were skipped because they do not apply. No existing job, name, input or `continue-on-error` changes. Requiring it is a repository setting, which this release does not touch.
+- **A repository without `composer.lock` now runs the harness version of the workflow tag it calls**, not the latest release its constraint allows, so a new blocking rule arrives with the pull request that raises the tag. The tag is read from `job.workflow_ref` and applied with `composer update --with` in the *Quality gates*, *Tests* and *WordPress integration* jobs; `composer.json` is not changed. A constraint that starts above the tag fails the install. Repositories with a lock install what they installed before, with a warning when the lock and the tag differ; a branch, a commit or a `dev-` constraint is left to Composer. **This only protects a repository once it calls a tag that contains this change**: this release itself still reaches, through Composer, every repository without a lock on an older tag, and the `composer update` jobs of locked ones, so it should not make a rule newly blocking.
 
 ### Fixed
 
+- **`template.yml` reads its presets from the commit it was called at.** It asked for `github.job_workflow_sha`, which is not a property of the `github` context: the value was empty and `actions/checkout` took the default branch of the harness, so a template called at a tag ran the Semgrep rules and the audit and ratchet code of `main`. It now uses `job.workflow_sha`.
 - **`check --fast` and the `post-edit` hook no longer hand PHPStan a file its configuration does not cover.** PHPStan analyses whatever it is given, so a change to a test file outside `paths` failed the fast gate, or blocked the agent, with errors the full analysis never reports (and a change to excluded files only ended in `No files found to analyse`). The changed files are now narrowed to `paths` minus `excludePaths`, as `phpstan dump-parameters` resolves them with the includes; when none is left the step is skipped with its reason. When it cannot be determined, every changed file is analysed as before.
 - **The harness's own `ArchitectureExemptionTest` passes with the default temporary directory of macOS.** Its throwaway project sat outside Pest's root, so Pest built a namespace from its absolute path, and a segment starting with a digit (`/var/folders/7f/…`) is a parse error. The project now holds its own copy of Pest's binary and is its own root. Tests only: nothing changes for a repository that uses the harness.
+
+### Added
+
+- **Both reusable workflows end with a `Result` job**, the one status check a repository can require (`harness / Result`): the other job names carry the profile, the mode or a PHP version. It needs every job and runs with `if: always()`; it fails when one of them failed or was cancelled (observed or not), except a failure the job's `continue-on-error` already ignores (observe mode, an API break labelled `breaking`, the observed jobs of a template), and passes the jobs that were skipped because they do not apply. No existing job, name, input or `continue-on-error` changes. Requiring it is a repository setting, which this release does not touch.
 
 ## [0.1.39] - 2026-11-26
 
