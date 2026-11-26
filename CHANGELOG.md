@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The WordPress integration job no longer fails on `wp: command not found`.** `setup-php` was asked for `wp-cli`; when its download failed it printed `Could not setup wp-cli`, the step still succeeded and the job broke at *Install WordPress* (several times on 2026-11-26). The job now installs WP-CLI itself: version 2.12.0, checked against its published SHA-512, with retries, and a failure stops that step with its own message. No input, job name or output changes.
+
 ## [0.1.38] - 2026-11-26
 
 ### Changed
