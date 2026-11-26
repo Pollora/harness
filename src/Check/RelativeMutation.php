@@ -30,7 +30,8 @@ use Pollora\Harness\Support\ChangedSources;
  * - **Base unmeasured** (its tests fail, a measuring guard trips): the file is held to `min` and says so; a
  *   regression cannot be proved, so it is the fixed floor or nothing.
  * - **Change unmeasured**: the gate fails. A score is refused rather than believed when Pest could not write its
- *   files, when Patchwork took over the stream wrapper, when every mutant survived, or when the tests fail.
+ *   files, when no mutated source was seen being executed (`MutationCanary`: Patchwork or another stream wrapper
+ *   serving the original), when every mutant survived, or when the tests fail.
  * - **Nothing is measured twice for nothing.** The change is measured first; a file at or above `100 - tolerance`
  *   cannot have dropped beyond the tolerance, so its base is not measured.
  * - **Cost.** One Pest pass per file and per side (each repeats the suite's own run first): the gate refuses a change
@@ -45,7 +46,7 @@ final class RelativeMutation
     /** The base and the change are compared as soon as it is clear that a file cannot have dropped. */
     private const float EPSILON = Ratchet::TOLERANCE;
 
-    /** @var Closure(string, list<string>): array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool} */
+    /** @var Closure(string, list<string>): array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool, unloaded?: string} */
     private readonly Closure $runner;
 
     /** @var Closure(): float */
@@ -57,7 +58,7 @@ final class RelativeMutation
     /**
      * @param  string  $cwd  The repository, at the change
      * @param  string  $base  The commit the change is counted from (`HEAD^1` on a pull request's merge commit)
-     * @param  (callable(string, list<string>): array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool})|null  $runner  One Pest mutation run; `MutationRun::run()` by default
+     * @param  (callable(string, list<string>): array{score: float|null, summary: string, output: string, empty: bool, unwritable: bool, unloaded?: string})|null  $runner  One Pest mutation run; `MutationRun::run()` by default
      * @param  (callable(): float)|null  $clock  Seconds; `microtime(true)` by default
      * @param  (callable(string, string): bool)|null  $dependencies  Gives the base checkout its dependencies; `BaseCheckout`'s copy of `vendor/` by default
      */
@@ -180,6 +181,9 @@ final class RelativeMutation
      * a directory function, the mutant's process dies and counts as killed: the score reads 0 % or 100 % whatever
      * the tests assert, and nothing in Pest's report says so. A repository that has Patchwork must say, in a test
      * bootstrap, that it handles `PEST_MUTATION_TESTING`; this gate refuses to measure one that does not.
+     *
+     * This is only the cheap refusal made before any run: naming the variable proves nothing. `MutationCanary`
+     * checks, after each run that has a score, that a mutated source is really executed.
      *
      * @return string|null The message of the refusal, null when the repository is fine
      */

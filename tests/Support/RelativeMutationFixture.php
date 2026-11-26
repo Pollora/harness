@@ -8,7 +8,8 @@ declare(strict_types=1);
  *
  * The fake reads a marker in the first line of `--path=<file>`: `// killed=39 survived=10` prints those counts and
  * their score; `// report=<json string>` prints that text as it is (to play a Pest that leaks Patchwork's frames,
- * cannot write its files, or prints no score). A file that does not exist prints nothing.
+ * cannot write its files, or prints no score). A file that does not exist prints nothing. Started as the process of one
+ * mutant (`PEST_MUTATION_FILE`), it loads that mutant, as Pest does.
  */
 if (! function_exists('relGit')) {
     /**
@@ -94,6 +95,9 @@ if (! function_exists('relRepository')) {
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
         file_put_contents($root.'/vendor/bin/pest', <<<'PHP'
             <?php
+            if (getenv('PEST_MUTATION_FILE') !== false) {
+                require getenv('PEST_MUTATION_FILE');
+            }
             $path = '';
             foreach ($argv as $argument) {
                 if (str_starts_with($argument, '--path=')) {

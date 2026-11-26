@@ -50,7 +50,8 @@ function projectWithFakePest(string $parallel, string $single): string
     mkdir($root.'/vendor/bin', 0777, true);
     mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0777, true);
     file_put_contents($root.'/vendor/bin/pest', sprintf(
-        "<?php\n\$parallel = in_array('--parallel', \$argv, true);\nfwrite(STDOUT, \$parallel ? %s : %s);\n",
+        // Without --mutate and with a mutant to load, it is one mutant's process: it loads it, as Pest does
+        "<?php\nif (getenv('PEST_MUTATION_FILE') !== false) {\n    require getenv('PEST_MUTATION_FILE');\n}\n\$parallel = in_array('--parallel', \$argv, true);\nfwrite(STDOUT, \$parallel ? %s : %s);\n",
         var_export($parallel, true),
         var_export($single, true),
     ));

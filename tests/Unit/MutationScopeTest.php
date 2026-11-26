@@ -207,6 +207,9 @@ describe('the source files a change touches', function (): void {
     });
 });
 
+/** What the fake Pest does as the process of one mutant: it loads it, as Pest does. */
+const LOAD_MUTANT = "if (getenv('PEST_MUTATION_FILE') !== false) {\n    require getenv('PEST_MUTATION_FILE');\n}\n";
+
 describe('the Pest run limited to some files', function (): void {
     /**
      * A project whose vendor/bin/pest prints its own arguments, then a report.
@@ -218,7 +221,8 @@ describe('the Pest run limited to some files', function (): void {
         $root = harnessTempDir();
         mkdir($root.'/vendor/bin', 0o777, true);
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, 'ARGS '.implode(' ', array_slice(\$argv, 1)).\"\\n\");\nfwrite(STDOUT, ".var_export($report, true).");\n");
+        scopeWrite($root, ['src/A.php' => "<?php\n", 'src/B.php' => "<?php\n"]);
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT."fwrite(STDOUT, 'ARGS '.implode(' ', array_slice(\$argv, 1)).\"\\n\");\nfwrite(STDOUT, ".var_export($report, true).");\n");
 
         return $root;
     }
@@ -275,7 +279,7 @@ describe('the mutation gate of the changed files', function (): void {
         $root = scopedRepository($changes);
         mkdir($root.'/vendor/bin', 0o777, true);
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, ".var_export($report, true).");\n");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT.'fwrite(STDOUT, '.var_export($report, true).");\n");
         $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => $mutation]), $root))->full(null, null, true);
 
         return array_values(array_filter($steps, static fn (Step $step): bool => str_starts_with($step->name, 'Mutation testing')))[0];
@@ -349,7 +353,7 @@ describe('the mutation gate of the changed files', function (): void {
         $root = scopedRepository(['src/A.php' => "<?php\n"]);
         mkdir($root.'/vendor/bin', 0o777, true);
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, \"  Mutations: 1 tested\\n  Score:     100.00%\\n\");\n");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT."fwrite(STDOUT, \"  Mutations: 1 tested\\n  Score:     100.00%\\n\");\n");
         $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'changed', 'min' => 80]]), $root))->full(null, null, true, 'HEAD');
         $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION_CHANGED))[0];
 
@@ -360,7 +364,7 @@ describe('the mutation gate of the changed files', function (): void {
         $root = scopedRepository(['src/New.php' => "<?php\n", 'src/Old.php' => "<?php // changed\n"]);
         mkdir($root.'/vendor/bin', 0o777, true);
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, 'ARGS '.implode(' ', array_slice(\$argv, 1)).\"\\n\");\nfwrite(STDOUT, \"  Mutations: 1 untested, 9 tested\\n  Score:     90.00%\\n\");\n");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT."fwrite(STDOUT, 'ARGS '.implode(' ', array_slice(\$argv, 1)).\"\\n\");\nfwrite(STDOUT, \"  Mutations: 1 untested, 9 tested\\n  Score:     90.00%\\n\");\n");
         $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'added', 'min' => 80]]), $root))->full(null, null, true);
         $step = array_values(array_filter($steps, static fn (Step $step): bool => str_starts_with($step->name, 'Mutation testing')))[0];
 
@@ -403,7 +407,7 @@ it('fails the gate of the new files when Pest cannot write its temporary files, 
     mkdir($root.'/vendor/bin', 0o777, true);
     mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
     $output = "Warning: fopen(/app/vendor/pestphp/pest-plugin-mutate/src/../.temp/mutations/225429bccf85eb2c): Failed to open stream: No such file or directory\n  Mutations: 5 tested\n  Score:     100.00%\n";
-    file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, ".var_export($output, true).");\n");
+    file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT.'fwrite(STDOUT, '.var_export($output, true).");\n");
     $steps = (new Plan(HarnessConfig::fromArray(['profile' => 'core', 'mutation' => ['scope' => 'added', 'min' => 80]]), $root))->full(null, null, true);
     $step = array_values(array_filter($steps, static fn (Step $step): bool => $step->name === Plan::MUTATION_ADDED))[0];
 
@@ -426,7 +430,7 @@ describe('the mutation scope a run chooses on the command line', function (): vo
         $root = scopedRepository($changes);
         mkdir($root.'/vendor/bin', 0o777, true);
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, ".var_export($report, true).");\n");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT.'fwrite(STDOUT, '.var_export($report, true).");\n");
         $config = HarnessConfig::fromArray(['profile' => 'core', 'mutation' => $mutation, 'ratchet' => ['msi' => 90]]);
 
         if ($scope !== null) {
@@ -495,7 +499,7 @@ describe('the mutation scope a run chooses on the command line', function (): vo
         $root = scopedRepository(['src/A.php' => "<?php\n"]);
         mkdir($root.'/vendor/bin', 0o777, true);
         mkdir($root.'/vendor/pestphp/pest-plugin-mutate', 0o777, true);
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nfwrite(STDOUT, \"  Mutations: 1 tested\\n  Score:     100.00%\\n\");\n");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n".LOAD_MUTANT."fwrite(STDOUT, \"  Mutations: 1 tested\\n  Score:     100.00%\\n\");\n");
         $config = HarnessConfig::fromArray(['profile' => 'core', 'ratchet' => ['msi' => 90]]);
         $limited = array_values(array_filter((new Plan($config->withMutation($config->mutation->withScope('changed')), $root))->full(null, null, true), static fn (Step $step): bool => $step->name === 'Ratchet'))[0];
         $whole = array_values(array_filter((new Plan($config, $root))->full(null, null, false), static fn (Step $step): bool => $step->name === 'Ratchet'))[0];
