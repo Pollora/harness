@@ -42,7 +42,8 @@ on:
         description: >-
           What the mutation gate mutates on a pull request when .harness.json sets no mutation.scope: `changed` (default)
           only the source files the pull request changes, `all` the whole repository as before. Other events always mutate
-          everything. Ignored when the repository declares mutation.scope itself.
+          everything. Ignored when the repository declares mutation.scope itself (a `changed-relative` one runs its gate on
+          pull requests only).
         type: string
         default: changed
       wordpress-integration:
@@ -87,6 +88,7 @@ jobs:
       downstream: ${{ steps.config.outputs.downstream }}
       mutation: ${{ steps.config.outputs.mutation }}
       mutation-scope: ${{ steps.config.outputs.mutation-scope }}
+      msi: ${{ steps.config.outputs.msi }}
       redis: ${{ steps.config.outputs.redis }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,9 +108,12 @@ jobs:
           # A repository that recorded a mutation score (ratchet.msi) gets it checked; the others are untouched.
           # A repository that declares "mutation": {"scope": "changed"} (or "added", or "changed-relative") is checked too, on the files the pull request
           # touches only, against its "min": its whole run is too long for CI. Everything else keeps the rule above.
+          # "changed-relative" only means something on a pull request: `Run every gate` decides what the other events run, from
+          # whether a ratchet.msi is recorded.
           # A repository whose tests need a service lists it under "services" (today: "redis").
           echo "redis=$(jq -r 'if ((.services // []) | index("redis")) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
+          echo "msi=$(jq -r 'if (.ratchet.msi // null) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or ((.mutation.scope // "all") | IN("changed", "added", "changed-relative")) then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
 
   quality:
@@ -181,6 +186,7 @@ jobs:
           HARNESS_SURFACE_ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'breaking') && 'all' || (contains(github.event.pull_request.labels.*.name, 'api-change') && 'additions' || 'none') }}
           MUTATION: ${{ needs.setup.outputs.mutation }}
           MUTATION_SCOPE: ${{ needs.setup.outputs.mutation-scope }}
+          MUTATION_MSI: ${{ needs.setup.outputs.msi }}
           MUTATION_ON_PR: ${{ inputs.mutation-on-pull-request }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -191,6 +197,22 @@ jobs:
               changed|all) ;;
               *) echo "::error::mutation-on-pull-request is \"$MUTATION_ON_PR\": use \"changed\" or \"all\"."; exit 1 ;;
             esac
+            # The relative gate compares the files of a change with their base: it runs on pull requests only. After a
+            # merge (or at night) HEAD^1 can be a whole release away, beyond mutation.max_files. A recorded ratchet.msi
+            # still has to be checked somewhere, so those events then mutate the whole repository. Both cases are said in
+            # the log and in the job summary: the gate is absent from the report, which must not read as a success.
+            if [ "$MUTATION_SCOPE" = "changed-relative" ] && [ "$EVENT_NAME" != "pull_request" ]; then
+              message="Mutation testing (changed files, relative): not run on a $EVENT_NAME event, it runs on pull requests only."
+              if [ "$MUTATION_MSI" = "true" ]; then
+                flags="--mutation --mutation-scope=all"
+                message="$message .harness.json records ratchet.msi, so this run mutates the whole repository instead and the Ratchet step compares the score with that floor."
+              else
+                flags=""
+                message="$message Nothing was mutated and no file was compared with its base."
+              fi
+              echo "::notice title=Relative mutation gate not run::$message"
+              printf '> %s\n\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+            fi
             # On a pull request, mutate only what the pull request changes (the whole score is measured on the main branch).
             # A repository that declares mutation.scope keeps it. The base is the first parent of the merge commit the
             # checkout holds; a checkout that is not a merge commit (another ref) has no such base, and counting from
