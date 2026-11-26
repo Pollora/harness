@@ -495,6 +495,10 @@ final readonly class Plan
                     return StepResult::failed(MutationRun::unwritableMessage());
                 }
 
+                if (isset($run['unloaded'])) {
+                    return StepResult::failed($run['unloaded']);
+                }
+
                 return $run['score'] === null
                     ? StepResult::failed(($run['empty'] ? 'Pest created no mutation: the tests cover no code it can mutate.' : 'Pest printed no mutation score: the tests must pass first.')."\n".trim(substr($run['output'], -600)))
                     : StepResult::passed(sprintf('  Mutation score %s %% (%s)', $run['score'], $run['summary']));
@@ -550,6 +554,10 @@ final readonly class Plan
 
                 if ($run['unwritable']) {
                     return StepResult::failed(MutationRun::unwritableMessage());
+                }
+
+                if (isset($run['unloaded'])) {
+                    return StepResult::failed($run['unloaded']);
                 }
 
                 $count = sprintf('%d %s file%s', count($files), $added ? 'new' : 'changed', count($files) === 1 ? '' : 's');
