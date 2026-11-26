@@ -319,6 +319,18 @@ The mutation run is 80 to 90 % of the *Quality gates* job (measured on 101 jobs 
 - **A reusable workflow**, `.github/workflows/php-package.yml`: quality gates, a test matrix (PHP × lowest/stable dependencies), a gitleaks scan, and the **downstream** job that runs the framework's tests against a changed core package.
 - **Agent hooks** for Claude Code: style fixed after each edit, PHPStan on the edited file, protected threshold files (QA-02), the fast gates before the agent hands back.
 
+### Which harness version CI runs
+
+The rules live in the CLI (`pollora/harness`, installed by Composer), not only in the workflow.
+
+| Repository | What CI installs |
+| --- | --- |
+| No `composer.lock`, workflow called at a release tag (`@vX.Y.Z`) | That version, in the *Quality gates*, *Tests* and *WordPress integration* jobs (`composer update --with=pollora/harness:X.Y.Z`, `composer.json` unchanged). A new rule arrives with the pull request that raises the tag. |
+| `composer.lock` committed | The *Quality gates* job installs the locked version, and warns when it differs from the tag. The jobs that run `composer update` resolve it anew, as before. |
+| Workflow called at a branch or a commit, or `pollora/harness` required as a `dev-` version | What Composer resolves, with a notice. |
+
+When the constraint of `composer.json` starts above the tag (`^0.1.40` with a workflow called at `@v0.1.39`), Composer refuses and the job fails: raise the tag. The tag is read from [`job.workflow_ref`](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#job-context), which is not available on GitHub Enterprise Server; an empty value is warned about and Composer resolves as before. `template.yml` installs no CLI: it reads its presets from the commit it was called at (`job.workflow_sha`).
+
 ## Templates
 
 A template (the skeleton, a theme, a plugin or a module) is copied into every project built from it, so it cannot carry the harness: `pollora/harness` in its `require-dev` would be installed by every `composer create-project`, and a `.harness.json` or an `AGENTS.md` at its root would land in every project. `template.yml` checks it from the outside instead. The template adds one file, `.github/workflows/harness.yml`, which the scaffolders strip:
@@ -500,7 +512,7 @@ A rule is born `observed` (`resources/rules.php`): it reports and never blocks. 
 3. **Record the floors.** `vendor/bin/pollora-qa ratchet --update` writes the metrics that have a floor, `type_coverage` for CONV-11 and `exempted_rules` for the exemptions. From then on a drop fails QA-01 in `enforce` mode and only warns in `observe`. `type_coverage` must be a number from 0 to 100 and every other ratchet key is validated too: a value the ratchet could not compare makes `.harness.json` invalid instead of being ignored.
 4. **Promote.** Change the `status` of the rule to `enforced` in `resources/rules.php`, then run `php bin/pollora-qa agents` and commit `AGENTS.md` (the CI checks that its block matches the catalogue). Nothing else in the code changes: the test that was incomplete now fails.
 A promotion done this way (0.1.35): CONV-09, PERF-01 and PERF-07. `promote-report --root=<workspace>` over the 36 directories that have a `composer.json` said `clean` or `not applicable` everywhere but the framework, whose four facades (`Option::forget()` and three facades over a concrete factory) were fixed in its own pull request first; the report was run again on the framework's `develop` and read `CONV-09 clean`, `PERF-01 clean`, `PERF-07 clean`. Only then did the three `status` lines change, together with `Plan::OBSERVED_BY_DEFAULT` (which lost `Performance budgets`: a gate listed there never blocks whatever the catalogue says). A rule the measure still finds in a repository is not promoted: it waits for that repository's fix.
-5. **Raise the version.** Add the entry under `[Unreleased]` in `CHANGELOG.md` and release a new version; a repository that stays on the previous tag is not affected, and each repository moves to it when it is ready.
+5. **Raise the version.** Add the entry under `[Unreleased]` in `CHANGELOG.md` and release a new version. A repository that stays on the previous tag is not affected as long as the CLI it runs is that tag's: a repository without `composer.lock` (see [Which harness version CI runs](#which-harness-version-ci-runs)), or one whose lock holds it. Each repository moves to the new tag by pull request, when it is ready. A local `composer update` without a lock still takes the latest release the constraint allows.
 
 ## Public surface
 

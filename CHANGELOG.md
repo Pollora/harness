@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **A repository without `composer.lock` now runs the harness version of the workflow tag it calls**, not the latest release its constraint allows, so a new blocking rule arrives with the pull request that raises the tag. The tag is read from `job.workflow_ref` and applied with `composer update --with` in the *Quality gates*, *Tests* and *WordPress integration* jobs; `composer.json` is not changed. A constraint that starts above the tag fails the install. Repositories with a lock install what they installed before, with a warning when the lock and the tag differ; a branch, a commit or a `dev-` constraint is left to Composer.
+
 ### Fixed
 
 - **`template.yml` reads its presets from the commit it was called at.** It asked for `github.job_workflow_sha`, which is not a property of the `github` context: the value was empty and `actions/checkout` took the default branch of the harness, so a template called at a tag ran the Semgrep rules and the audit and ratchet code of `main`. It now uses `job.workflow_sha`.

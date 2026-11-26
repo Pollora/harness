@@ -90,6 +90,7 @@ jobs:
       mutation-scope: ${{ steps.config.outputs.mutation-scope }}
       msi: ${{ steps.config.outputs.msi }}
       redis: ${{ steps.config.outputs.redis }}
+      harness: ${{ steps.harness.outputs.pin }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,6 +116,46 @@ jobs:
           echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "msi=$(jq -r 'if (.ratchet.msi // null) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or ((.mutation.scope // "all") | IN("changed", "added", "changed-relative")) then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
+
+      # A repository without composer.lock would otherwise get the latest release its constraint allows, whatever tag it
+      # calls: new blocking rules would reach it without a pull request. It gets the version of the workflow's own tag.
+      # job.workflow_ref names the file that defines this job (this one), where github.workflow_ref names the caller's.
+      # A repository with a lock keeps what it locked; a difference with the tag is said.
+      - id: harness
+        name: Choose the harness version
+        env:
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+        run: |
+          set -euo pipefail
+          pin=""
+          constraint=""
+          if [ -f composer.json ]; then
+            constraint=$(jq -r '.require["pollora/harness"] // .["require-dev"]["pollora/harness"] // empty' composer.json)
+          fi
+          if [ -z "$constraint" ]; then
+            echo "composer.json does not require pollora/harness: its version is left to Composer."
+          elif [ -z "${WORKFLOW_REF:-}" ]; then
+            echo "::warning title=Harness version::job.workflow_ref is empty here, so the harness version is not aligned with the workflow: Composer resolves it as before."
+          elif ! printf '%s' "$WORKFLOW_REF" | grep -Eq '@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::notice title=Harness version::The workflow is not called at a release tag ($WORKFLOW_REF): Composer resolves the harness version."
+          else
+            version="${WORKFLOW_REF##*@refs/tags/v}"
+            if [ -f composer.lock ]; then
+              locked=$(jq -r '[(.packages // [])[], (."packages-dev" // [])[] | select(.name == "pollora/harness") | .version][0] // empty' composer.lock)
+              if [ -n "$locked" ] && [ "${locked#v}" != "$version" ]; then
+                echo "::warning title=Harness version::composer.lock holds pollora/harness $locked and the workflow is called at v$version: the Quality gates run $locked. The jobs that run composer update (tests, WordPress integration) resolve it anew."
+              fi
+            else
+              case "$constraint" in
+                *dev*) echo "::notice title=Harness version::composer.json requires pollora/harness $constraint: Composer resolves it." ;;
+                *)
+                  pin="pollora/harness:$version"
+                  echo "No composer.lock: installing pollora/harness $version, the version of the workflow's tag."
+                  ;;
+              esac
+            fi
+          fi
+          echo "pin=$pin" >> "$GITHUB_OUTPUT"
 
   quality:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
@@ -167,7 +208,15 @@ jobs:
       - name: Install Composer dependencies
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
-        run: composer install --prefer-dist --no-interaction --no-progress
+          HARNESS_PIN: ${{ needs.setup.outputs.harness }}
+        # Without a lock `composer install` resolves like `update`, which is the one that takes a temporary constraint
+        # (composer.json stays as it is).
+        run: |
+          if [ -n "$HARNESS_PIN" ]; then
+            composer update --with="$HARNESS_PIN" --prefer-dist --no-interaction --no-progress
+          else
+            composer install --prefer-dist --no-interaction --no-progress
+          fi
 
       - name: Save Composer's cache
         if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
@@ -314,7 +363,8 @@ jobs:
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
           STABILITY: ${{ matrix.stability }}
-        run: composer update "--$STABILITY" --prefer-dist --no-interaction --no-progress
+          HARNESS_PIN: ${{ needs.setup.outputs.harness }}
+        run: composer update "--$STABILITY" ${HARNESS_PIN:+"--with=$HARNESS_PIN"} --prefer-dist --no-interaction --no-progress
 
       - name: Save Composer's cache
         if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
@@ -456,7 +506,8 @@ jobs:
       - name: Install Composer dependencies
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
-        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
+          HARNESS_PIN: ${{ needs.setup.outputs.harness }}
+        run: composer update --prefer-stable ${HARNESS_PIN:+"--with=$HARNESS_PIN"} --prefer-dist --no-interaction --no-progress
 
       - name: Save Composer's cache
         if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
