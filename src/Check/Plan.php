@@ -23,6 +23,7 @@ use Pollora\Harness\Rules\Catalogue;
 use Pollora\Harness\Support\ChangedSources;
 use Pollora\Harness\Support\InterpreterFlags;
 use Pollora\Harness\Support\Paths;
+use Pollora\Harness\Support\PhpStanScope;
 use Pollora\Harness\Surface\SurfaceCheck;
 use Pollora\Harness\Surface\SurfaceFile;
 
@@ -93,9 +94,7 @@ final readonly class Plan
 
         return [
             $changedFiles === null ? $this->style(dirty: false, note: $note) : $this->style(dirty: true),
-            $changedFiles === null ? $this->staticAnalysis([], $note) : ($changedFiles === []
-                ? Step::skipped('Static analysis', ['ARCH-02', 'CONV-11'], 'no PHP file changed')
-                : $this->staticAnalysis($changedFiles)),
+            $changedFiles === null ? $this->staticAnalysis([], $note) : $this->staticAnalysisOfChanges($changedFiles),
             new Step('Architecture', self::ARCHITECTURE_RULES, ['vendor/bin/pest', 'tests/Arch.php'], requires: ['tests/Arch.php', 'vendor/bin/pest'], note: $this->exemptedRules(), exempted: $this->exemptedRuleIds()),
             $this->dependencyPolicy(),
         ];
@@ -345,6 +344,29 @@ final readonly class Plan
         $command = ['vendor/bin/pint', '--test', '--config', Paths::pintConfig($this->cwd)];
 
         return new Step('Code style', ['ARCH-09'], $dirty ? [...$command, '--dirty'] : $command, requires: ['vendor/bin/pint'], note: $note);
+    }
+
+    /**
+     * The changed files PHPStan is configured to analyse: given a file on the command line it analyses it whatever
+     * `paths` says, which would report in the fast gate what the full one never looks at. All of them are kept when
+     * the configuration cannot be read.
+     *
+     * @param  list<string>  $changedFiles
+     */
+    private function staticAnalysisOfChanges(array $changedFiles): Step
+    {
+        $name = 'Static analysis';
+        $rules = ['ARCH-02', 'CONV-11'];
+
+        if ($changedFiles === []) {
+            return Step::skipped($name, $rules, 'no PHP file changed');
+        }
+
+        $files = PhpStanScope::of($this->cwd)?->analysed($changedFiles) ?? $changedFiles;
+
+        return $files === []
+            ? Step::skipped($name, $rules, 'no changed PHP file is among those PHPStan is configured to analyse (paths, excludePaths)')
+            : $this->staticAnalysis($files);
     }
 
     /**
