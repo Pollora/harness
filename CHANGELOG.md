@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The harness's own `ArchitectureExemptionTest` passes with the default temporary directory of macOS.** Its throwaway project sat outside Pest's root, so Pest built a namespace from its absolute path, and a segment starting with a digit (`/var/folders/7f/…`) is a parse error. The project now holds its own copy of Pest's binary and is its own root. Tests only: nothing changes for a repository that uses the harness.
+
 ## [0.1.39] - 2026-11-26
 
 ### Fixed
