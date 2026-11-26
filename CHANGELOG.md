@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **README passages that were no longer true**: not every repository runs in `enforce` mode; a template may carry a `.harness.json`; the examples call a current tag instead of `@v0.1.10` and `@main`; the duration of the WordPress job is measured instead of estimated; the differences the `ThumbnailDriver` contract found in `media` have been fixed.
+
 ### Changed
 
 - **A repository without `composer.lock` now runs the harness version of the workflow tag it calls**, not the latest release its constraint allows, so a new blocking rule arrives with the pull request that raises the tag. The tag is read from `job.workflow_ref` and applied with `composer update --with` in the *Quality gates*, *Tests* and *WordPress integration* jobs; `composer.json` is not changed. A constraint that starts above the tag fails the install. Repositories with a lock install what they installed before, with a warning when the lock and the tag differ; a branch, a commit or a `dev-` constraint is left to Composer. **This only protects a repository once it calls a tag that contains this change**: this release itself still reaches, through Composer, every repository without a lock on an older tag, and the `composer update` jobs of locked ones, so it should not make a rule newly blocking.

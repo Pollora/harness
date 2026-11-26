@@ -144,7 +144,7 @@ The *Dependency audit (npm)* gate runs `npm audit --json` over every `package-lo
 - If `npm audit` cannot reach the registry or prints no report, the gate fails: a missing report is never read as a clean one.
 - The gate is observed by default (`OBSERVED_BY_DEFAULT`), like before; the exceptions change what it reports, not whether it blocks.
 
-A template (the skeleton, a theme) cannot carry a `.harness.json`. Its reusable workflow runs `pollora-qa npm-audit`, the same code as the `check` step, which reads the `npm_audit` key from `.harness.json` or, failing that, from `.github/harness.json` (a directory the release archives leave out), as a file holding only that key. `--config=FILE` names another file. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not.
+A template (the skeleton, a theme) needs no `.harness.json`. Its reusable workflow runs `pollora-qa npm-audit`, the same code as the `check` step, which reads the `npm_audit` key from `.harness.json` or, failing that, from `.github/harness.json` (a directory the release archives leave out), when the template carries one (see [A .harness.json for a template](#a-harnessjson-for-a-template)). `--config=FILE` names another file. `.harness.json` is a protected file (QA-02): a person adds the entry, an agent does not.
 
 The **Dependency analysis** gate uses the repository's `composer-dependency-analyser.php` when there is one; without it, a harness preset ignores what is noise in a WordPress repository (WordPress classes and functions, which are not Composer packages, the usual PHP extensions, and the classes and libraries of the tests); a repository that needs more writes its own file and can start from the preset with `require`.
 
@@ -341,7 +341,7 @@ When the constraint of `composer.json` starts above the tag (`^0.1.40` with a wo
 
 ## Templates
 
-A template (the skeleton, a theme, a plugin or a module) is copied into every project built from it, so it cannot carry the harness: `pollora/harness` in its `require-dev` would be installed by every `composer create-project`, and a `.harness.json` or an `AGENTS.md` at its root would land in every project. `template.yml` checks it from the outside instead. The template adds one file, `.github/workflows/harness.yml`, which the scaffolders strip:
+A template (the skeleton, a theme, a plugin or a module) is copied into every project built from it, so it cannot carry the harness: `pollora/harness` in its `require-dev` would be installed by every `composer create-project`, and an `AGENTS.md` at its root would land in every project. `template.yml` checks it from the outside instead (the one file it may carry is an optional `.harness.json`, [below](#a-harnessjson-for-a-template)). The template adds one file, `.github/workflows/harness.yml`, which the scaffolders strip:
 
 ```yaml
 name: Harness
@@ -356,7 +356,7 @@ permissions: {}
 
 jobs:
   harness:
-    uses: Pollora/harness/.github/workflows/template.yml@v0.1.10
+    uses: Pollora/harness/.github/workflows/template.yml@v0.1.39
     with:
       mode: enforce # observe reports and never blocks
       observed: '' # gates reported but never blocking: secrets, style, security, audit, ratchet
@@ -415,7 +415,7 @@ Pollora packages test against Brain Monkey, which doubles WordPress. That is fas
 ```yaml
 jobs:
   harness:
-    uses: Pollora/harness/.github/workflows/php-package.yml@main
+    uses: Pollora/harness/.github/workflows/php-package.yml@v0.1.39
     with:
       wordpress-integration: tests/Integration # the suite; empty (default) = off
       wordpress-version: latest # latest (default), nightly, 6.9, 6.9.1
@@ -459,7 +459,7 @@ The bootstrap template also guards `define('DISABLE_WP_CRON', ...)` with `define
 
 ### What it costs, and when to turn it on
 
-Expect roughly 2 to 3 minutes added per PHP version before the tests themselves (MySQL start, WordPress download and install, Composer), 30 to 60 seconds less once the caches are warm; the jobs run in parallel with the others, so a pull request waits only if this job is the slowest. These figures are estimates: they have not been measured on a pilot repository yet. WordPress archives and plugin archives are cached (restored on every run, written only by runs that are not pull requests, like Composer's cache), and `latest` is resolved to a version number first so the cache key is exact.
+Measured on 26 November 2026, each *WordPress integration* job as a whole (MySQL start, WordPress download and install, Composer and the suite) lasted 57 to 88 seconds on `Pollora/headless` and `Pollora/hornet`; the first pilot, on `Pollora/hook`, took 37 and 46 seconds. A larger suite adds its own time. The jobs run in parallel with the others, so a pull request waits only if this job is the slowest. WordPress archives and plugin archives are cached (restored on every run, written only by runs that are not pull requests, like Composer's cache), and `latest` is resolved to a version number first so the cache key is exact.
 
 Turn it on for a repository whose code calls WordPress functions, hooks or the database in ways a double cannot reproduce: hook registration order, `register_*`, queries, options, cron, REST routes, anything that depends on WordPress being loaded. Leave it off for pure-PHP packages with no WordPress call (the ones that already pass on doubles prove nothing more here), and keep the suite small: what a double already proves belongs in the unit suite. MySQL 8.0 is used because it is what hosts run and what `hook` already tests on; it is past its upstream support, so the image will move to 8.4 once a pilot shows the authentication plugin of the client works with it.
 
@@ -494,11 +494,11 @@ A contract that needs a service (Redis for a cache store, a real WordPress for a
 
 ### A first port: `ThumbnailDriver` (media)
 
-The contract found four differences between the three drivers and one defect they share, each with its proof in `media/tests/Contract`. The differences: the file driver signs a key with a leading slash differently from the other two (`SizedFileName.php:57`); the Bunny URL does not encode a `?` or `#` in the key (`BunnyThumbnailDriver.php:35`), so `sizeOf()` cannot read its own URL back (imgproxy does encode); the file and imgproxy drivers recognise the name of a size nobody declared, Bunny does not; imgproxy recognises the URL of a size it refuses (the `default` preset). The shared defect: `SizeGeometry` divides by the width and height of the original (`SizeGeometry.php:110-123`), so a scale or a contain of an original recorded as 0 pixels throws `DivisionByZeroError`. The contract shows it through the file driver only, because that driver is the one that calls the geometry; `DeclaredSizes::downsize()` (line 225) calls the geometry itself before any driver, so in WordPress every driver is reached (read in the code, not run). None was corrected by the contract: each is listed with its reason until it is decided.
+The contract found four differences between the three drivers and one defect they share, each with its proof in `media/tests/Contract`. The differences: the file driver signs a key with a leading slash differently from the other two (`SizedFileName.php:57`); the Bunny URL does not encode a `?` or `#` in the key (`BunnyThumbnailDriver.php:35`), so `sizeOf()` cannot read its own URL back (imgproxy does encode); the file and imgproxy drivers recognise the name of a size nobody declared, Bunny does not; imgproxy recognises the URL of a size it refuses (the `default` preset). The shared defect: `SizeGeometry` divides by the width and height of the original (`SizeGeometry.php:110-123`), so a scale or a contain of an original recorded as 0 pixels throws `DivisionByZeroError`. The contract shows it through the file driver only, because that driver is the one that calls the geometry; `DeclaredSizes::downsize()` (line 225) calls the geometry itself before any driver, so in WordPress every driver is reached (read in the code, not run). The contract corrected none of them: each was listed with its reason until it was decided. They have since been fixed ([Pollora/media#60](https://github.com/Pollora/media/pull/60)), and the list of known deviations of that suite is now empty.
 
 ### What it costs, and where to use it
 
-Measured on `media` (PHP 8.4, no coverage driver, so coverage is not measured): 162 lines of cases (13 `it()`) and 42 lines of adapters and deviations for one port and four adapters, plus the 37 lines of `contractCase()` that the template provides; 140 test instances (130 passed, 10 skipped, all ten known deviations) in 0.37 to 0.51 s over three runs, Pest's start-up included. The whole suite takes 17 to 18 s with or without them, so the cost is below what a run varies by. Adding an adapter is one dataset row (about 150 characters); adding a case is one `it()` that every adapter runs; maintaining it is the list of known deviations, one line each. Use it for a port with **two real adapters or more**, or a fake that has to follow a real adapter (`ScheduleFake` and `WpCronDriver`): a port with one adapter has nothing to compare. A static check that every such port has a contract suite was measured and is not a rule yet (see *Status*).
+Measured on `media` when the contract was written, before those fixes (PHP 8.4, no coverage driver, so coverage is not measured): 162 lines of cases (13 `it()`) and 42 lines of adapters and deviations for one port and four adapters, plus the 37 lines of `contractCase()` that the template provides; 140 test instances (130 passed, 10 skipped, all ten known deviations) in 0.37 to 0.51 s over three runs, Pest's start-up included. The whole suite takes 17 to 18 s with or without them, so the cost is below what a run varies by. Adding an adapter is one dataset row (about 150 characters); adding a case is one `it()` that every adapter runs; maintaining it is the list of known deviations, one line each. Use it for a port with **two real adapters or more**, or a fake that has to follow a real adapter (`ScheduleFake` and `WpCronDriver`): a port with one adapter has nothing to compare. A static check that every such port has a contract suite was measured and is not a rule yet (see *Status*).
 
 ## Reliability and security of the workflows
 
@@ -605,7 +605,7 @@ An exception to a rule is written on the line it concerns, with its reason: `// 
 
 ## Status
 
-The harness no longer only measures: every repository that adopted it runs the gates in `enforce` mode, with a ratchet that only moves up (line coverage, PHPStan level and baseline, mutation score).
+The harness no longer only measures: most repositories that adopted it run the gates in `enforce` mode, with a ratchet that only moves up (line coverage, PHPStan level and baseline, mutation score). A newly adopted repository stays in `observe` until its reports are clean; the `mode` of its `.harness.json` says which it is.
 
 | | Rules | Which |
 | --- | --- | --- |
