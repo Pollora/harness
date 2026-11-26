@@ -182,7 +182,6 @@ final class MutationRun
             ...InterpreterFlags::coverageScope($cwd),
             // The only sign of a mutant Pest could not write is a warning, which the ini files may hide
             '-d', 'display_errors=1',
-            '-d', 'error_reporting=-1',
             'vendor/bin/pest',
             '--mutate',
             '--everything',
