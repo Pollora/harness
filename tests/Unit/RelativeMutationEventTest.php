@@ -11,7 +11,9 @@ use Pollora\Harness\Config\MutationSettings;
  * Which mutation pass the reusable workflow starts, per event: `changed-relative` compares each file of a change with
  * its base, so it only means something on a pull request. The two scripts that decide (the setup job and `Run every
  * gate`) are taken from the workflow as they are and run with bash, against a fake `pollora-qa` that prints what it
- * was called with. The wiring between them (job outputs, then the `env` of the step) is read from the workflow too.
+ * was called with. The wiring between them (job outputs, then the `env` of the step) is read from the workflow too,
+ * as is the part of the GitHub context the step receives: a value is given by its expression, and reaches the script
+ * under whatever name the workflow maps it to.
  */
 function eventWorkflow(): string
 {
@@ -79,9 +81,10 @@ function eventRepository(array $harness, bool $mergeCommit): string
  * What the quality job does for a repository holding this .harness.json, on this event.
  *
  * @param  array<mixed>  $harness  The content of .harness.json
+ * @param  array<string, string>  $context  GitHub context values, keyed by expression (`github.head_ref`)
  * @return array{status: int, flags: string, log: string, summary: string}
  */
-function eventGate(array $harness, string $event, bool $mergeCommit = false, string $onPullRequest = 'changed'): array
+function eventGate(array $harness, string $event, bool $mergeCommit = false, string $onPullRequest = 'changed', array $context = []): array
 {
     $root = eventRepository($harness, $mergeCommit);
 
@@ -100,7 +103,20 @@ function eventGate(array $harness, string $event, bool $mergeCommit = false, str
     }
 
     preg_match_all('/^          ([A-Z_]+): \$\{\{ needs\.setup\.outputs\.([a-z-]+) \}\}$/m', eventWorkflow(), $mapped, PREG_SET_ORDER);
-    $environment = ['EVENT_NAME' => $event, 'MUTATION_ON_PR' => $onPullRequest, 'GITHUB_STEP_SUMMARY' => $root.'/summary'];
+    $environment = ['MUTATION_ON_PR' => $onPullRequest, 'GITHUB_STEP_SUMMARY' => $root.'/summary'];
+
+    // The GitHub context the step reads. What a test gives and the step does not read fails the test, and what the step
+    // reads and a test does not give is empty, never inherited from the runner of the tests.
+    $context = ['github.event_name' => $event, ...$context];
+    preg_match_all('/^          ([A-Z_]+): \$\{\{ (github\.[a-z_.]+) \}\}$/m', eventWorkflow(), $read, PREG_SET_ORDER);
+
+    if (array_diff(array_keys($context), array_column($read, 2)) !== []) {
+        throw new RuntimeException('Run every gate does not read: '.implode(', ', array_diff(array_keys($context), array_column($read, 2))));
+    }
+
+    foreach ($read as $line) {
+        $environment[$line[1] ?? ''] = $context[$line[2] ?? ''] ?? '';
+    }
 
     foreach ($mapped as $line) {
         $environment[$line[1] ?? ''] = (string) ($jobOutputs[$line[2] ?? ''] ?? '');
@@ -189,4 +205,75 @@ it('turns the whole pass of that floor into the gate that feeds the msi of the r
 
     expect($names($config))->toContain(Plan::MUTATION_RELATIVE)
         ->and($names($config->withMutation($config->mutation->withScope(MutationSettings::ALL))))->toContain(Plan::MUTATION);
+});
+
+/**
+ * The context of a pull request in `acme/package`, whose default branch is `main`: by default the release one.
+ *
+ * @return array<string, string>
+ */
+function eventPullRequest(string $head = 'develop', string $base = 'main', string $headRepository = 'acme/package'): array
+{
+    return [
+        'github.head_ref' => $head,
+        'github.base_ref' => $base,
+        'github.event.repository.default_branch' => 'main',
+        'github.event.pull_request.head.repo.full_name' => $headRepository,
+        'github.repository' => 'acme/package',
+    ];
+}
+
+it('does not run the relative gate on a release pull request, and says so in the log and the job summary', function () use ($relative): void {
+    $gate = eventGate($relative, 'pull_request', true, context: eventPullRequest());
+
+    expect($gate['status'])->toBe(0)
+        ->and($gate['flags'])->toBe('')
+        ->and($gate['log'])->toContain('::notice title=Relative mutation gate not run::')
+        ->and($gate['summary'])->toContain('not run on a release pull request (develop into main')
+        ->and($gate['summary'])->toContain('Nothing was mutated and no file was compared with its base')
+        ->and(str_contains($gate['summary'], 'ratchet.msi'))->toBeFalse()
+        ->and(str_contains($gate['summary'], 'passed'))->toBeFalse();
+});
+
+it('mutates nothing on a release pull request even with a msi floor, and says where the floor is compared', function () use ($relative): void {
+    $gate = eventGate([...$relative, 'ratchet' => ['msi' => 75]], 'pull_request', true, context: eventPullRequest());
+
+    expect($gate['status'])->toBe(0)
+        ->and($gate['flags'])->toBe('')
+        ->and($gate['summary'])->toContain('Nothing was mutated')
+        ->and($gate['summary'])->toContain('does not compare it here')
+        ->and($gate['summary'])->toContain('The push to main after the merge mutates the whole repository')
+        ->and(str_contains($gate['summary'], 'passed'))->toBeFalse();
+});
+
+it('keeps the gate on every pull request that is not a release one', function (string $head, string $base, string $headRepository) use ($relative): void {
+    $gate = eventGate($relative, 'pull_request', true, context: eventPullRequest($head, $base, $headRepository));
+
+    expect($gate['status'])->toBe(0)
+        ->and($gate['flags'])->toBe('--mutation')
+        ->and($gate['summary'])->toBe('')
+        ->and(str_contains($gate['log'], 'not run'))->toBeFalse();
+})->with([
+    'a fork with a branch named develop' => ['develop', 'main', 'someone/package'],
+    'a deleted fork' => ['develop', 'main', ''],
+    'a feature into develop' => ['feature/x', 'develop', 'acme/package'],
+    'a feature into main' => ['feature/x', 'main', 'acme/package'],
+    'develop into a branch that is not the default one' => ['develop', 'release', 'acme/package'],
+    'a branch that only starts like develop' => ['develop-2', 'main', 'acme/package'],
+    'a branch name that is shell code' => ['develop";exit${IFS}3;"', 'main', 'acme/package'],
+]);
+
+it('leaves the other scopes as they were on a release pull request', function (array $harness, string $flags): void {
+    $gate = eventGate($harness, 'pull_request', true, context: eventPullRequest());
+
+    expect($gate['flags'])->toBe($flags)
+        ->and($gate['summary'])->toBe('');
+})->with([
+    'changed' => [['mutation' => ['scope' => 'changed', 'min' => 80]], '--mutation'],
+    'added' => [['mutation' => ['scope' => 'added', 'min' => 80]], '--mutation'],
+    'msi' => [['ratchet' => ['msi' => 75]], '--mutation --mutation-scope=changed --mutation-base=HEAD^1'],
+]);
+
+it('never writes a GitHub context value into the script of the step', function (): void {
+    expect(str_contains(eventScript('name: Run every gate'), '${{'))->toBeFalse();
 });
