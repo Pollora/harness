@@ -124,7 +124,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/harness
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ job.workflow_sha }}
           path: .harness-presets
           persist-credentials: false
 
@@ -162,7 +162,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/harness
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ job.workflow_sha }}
           path: .harness-presets
           persist-credentials: false
 
@@ -200,7 +200,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Pollora/harness
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ job.workflow_sha }}
           path: .harness-presets
           persist-credentials: false
 
@@ -246,7 +246,7 @@ jobs:
         if: steps.file.outputs.present == 'true'
         with:
           repository: Pollora/harness
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ job.workflow_sha }}
           path: .harness-presets
           persist-credentials: false
 
@@ -280,3 +280,51 @@ jobs:
           flag=--observe
           [ "$MODE" = "enforce" ] && flag=--enforce
           php .harness-presets/bin/pollora-qa check --template "$flag"
+
+  # One check with a name that never changes (the names above carry the profile and the mode, or a PHP version), for a
+  # repository to require in its branch protection. It fails when a needed job failed or was
+  # cancelled, except a failure the job's own continue-on-error already ignores. A skipped job did not apply.
+  # always() is required: GitHub counts a skipped required check as passed.
+  result:
+    name: Result
+    needs: [secrets, style, security, audit, npm-audit, ratchet]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the result of every job
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          # The same expressions as the continue-on-error of each job
+          ADVISORY_SECRETS: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'secrets') }}
+          ADVISORY_STYLE: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'style') }}
+          ADVISORY_SECURITY: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'security') }}
+          ADVISORY_AUDIT: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'audit') }}
+          ADVISORY_NPM_AUDIT: true
+          ADVISORY_RATCHET: ${{ inputs.mode != 'enforce' || contains(inputs.observed, 'ratchet') }}
+        run: |
+          set -euo pipefail
+          results=$(printf '%s' "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"')
+          if [ -z "$results" ]; then
+            echo "::error::No job result to read."
+            exit 1
+          fi
+          status=0
+          while read -r job result; do
+            # ADVISORY_<JOB> is "true" where the job has continue-on-error: its failure never blocked the run.
+            advisory="ADVISORY_$(printf '%s' "$job" | tr 'a-z-' 'A-Z_')"
+            verdict=blocking
+            case "$result" in
+              success) verdict=ok ;;
+              # Skipped is how a job that does not apply ends; setup always applies.
+              skipped) if [ "$job" != "setup" ]; then verdict=ok; fi ;;
+              failure) if [ "${!advisory:-}" = "true" ]; then verdict="reported, not blocking"; fi ;;
+            esac
+            echo "$job: $result ($verdict)"
+            if [ "$verdict" = "blocking" ]; then
+              echo "::error::$job ended in $result."
+              status=1
+            fi
+          done <<< "$results"
+          exit "$status"

@@ -39,7 +39,7 @@ it('keeps the name, needs and if of every job that existed before the WordPress 
         ->and($jobs['contract']['name'])->toBe('PHP API compatibility (QA-05)')
         ->and($jobs['secrets']['name'])->toBe('Secrets (SEC-08)')
         ->and($jobs['downstream'])->toBe(['name' => 'Downstream — framework with this change (QA-03)', 'needs' => 'setup', 'if' => "contains(needs.setup.outputs.downstream, 'framework')"])
-        ->and(array_keys($jobs))->toBe(['setup', 'quality', 'tests', 'wordpress', 'contract', 'secrets', 'downstream']);
+        ->and(array_keys($jobs))->toBe(['setup', 'quality', 'tests', 'wordpress', 'contract', 'secrets', 'downstream', 'result']);
 
     foreach (['quality', 'tests', 'contract', 'secrets'] as $job) {
         expect($jobs[$job]['needs'])->toBe('setup')
@@ -47,14 +47,14 @@ it('keeps the name, needs and if of every job that existed before the WordPress 
     }
 });
 
-it('skips the WordPress job while wordpress-integration is empty, and nothing waits for it', function (): void {
+it('skips the WordPress job while wordpress-integration is empty, and only the Result job waits for it', function (): void {
     $jobs = workflowJobs();
     $text = (string) file_get_contents(dirname(__DIR__, 2).'/.github/workflows/php-package.yml');
 
     expect($jobs['wordpress']['name'])->toBe('WordPress integration PHP ${{ matrix.php }}')
         ->and($jobs['wordpress']['if'])->toBe("inputs.wordpress-integration != ''")
         ->and($text)->toMatch("/wordpress-integration:\n(?:.*\n)*?        type: string\n        default: ''/")
-        ->and($text)->not->toMatch('/needs:.*\bwordpress\b/');
+        ->and(array_keys(array_filter($jobs, static fn (array $job): bool => preg_match('/\bwordpress\b/', $job['needs']) === 1)))->toBe(['result']);
 });
 
 it('ships the bootstrap templates the workflow and the README name', function (): void {

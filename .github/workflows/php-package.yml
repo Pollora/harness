@@ -11,8 +11,9 @@
 #         contents: read
 #
 # In observe mode every job reports and none fails the build; in enforce mode
-# the quality, tests and secrets jobs block the merge (mark them required in
-# the branch protection), and so does downstream for core packages.
+# the quality, tests and secrets jobs block the merge, and so does downstream for
+# core packages. Require the `Result` job (the check `harness / Result`) in the
+# branch protection: it is the one name that does not change.
 
 name: Pollora harness
 
@@ -90,6 +91,7 @@ jobs:
       mutation-scope: ${{ steps.config.outputs.mutation-scope }}
       msi: ${{ steps.config.outputs.msi }}
       redis: ${{ steps.config.outputs.redis }}
+      harness: ${{ steps.harness.outputs.pin }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,6 +117,46 @@ jobs:
           echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "msi=$(jq -r 'if (.ratchet.msi // null) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation=$(jq -r 'if (.ratchet.msi // null) != null or ((.mutation.scope // "all") | IN("changed", "added", "changed-relative")) then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
+
+      # A repository without composer.lock would otherwise get the latest release its constraint allows, whatever tag it
+      # calls: new blocking rules would reach it without a pull request. It gets the version of the workflow's own tag.
+      # job.workflow_ref names the file that defines this job (this one), where github.workflow_ref names the caller's.
+      # A repository with a lock keeps what it locked; a difference with the tag is said.
+      - id: harness
+        name: Choose the harness version
+        env:
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+        run: |
+          set -euo pipefail
+          pin=""
+          constraint=""
+          if [ -f composer.json ]; then
+            constraint=$(jq -r '.require["pollora/harness"] // .["require-dev"]["pollora/harness"] // empty' composer.json)
+          fi
+          if [ -z "$constraint" ]; then
+            echo "composer.json does not require pollora/harness: its version is left to Composer."
+          elif [ -z "${WORKFLOW_REF:-}" ]; then
+            echo "::warning title=Harness version::job.workflow_ref is empty here, so the harness version is not aligned with the workflow: Composer resolves it as before."
+          elif ! printf '%s' "$WORKFLOW_REF" | grep -Eq '@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::notice title=Harness version::The workflow is not called at a release tag ($WORKFLOW_REF): Composer resolves the harness version."
+          else
+            version="${WORKFLOW_REF##*@refs/tags/v}"
+            if [ -f composer.lock ]; then
+              locked=$(jq -r '[(.packages // [])[], (."packages-dev" // [])[] | select(.name == "pollora/harness") | .version][0] // empty' composer.lock)
+              if [ -n "$locked" ] && [ "${locked#v}" != "$version" ]; then
+                echo "::warning title=Harness version::composer.lock holds pollora/harness $locked and the workflow is called at v$version: the Quality gates run $locked. The jobs that run composer update (tests, WordPress integration) resolve it anew."
+              fi
+            else
+              case "$constraint" in
+                *dev*) echo "::notice title=Harness version::composer.json requires pollora/harness $constraint: Composer resolves it." ;;
+                *)
+                  pin="pollora/harness:$version"
+                  echo "No composer.lock: installing pollora/harness $version, the version of the workflow's tag."
+                  ;;
+              esac
+            fi
+          fi
+          echo "pin=$pin" >> "$GITHUB_OUTPUT"
 
   quality:
     name: Quality gates (${{ needs.setup.outputs.profile }}, ${{ needs.setup.outputs.mode }})
@@ -167,7 +209,15 @@ jobs:
       - name: Install Composer dependencies
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
-        run: composer install --prefer-dist --no-interaction --no-progress
+          HARNESS_PIN: ${{ needs.setup.outputs.harness }}
+        # Without a lock `composer install` resolves like `update`, which is the one that takes a temporary constraint
+        # (composer.json stays as it is).
+        run: |
+          if [ -n "$HARNESS_PIN" ]; then
+            composer update --with="$HARNESS_PIN" --prefer-dist --no-interaction --no-progress
+          else
+            composer install --prefer-dist --no-interaction --no-progress
+          fi
 
       - name: Save Composer's cache
         if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
@@ -314,7 +364,8 @@ jobs:
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
           STABILITY: ${{ matrix.stability }}
-        run: composer update "--$STABILITY" --prefer-dist --no-interaction --no-progress
+          HARNESS_PIN: ${{ needs.setup.outputs.harness }}
+        run: composer update "--$STABILITY" ${HARNESS_PIN:+"--with=$HARNESS_PIN"} --prefer-dist --no-interaction --no-progress
 
       - name: Save Composer's cache
         if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
@@ -327,8 +378,8 @@ jobs:
         run: vendor/bin/pest
 
   # Optional: runs the repository's integration suite against a real WordPress and a real MySQL, which Brain Monkey doubles
-  # cannot reproduce. Skipped (nothing starts, no cost) while the `wordpress-integration` input is empty. No other job
-  # depends on it: a skipped or failed run here changes no other job and no status the repository requires. MySQL is a
+  # cannot reproduce. Skipped (nothing starts, no cost) while the `wordpress-integration` input is empty. Only `Result`
+  # depends on it: skipped it passes there, and a failure in enforce mode fails `Result` as it fails the run. MySQL is a
   # service container rather than SQLite: it is the database WordPress runs on, so a query the SQLite translation layer
   # would accept and MySQL refuse is caught, and nothing but the WordPress archive (cached) is downloaded.
   wordpress:
@@ -456,7 +507,8 @@ jobs:
       - name: Install Composer dependencies
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
-        run: composer update --prefer-stable --prefer-dist --no-interaction --no-progress
+          HARNESS_PIN: ${{ needs.setup.outputs.harness }}
+        run: composer update --prefer-stable ${HARNESS_PIN:+"--with=$HARNESS_PIN"} --prefer-dist --no-interaction --no-progress
 
       - name: Save Composer's cache
         if: github.event_name != 'pull_request' && steps.composer-cache-restore.outputs.cache-hit != 'true'
@@ -670,3 +722,50 @@ jobs:
         if: steps.alias.outputs.skip != 'true'
         working-directory: framework
         run: composer test:unit
+
+  # One check with a name that never changes (the names above carry the profile and the mode, or a PHP version), for a
+  # repository to require in its branch protection. It fails when a needed job failed or was
+  # cancelled, except a failure the job's own continue-on-error already ignores. A skipped job did not apply.
+  # always() is required: GitHub counts a skipped required check as passed.
+  result:
+    name: Result
+    needs: [setup, quality, tests, wordpress, contract, secrets, downstream]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the result of every job
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          # The same expressions as the continue-on-error of each job
+          ADVISORY_TESTS: ${{ needs.setup.outputs.mode != 'enforce' }}
+          ADVISORY_WORDPRESS: ${{ needs.setup.outputs.mode != 'enforce' }}
+          ADVISORY_CONTRACT: ${{ needs.setup.outputs.mode != 'enforce' || contains(github.event.pull_request.labels.*.name, 'breaking') }}
+          ADVISORY_SECRETS: ${{ needs.setup.outputs.mode != 'enforce' }}
+          ADVISORY_DOWNSTREAM: ${{ needs.setup.outputs.mode != 'enforce' }}
+        run: |
+          set -euo pipefail
+          results=$(printf '%s' "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"')
+          if [ -z "$results" ]; then
+            echo "::error::No job result to read."
+            exit 1
+          fi
+          status=0
+          while read -r job result; do
+            # ADVISORY_<JOB> is "true" where the job has continue-on-error: its failure never blocked the run.
+            advisory="ADVISORY_$(printf '%s' "$job" | tr 'a-z-' 'A-Z_')"
+            verdict=blocking
+            case "$result" in
+              success) verdict=ok ;;
+              # Skipped is how a job that does not apply ends; setup always applies.
+              skipped) if [ "$job" != "setup" ]; then verdict=ok; fi ;;
+              failure) if [ "${!advisory:-}" = "true" ]; then verdict="reported, not blocking"; fi ;;
+            esac
+            echo "$job: $result ($verdict)"
+            if [ "$verdict" = "blocking" ]; then
+              echo "::error::$job ended in $result."
+              status=1
+            fi
+          done <<< "$results"
+          exit "$status"
