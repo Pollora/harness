@@ -32,7 +32,10 @@ function scopeProject(array $files, ?string $parameters = null): string
     mkdir($root.'/src');
 
     foreach ($files as $file) {
-        is_dir(dirname($root.'/'.$file)) || mkdir(dirname($root.'/'.$file), 0o755, true);
+        if (! is_dir(dirname($root.'/'.$file))) {
+            mkdir(dirname($root.'/'.$file), 0o755, true);
+        }
+
         file_put_contents($root.'/'.$file, SCOPE_BROKEN);
     }
 
