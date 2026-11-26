@@ -321,7 +321,7 @@ The mutation run is 80 to 90 % of the *Quality gates* job (measured on 101 jobs 
 
 ### Which harness version CI runs
 
-The rules live in the CLI (`pollora/harness`, installed by Composer), not only in the workflow.
+The rules live in the CLI (`pollora/harness`, installed by Composer), not only in the workflow. What follows applies to a workflow called at the release that introduced it (see the CHANGELOG) or a later one: an older tag installs the newest release the constraint allows.
 
 | Repository | What CI installs |
 | --- | --- |
@@ -512,7 +512,7 @@ A rule is born `observed` (`resources/rules.php`): it reports and never blocks. 
 3. **Record the floors.** `vendor/bin/pollora-qa ratchet --update` writes the metrics that have a floor, `type_coverage` for CONV-11 and `exempted_rules` for the exemptions. From then on a drop fails QA-01 in `enforce` mode and only warns in `observe`. `type_coverage` must be a number from 0 to 100 and every other ratchet key is validated too: a value the ratchet could not compare makes `.harness.json` invalid instead of being ignored.
 4. **Promote.** Change the `status` of the rule to `enforced` in `resources/rules.php`, then run `php bin/pollora-qa agents` and commit `AGENTS.md` (the CI checks that its block matches the catalogue). Nothing else in the code changes: the test that was incomplete now fails.
 A promotion done this way (0.1.35): CONV-09, PERF-01 and PERF-07. `promote-report --root=<workspace>` over the 36 directories that have a `composer.json` said `clean` or `not applicable` everywhere but the framework, whose four facades (`Option::forget()` and three facades over a concrete factory) were fixed in its own pull request first; the report was run again on the framework's `develop` and read `CONV-09 clean`, `PERF-01 clean`, `PERF-07 clean`. Only then did the three `status` lines change, together with `Plan::OBSERVED_BY_DEFAULT` (which lost `Performance budgets`: a gate listed there never blocks whatever the catalogue says). A rule the measure still finds in a repository is not promoted: it waits for that repository's fix.
-5. **Raise the version.** Add the entry under `[Unreleased]` in `CHANGELOG.md` and release a new version. A repository that stays on the previous tag is not affected as long as the CLI it runs is that tag's: a repository without `composer.lock` (see [Which harness version CI runs](#which-harness-version-ci-runs)), or one whose lock holds it. Each repository moves to the new tag by pull request, when it is ready. A local `composer update` without a lock still takes the latest release the constraint allows.
+5. **Raise the version.** Add the entry under `[Unreleased]` in `CHANGELOG.md` and release a new version. Each repository moves to the new tag by pull request, when it is ready. A repository that stays on the previous tag is not affected only where the CLI it installs stays too (see [Which harness version CI runs](#which-harness-version-ci-runs)): a repository without `composer.lock` called at a tag that pins it; a repository still on an older tag takes the new release through Composer; and with a committed lock only the *Quality gates* job holds the locked version, the jobs that run `composer update` (so the architecture rules of the *Tests* job) take the new one. A local `composer update` without a lock takes the latest release the constraint allows.
 
 ## Public surface
 
