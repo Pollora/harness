@@ -235,6 +235,7 @@ it('runs every step of the ratchet job after the file test only when the file is
     $job = substr($text, (int) strpos($text, "\n  ratchet:\n"));
     // the ratchet job alone, without the Result job that follows it
     $job = substr($job, 0, (int) strpos($job, "\n  result:\n"));
+
     $afterFile = substr($job, (int) strpos($job, 'id: file'));
     $steps = preg_split('/^      - /m', $afterFile) ?: [];
     array_shift($steps);
