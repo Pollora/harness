@@ -15,7 +15,7 @@ function versionScript(string $job, string $step): string
         throw new RuntimeException("No script for {$job} / {$step}");
     }
 
-    return isset($match[2]) ? $match[2] : (string) preg_replace('/^ {10}/m', '', $match[1] ?? '');
+    return $match[2] ?? (string) preg_replace('/^ {10}/m', '', $match[1] ?? '');
 }
 
 /**
