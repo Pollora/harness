@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`template.yml` reads its presets from the commit it was called at.** It asked for `github.job_workflow_sha`, which is not a property of the `github` context: the value was empty and `actions/checkout` took the default branch of the harness, so a template called at a tag ran the Semgrep rules and the audit and ratchet code of `main`. It now uses `job.workflow_sha`.
+
 ## [0.1.39] - 2026-11-26
 
 ### Fixed
