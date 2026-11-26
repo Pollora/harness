@@ -366,8 +366,27 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pdo, mysqli, gd, intl, exif
-          tools: wp-cli
           coverage: none
+
+      # Not installed by setup-php: when its download of WP-CLI fails it only prints a line, its step succeeds, and the job
+      # breaks later on "wp: command not found". Pinned and checked, like the other tools the workflow runs.
+      - name: Install WP-CLI
+        env:
+          WP_CLI_VERSION: '2.12.0'
+          WP_CLI_SHA512: be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/wp-cli"
+          mkdir -p "$bin"
+          curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 3 --max-time 120 \
+            --output "$bin/wp" "https://github.com/wp-cli/wp-cli/releases/download/v$WP_CLI_VERSION/wp-cli-$WP_CLI_VERSION.phar"
+          if ! echo "$WP_CLI_SHA512  $bin/wp" | sha512sum -c - > /dev/null 2>&1; then
+            echo "::error::The WP-CLI $WP_CLI_VERSION archive does not have the expected checksum."
+            exit 1
+          fi
+          chmod +x "$bin/wp"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/wp" --version
 
       # The inputs come from the calling workflow: they are checked here, and reach the other steps through
       # $GITHUB_ENV, never through a ${{ }} written inside a script.
