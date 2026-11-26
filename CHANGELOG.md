@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.38] - 2026-11-26
+
 ### Changed
 
 - **In the reusable workflow, the `changed-relative` mutation gate does not run on a release pull request.** Such a pull request carries a whole release, past `mutation.max_files`, so the gate failed on it. A release pull request is a `pull_request` event whose head branch is `develop`, whose base branch is the repository's default branch and whose head is in the same repository: anything else keeps the gate, pull requests into `develop` and a fork's branch named `develop` included. Nothing is mutated there, with or without `ratchet.msi`; a notice and the job summary say the gate did not run (it is not reported as passed). With a `ratchet.msi`, the *Ratchet* step shows `no report` for `msi`, and the floor is compared by the whole pass of the push to the default branch after the merge. The files of the release are therefore not compared with the default branch: a direct push to `develop` or an admin merge is not seen. Other scopes, other events, `pollora-qa` itself and `.harness.json` are unchanged.
