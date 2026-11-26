@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **In the reusable workflow, the `changed-relative` mutation gate runs on pull requests only.** It also ran on pushes and on the nightly schedule, where `HEAD^1..HEAD` can be a whole release merge: past `mutation.max_files`, the gate failed and left `main` red every night. On any event other than `pull_request`, *Quality gates* no longer runs it and says so in a notice and in the job summary; the gate is absent from the report, not passed. A repository that also records `ratchet.msi` mutates the whole repository there (`--mutation-scope=all`) and the ratchet compares the score with the floor. **This is a new check for such a repository**: until now a limited scope never compared `msi`, on any event, and the whole pass takes as long as the repository does (`quality-timeout-minutes`). Without `ratchet.msi`, no mutation runs on those events. Pull requests, the other scopes, `pollora-qa` itself (`check --mutation --mutation-scope=changed-relative` run by hand) and `.harness.json` are unchanged. A pull request larger than `max_files`, a release one included, still fails.
+
 ## [0.1.37] - 2026-11-26
 
 ### Fixed
