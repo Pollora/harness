@@ -43,7 +43,7 @@ on:
           What the mutation gate mutates on a pull request when .harness.json sets no mutation.scope: `changed` (default)
           only the source files the pull request changes, `all` the whole repository as before. Other events always mutate
           everything. Ignored when the repository declares mutation.scope itself (a `changed-relative` one runs its gate on
-          pull requests only).
+          pull requests only, release pull requests excluded).
         type: string
         default: changed
       wordpress-integration:
@@ -108,8 +108,8 @@ jobs:
           # A repository that recorded a mutation score (ratchet.msi) gets it checked; the others are untouched.
           # A repository that declares "mutation": {"scope": "changed"} (or "added", or "changed-relative") is checked too, on the files the pull request
           # touches only, against its "min": its whole run is too long for CI. Everything else keeps the rule above.
-          # "changed-relative" only means something on a pull request: `Run every gate` decides what the other events run, from
-          # whether a ratchet.msi is recorded.
+          # "changed-relative" only means something on a pull request that is not a release: `Run every gate` decides what the
+          # other events run, from whether a ratchet.msi is recorded, and runs no mutation on a release pull request.
           # A repository whose tests need a service lists it under "services" (today: "redis").
           echo "redis=$(jq -r 'if ((.services // []) | index("redis")) != null then "true" else "false" end' .harness.json)" >> "$GITHUB_OUTPUT"
           echo "mutation-scope=$(jq -r '.mutation.scope // "all"' .harness.json)" >> "$GITHUB_OUTPUT"
@@ -189,6 +189,13 @@ jobs:
           MUTATION_MSI: ${{ needs.setup.outputs.msi }}
           MUTATION_ON_PR: ${{ inputs.mutation-on-pull-request }}
           EVENT_NAME: ${{ github.event_name }}
+          # What tells a release pull request apart. Branch names are chosen by whoever opens the pull request: they
+          # reach the script through the environment only, never inside it.
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPOSITORY: ${{ github.repository }}
         run: |
           flags=""
           if [ "$MUTATION" = "true" ]; then
@@ -209,6 +216,22 @@ jobs:
               else
                 flags=""
                 message="$message Nothing was mutated and no file was compared with its base."
+              fi
+              echo "::notice title=Relative mutation gate not run::$message"
+              printf '> %s\n\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            # A release pull request (`develop` into the default branch, from this repository) carries a whole release,
+            # beyond mutation.max_files: the relative gate does not run there either, and nothing is mutated, the push
+            # that follows the merge doing it when ratchet.msi is recorded. The head repository is part of the rule:
+            # without it a fork with a branch named `develop` would escape the gate. A deleted fork has an empty name.
+            if [ "$MUTATION_SCOPE" = "changed-relative" ] && [ "$EVENT_NAME" = "pull_request" ] \
+              && [ "$HEAD_REF" = "develop" ] && [ -n "$DEFAULT_BRANCH" ] && [ "$BASE_REF" = "$DEFAULT_BRANCH" ] \
+              && [ -n "$THIS_REPOSITORY" ] && [ "$HEAD_REPOSITORY" = "$THIS_REPOSITORY" ]; then
+              flags=""
+              message="Mutation testing (changed files, relative): not run on a release pull request (develop into $DEFAULT_BRANCH, the default branch, from this repository)."
+              message="$message Nothing was mutated and no file was compared with its base."
+              if [ "$MUTATION_MSI" = "true" ]; then
+                message="$message .harness.json records ratchet.msi: the Ratchet step does not compare it here and shows no report for it. The push to $DEFAULT_BRANCH after the merge mutates the whole repository and compares it, if this workflow runs on that push."
               fi
               echo "::notice title=Relative mutation gate not run::$message"
               printf '> %s\n\n' "$message" >> "$GITHUB_STEP_SUMMARY"
