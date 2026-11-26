@@ -282,7 +282,7 @@ jobs:
           php .harness-presets/bin/pollora-qa check --template "$flag"
 
   # One check with a name that never changes (the names above carry the profile and the mode, or a PHP version), for a
-  # repository to require in its branch protection. It fails where this run fails: a needed job that failed or was
+  # repository to require in its branch protection. It fails when a needed job failed or was
   # cancelled, except a failure the job's own continue-on-error already ignores. A skipped job did not apply.
   # always() is required: GitHub counts a skipped required check as passed.
   result:
