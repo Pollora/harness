@@ -319,6 +319,12 @@ The mutation run is 80 to 90 % of the *Quality gates* job (measured on 101 jobs 
 - **A reusable workflow**, `.github/workflows/php-package.yml`: quality gates, a test matrix (PHP × lowest/stable dependencies), a gitleaks scan, and the **downstream** job that runs the framework's tests against a changed core package.
 - **Agent hooks** for Claude Code: style fixed after each edit, PHPStan on the edited file, protected threshold files (QA-02), the fast gates before the agent hands back.
 
+### The one check to require
+
+Both reusable workflows end with a job named **`Result`**. With the workflow call `init` writes (the job is called `harness`), the status check is **`harness / Result`**: require that one in the branch protection or the ruleset. The other job names carry the profile and the mode (`Quality gates (core, enforce)`) or a PHP version, so requiring them blocks every merge the day one of those changes.
+
+`Result` fails exactly where the run fails: a job it needs failed or was cancelled. Observe mode is unchanged: a failure that the job's `continue-on-error` already ignores (every job but `Read .harness.json` and *Quality gates* in observe mode, the API contract on a pull request labelled `breaking`, the `observed` jobs of a template) does not fail it. A skipped job (no `wordpress-integration`, no `downstream`) passes. A cancelled job fails it, observed or not, since nothing was checked. It runs with `if: always()`, because GitHub counts a skipped required check as passed. A caller that filters the whole workflow call out (`paths`, or an `if` on its job) never reports the check, and a pull request that requires it stays pending.
+
 ## Templates
 
 A template (the skeleton, a theme, a plugin or a module) is copied into every project built from it, so it cannot carry the harness: `pollora/harness` in its `require-dev` would be installed by every `composer create-project`, and a `.harness.json` or an `AGENTS.md` at its root would land in every project. `template.yml` checks it from the outside instead. The template adds one file, `.github/workflows/harness.yml`, which the scaffolders strip:
@@ -482,7 +488,7 @@ Measured on `media` (PHP 8.4, no coverage driver, so coverage is not measured): 
 
 ## Reliability and security of the workflows
 
-`php-package.yml`, `template.yml` and the harness's own `ci.yml` follow the same rules. Their contract does not change: same inputs, same job names (they are the status contexts the repositories require).
+`php-package.yml`, `template.yml` and the harness's own `ci.yml` follow the same rules. Their contract does not change: same inputs, same job names. A repository that requires a status requires `Result` (see [The one check to require](#the-one-check-to-require)).
 
 - **Pinned by commit.** Every third-party action is referenced by the full SHA of its tag's commit, with the tag in a comment (`actions/checkout@3d3c42e5… # v7.0.1`). Semgrep is installed with `pipx install semgrep==<version>` and gitleaks runs from `ghcr.io/gitleaks/gitleaks:<tag>@sha256:<digest>`. Dependabot (`github-actions` ecosystem, weekly) proposes the new SHA with its tag comment; to bump by hand, resolve the tag with `gh api repos/<org>/<repo>/git/ref/tags/<tag>` (when `object.type` is `tag`, follow `gh api repos/<org>/<repo>/git/tags/<sha>` to the commit), and for the image read the digest with `docker buildx imagetools inspect ghcr.io/gitleaks/gitleaks:<tag>`. Update the comment together with the SHA.
 - **Least privilege.** `permissions: {}` at the top, `contents: read` per job, `persist-credentials: false` on every checkout, no `pull_request_target`, and no `${{ }}` of a value a third party controls inside a `run:` (they go through `env:`).

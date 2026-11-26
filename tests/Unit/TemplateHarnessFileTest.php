@@ -193,7 +193,7 @@ it('has ratchet read a root file that leaves the profile out, and still tells a 
     expect(fn () => harnessRun(new RatchetCommand, $package))->toThrow(InvalidConfig::class, 'declares the profile');
 });
 
-it('keeps the job names, needs and if of template.yml, and adds one optional job at the end', function (): void {
+it('keeps the job names, needs and if of template.yml, with the Result job alone depending on the others', function (): void {
     $text = (string) file_get_contents(dirname(__DIR__, 2).'/.github/workflows/template.yml');
     $section = substr($text, (int) strpos($text, "\njobs:\n"));
     $jobs = [];
@@ -211,7 +211,12 @@ it('keeps the job names, needs and if of template.yml, and adds one optional job
         ];
     }
 
-    expect(array_keys($jobs))->toBe(['secrets', 'style', 'security', 'audit', 'npm-audit', 'ratchet'])
+    $result = $jobs['result'];
+    unset($jobs['result']);
+
+    expect($result['name'])->toBe('Result')
+        ->and($result['if'])->toBe('always()')
+        ->and(array_keys($jobs))->toBe(['secrets', 'style', 'security', 'audit', 'npm-audit', 'ratchet'])
         ->and(array_map(static fn (array $job): string => $job['name'], $jobs))->toBe([
             'secrets' => 'Secrets (SEC-08)',
             'style' => 'Code style',
@@ -228,6 +233,8 @@ it('keeps the job names, needs and if of template.yml, and adds one optional job
 it('runs every step of the ratchet job after the file test only when the file is there', function (): void {
     $text = (string) file_get_contents(dirname(__DIR__, 2).'/.github/workflows/template.yml');
     $job = substr($text, (int) strpos($text, "\n  ratchet:\n"));
+    // the ratchet job alone, without the Result job that follows it
+    $job = substr($job, 0, (int) strpos($job, "\n  result:\n"));
     $afterFile = substr($job, (int) strpos($job, 'id: file'));
     $steps = preg_split('/^      - /m', $afterFile) ?: [];
     array_shift($steps);

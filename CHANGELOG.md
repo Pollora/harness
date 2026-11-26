@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Both reusable workflows end with a `Result` job**, the one status check a repository can require (`harness / Result`): the other job names carry the profile, the mode or a PHP version. It needs every job and runs with `if: always()`; it fails when one of them failed or was cancelled, except a failure the job's `continue-on-error` already ignores (observe mode, an API break labelled `breaking`, the observed jobs of a template), and passes the jobs that were skipped because they do not apply. No existing job, name, input or `continue-on-error` changes. Requiring it is a repository setting, which this release does not touch.
+
 ## [0.1.39] - 2026-11-26
 
 ### Fixed
