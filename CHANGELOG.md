@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.37] - 2026-11-26
+
 ### Fixed
 
 - **A mutation score can no longer be read from a run whose mutants were not written, were stale, or never loaded.** Three false figures were still possible with 0.1.36. (1) The write warning of Pest was only seen when PHP displayed errors: with `display_errors=0`, an unwritable `.temp/mutations` read `score: 100`. The run now forces `display_errors=1`, writes a probe file there before starting Pest (which is not started when it fails), and checks the directory again afterwards, mutants left empty included. (2) The run after an unwritable one read 100 % with no warning, from Pest's mutation cache: the run now passes `--no-cache`. (3) The Patchwork guard only checked that a bootstrap *mentions* `PEST_MUTATION_TESTING`: with the mutant loading removed, the gate read `measured`. After any run with a score, in every scope, the new `Check\MutationCanary` starts Pest as the process of one mutant with a mutated source that only records that it ran; without the record there is no score (`unmeasured` on the relative gate, a failed step elsewhere, nothing for the ratchet). A legitimate 100 % has the record and is kept. The static Patchwork guard stays, as the cheap refusal before any run. Cost: nearly nothing when the mutant loads at once, up to one run of the suite otherwise. A repository whose mutants do not load, and which got a score until now, is refused: that score was not a measure. Limits are listed in the README (*A score needs proof that mutants load*). No configuration, option or public interface changes.
