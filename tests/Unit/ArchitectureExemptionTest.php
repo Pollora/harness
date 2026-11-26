@@ -7,11 +7,12 @@ declare(strict_types=1);
  * ARCH-09 problem (a file without strict types), checked by a real Pest run.
  *
  * @param  list<array{rule: string, reason: string}>  $allowRules
+ * @param  string|null  $root  An empty directory for the project; a fresh temporary one when null
  * @return array{int, string}
  */
-function archRun(array $allowRules): array
+function archRun(array $allowRules, ?string $root = null): array
 {
-    $root = harnessTempDir();
+    $root ??= harnessTempDir();
     mkdir($root.'/src');
     mkdir($root.'/tests');
     mkdir($root.'/vendor');
@@ -24,7 +25,13 @@ function archRun(array $allowRules): array
     file_put_contents($root.'/src/Loose.php', "<?php\n\nnamespace Acme\\Shared;\n\nfinal class Loose {}\n");
     file_put_contents($root.'/tests/Arch.php', "<?php\n\ndeclare(strict_types=1);\n\nPollora\\Harness\\Pest\\Architecture::for(dirname(__DIR__))->register();\n");
 
-    $command = [PHP_BINARY, dirname(__DIR__, 2).'/vendor/bin/pest', 'tests/Arch.php', '--colors=never', '--filter=ARCH-'];
+    // Pest takes its root from where its binary is. Run from the harness's vendor, this project would be outside that
+    // root and Pest would turn its absolute path into a namespace: a segment starting with a digit (the default TMPDIR
+    // of macOS has one) is a parse error. A copy of the binary makes the project its own root, as an installed one is.
+    mkdir($root.'/vendor/pestphp/pest/bin', 0o755, true);
+    copy(dirname(__DIR__, 2).'/vendor/pestphp/pest/bin/pest', $root.'/vendor/pestphp/pest/bin/pest');
+
+    $command = [PHP_BINARY, $root.'/vendor/pestphp/pest/bin/pest', 'tests/Arch.php', '--colors=never', '--filter=ARCH-'];
     $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, [...getenv(), 'COLUMNS' => '200']);
     $output = stream_get_contents($pipes[1]).stream_get_contents($pipes[2]);
     fclose($pipes[1]);
@@ -61,4 +68,15 @@ it('passes once every failing rule is exempted, and says so', function (): void 
     expect($code)->toBe(0)
         ->and($output)->toContain('exempted: ARCH-08 — published classes cannot become final')
         ->and($output)->toContain('exempted: ARCH-09 — generated file');
+});
+
+it('runs from a directory whose path has a segment starting with a digit', function (): void {
+    $root = harnessTempDir().'/7f';
+    mkdir($root);
+
+    [$code, $output] = archRun([], $root);
+
+    expect(str_contains($output, 'Unable to create test case'))->toBeFalse($output)
+        ->and($code)->not->toBe(0)
+        ->and($output)->toContain('Acme\\Shared\\Loose');
 });
