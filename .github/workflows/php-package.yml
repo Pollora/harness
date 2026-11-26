@@ -11,8 +11,9 @@
 #         contents: read
 #
 # In observe mode every job reports and none fails the build; in enforce mode
-# the quality, tests and secrets jobs block the merge (mark them required in
-# the branch protection), and so does downstream for core packages.
+# the quality, tests and secrets jobs block the merge, and so does downstream for
+# core packages. Require the `Result` job (the check `harness / Result`) in the
+# branch protection: it is the one name that does not change.
 
 name: Pollora harness
 
@@ -327,8 +328,8 @@ jobs:
         run: vendor/bin/pest
 
   # Optional: runs the repository's integration suite against a real WordPress and a real MySQL, which Brain Monkey doubles
-  # cannot reproduce. Skipped (nothing starts, no cost) while the `wordpress-integration` input is empty. No other job
-  # depends on it: a skipped or failed run here changes no other job and no status the repository requires. MySQL is a
+  # cannot reproduce. Skipped (nothing starts, no cost) while the `wordpress-integration` input is empty. Only `Result`
+  # depends on it: skipped it passes there, and a failure in enforce mode fails `Result` as it fails the run. MySQL is a
   # service container rather than SQLite: it is the database WordPress runs on, so a query the SQLite translation layer
   # would accept and MySQL refuse is caught, and nothing but the WordPress archive (cached) is downloaded.
   wordpress:
@@ -670,3 +671,50 @@ jobs:
         if: steps.alias.outputs.skip != 'true'
         working-directory: framework
         run: composer test:unit
+
+  # One check with a name that never changes (the names above carry the profile and the mode, or a PHP version), for a
+  # repository to require in its branch protection. It fails when a needed job failed or was
+  # cancelled, except a failure the job's own continue-on-error already ignores. A skipped job did not apply.
+  # always() is required: GitHub counts a skipped required check as passed.
+  result:
+    name: Result
+    needs: [setup, quality, tests, wordpress, contract, secrets, downstream]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check the result of every job
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          # The same expressions as the continue-on-error of each job
+          ADVISORY_TESTS: ${{ needs.setup.outputs.mode != 'enforce' }}
+          ADVISORY_WORDPRESS: ${{ needs.setup.outputs.mode != 'enforce' }}
+          ADVISORY_CONTRACT: ${{ needs.setup.outputs.mode != 'enforce' || contains(github.event.pull_request.labels.*.name, 'breaking') }}
+          ADVISORY_SECRETS: ${{ needs.setup.outputs.mode != 'enforce' }}
+          ADVISORY_DOWNSTREAM: ${{ needs.setup.outputs.mode != 'enforce' }}
+        run: |
+          set -euo pipefail
+          results=$(printf '%s' "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"')
+          if [ -z "$results" ]; then
+            echo "::error::No job result to read."
+            exit 1
+          fi
+          status=0
+          while read -r job result; do
+            # ADVISORY_<JOB> is "true" where the job has continue-on-error: its failure never blocked the run.
+            advisory="ADVISORY_$(printf '%s' "$job" | tr 'a-z-' 'A-Z_')"
+            verdict=blocking
+            case "$result" in
+              success) verdict=ok ;;
+              # Skipped is how a job that does not apply ends; setup always applies.
+              skipped) if [ "$job" != "setup" ]; then verdict=ok; fi ;;
+              failure) if [ "${!advisory:-}" = "true" ]; then verdict="reported, not blocking"; fi ;;
+            esac
+            echo "$job: $result ($verdict)"
+            if [ "$verdict" = "blocking" ]; then
+              echo "::error::$job ended in $result."
+              status=1
+            fi
+          done <<< "$results"
+          exit "$status"
