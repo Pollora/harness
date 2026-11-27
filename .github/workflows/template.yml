@@ -13,7 +13,7 @@
 #
 #   jobs:
 #     harness:
-#       uses: Pollora/harness/.github/workflows/template.yml@v0.1.40
+#       uses: Pollora/harness/.github/workflows/template.yml@v0.1.41
 #       with:
 #         mode: enforce
 #       permissions:

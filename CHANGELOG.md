@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.41] - 2026-11-27
+
 ### Fixed
 
 - **No mutation score is given when the tests do not pass on unchanged code run as a mutant.** Pest counts a mutant's process that fails as a caught mutant, and one that loops as a timeout, caught too, so a suite that breaks in that process whatever the file contains scored mutants nothing had tested (on `pollora/media`, one file read 100 % with Patchwork 2.2.5 and 77.92 % with its unreleased fix). Before Pest runs, the harness now runs the suite alone, then the tests covering the code with `PEST_MUTATION_TESTING` set to the source file and `PEST_MUTATION_FILE` to an exact copy of it; selected by name as Pest selects them, never passing `--parallel`; if they fail (twice: one flaky failure is not a verdict), or are still running after five times the duration of the suite (never less than 120 s), Pest is not started and the gate fails with the failing tests. When they only fail with the variables of a parallel run, the mutants are run in a single process. **A repository whose score the gate accepted may now be refused**: Patchwork (loaded by Brain Monkey) under tests that read a directory, and Pest's own stream wrapper, which takes every `flock()` as shared and reports an unreadable file as absent, are two causes. The README says what to do.
