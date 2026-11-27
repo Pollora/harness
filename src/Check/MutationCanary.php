@@ -33,13 +33,15 @@ use Pollora\Harness\Support\InterpreterFlags;
  * Pest runs a mutant, with `PEST_MUTATION_FILE` an exact copy of the source:
  *
  * - First the suite runs alone: the control, which times it and, with a coverage driver, says which tests cover which
- *   file. A single process is tried first, then `--parallel` for a suite that only holds that way; when neither passes
- *   there is nothing to compare with.
+ *   file. A single process is tried first, then `--parallel` (for a suite that only holds that way, or one flaky run),
+ *   both with coverage before either without; when none passes there is nothing to compare with.
  * - Then, with the environment of a mutant, the tests Pest would select: those that cover the file (`--filter`, the
- *   union of what it selects for each line). Without coverage data, the whole suite, which can refuse a score for a
+ *   union of what it selects for each line, in several runs when too long for one). Never their whole class: a test
+ *   that covers nothing is run for no mutant. Without coverage data, the whole suite, which can refuse a score for a
  *   test that no mutant of the file would run.
  * - Pest never gives a mutant `--parallel`: in a parallel mutation run it sets the variables of a ParaTest worker, and
  *   so does this. When the tests only fail with those, mutants are not run in parallel.
+ * - A run that fails is tried once more: one flaky failure must not refuse the score.
  * - Without `--bail`, so that every failing test is listed; the verdict is the same.
  * - The limit of these runs is `TIME_FACTOR` times the control, and never below `TIME_FLOOR` seconds.
  */
@@ -57,7 +59,7 @@ final class MutationCanary
 
     private const string ABSENT = 'absent';
 
-    /** Past this length a `--filter` names test classes only: PCRE refuses a longer one, which then selects nothing. */
+    /** Past this length a `--filter` is split over several runs: PCRE refuses a longer one, which then selects nothing. */
     private const int FILTER_LIMIT = 20_000;
 
     /** What Pest and ParaTest set in the processes of a run: none of it may leak into the control. */
@@ -112,11 +114,11 @@ final class MutationCanary
             return [...$result, 'refusal' => $control, 'controlled' => false];
         }
 
-        [$arguments, $seconds, $coverage] = $control;
+        [$seconds, $coverage] = $control;
         $result['limit'] = max($floor, self::TIME_FACTOR * $seconds);
 
         foreach ($originals as $path => $original) {
-            $filter = null;
+            $filters = null;
 
             if ($coverage !== null) {
                 $tests = self::testsCovering($coverage, $paths === [] ? array_values(self::originals($root, $sources)) : [$original]);
@@ -126,20 +128,21 @@ final class MutationCanary
                     continue;
                 }
 
-                $filter = $tests === [] ? null : self::filter($tests, $paths === []);
+                $filters = $tests === [] ? null : self::filters($tests);
             }
 
-            // ParaTest sets the variables of its workers itself when the suite needs --parallel
-            $variables = $result['parallel'] && $arguments === [] ? self::workerVariables() : [];
-            $refusal = self::unchangedRefusal($root, $path, $original, $variables, $arguments, $filter, $result['limit'], $paths === []);
+            foreach ($filters ?? [null] as $filter) {
+                $variables = $result['parallel'] ? self::workerVariables() : [];
+                $refusal = self::unchangedRefusal($root, $path, $original, $variables, $filter, $result['limit'], $paths === []);
 
-            if ($refusal !== null && $variables !== []) {
-                $result['parallel'] = false;
-                $refusal = self::unchangedRefusal($root, $path, $original, [], $arguments, $filter, $result['limit'], $paths === []);
-            }
+                if ($refusal !== null && $variables !== []) {
+                    $result['parallel'] = false;
+                    $refusal = self::unchangedRefusal($root, $path, $original, [], $filter, $result['limit'], $paths === []);
+                }
 
-            if ($refusal !== null) {
-                return [...$result, 'refusal' => $refusal];
+                if ($refusal !== null) {
+                    return [...$result, 'refusal' => $refusal];
+                }
             }
         }
 
@@ -215,22 +218,25 @@ final class MutationCanary
     /**
      * Runs the suite alone, with nothing of a mutant.
      *
-     * @return array{list<string>, float, array<string, list<string>>|null}|string The arguments it passes with, its
-     *                                                                             duration and the tests covering each file (null without coverage data), or why nothing can be compared
+     * @return array{float, array<string, list<string>>|null}|string Its duration and the tests covering each file (null
+     *                                                               without coverage data), or why nothing can be compared
      */
     private static function control(string $root): array|string
     {
         $report = sys_get_temp_dir().'/pollora-coverage-'.bin2hex(random_bytes(8)).'.php';
 
-        try {
-            [$code, , $seconds] = self::execute($root, ['--coverage-php='.$report], [...self::environment(), 'XDEBUG_MODE' => 'coverage'], flags: InterpreterFlags::coverageScope($root));
+        // In parallel too: without coverage data, every test would be run as a mutant, those of no mutant included
+        foreach ([[], ['--parallel']] as $arguments) {
+            try {
+                [$code, , $seconds] = self::execute($root, [...$arguments, '--coverage-php='.$report], [...self::environment(), 'XDEBUG_MODE' => 'coverage'], flags: InterpreterFlags::coverageScope($root));
 
-            if ($code === 0) {
-                return [[], $seconds, self::coverage($root, $report)];
-            }
-        } finally {
-            if (is_file($report)) {
-                unlink($report);
+                if ($code === 0) {
+                    return [$seconds, self::coverage($root, $report)];
+                }
+            } finally {
+                if (is_file($report)) {
+                    unlink($report);
+                }
             }
         }
 
@@ -241,7 +247,7 @@ final class MutationCanary
             [$code, $output, $seconds] = self::execute($root, $arguments, self::environment());
 
             if ($code === 0) {
-                return [$arguments, $seconds, null];
+                return [$seconds, null];
             }
         }
 
@@ -312,28 +318,37 @@ final class MutationCanary
     }
 
     /**
-     * The `--filter` Pest gives the process of a mutant (`MutationTest::start()`), for these tests.
+     * The `--filter` Pest gives the process of a mutant (`MutationTest::start()`), for these tests, in as many parts as
+     * their length needs.
      *
      * @param  list<string>  $tests  As the coverage names them
-     * @return string|null null when a test has a name Pest's own pattern does not read
+     * @return list<string>|null null when a test has a name Pest's own pattern does not read
      */
-    private static function filter(array $tests, bool $classesOnly): ?string
+    private static function filters(array $tests): ?array
     {
         $names = [];
-        $classes = [];
 
         foreach ($tests as $test) {
             if (preg_match('/\\\\([a-zA-Z0-9]*)::(__pest_evaluable_)?([^#]*)"?/', $test, $matches) !== 1) {
                 return null;
             }
 
-            $classes[$matches[1].'::'] = true;
             $names[$matches[1].'::(.*)'.($matches[2] === '__pest_evaluable_' ? str_replace(['__', '_'], ['.{1,2}', '.'], $matches[3]) : $matches[3])] = true;
         }
 
-        $filter = implode('|', array_keys($names));
+        $filters = [];
+        $part = '';
 
-        return $classesOnly || strlen($filter) > self::FILTER_LIMIT ? implode('|', array_keys($classes)) : $filter;
+        foreach (array_keys($names) as $name) {
+            if ($part !== '' && strlen($part) + strlen($name) >= self::FILTER_LIMIT) {
+                $filters[] = $part;
+                $part = '';
+            }
+
+            $part .= ($part === '' ? '' : '|').$name;
+        }
+
+        return $part === '' ? $filters : [...$filters, $part];
     }
 
     /**
@@ -350,10 +365,9 @@ final class MutationCanary
      * Runs the tests as the process of a mutant that changes nothing.
      *
      * @param  array<string, string>  $variables  Those of a parallel run, or none
-     * @param  list<string>  $arguments  Those the suite passes with on its own
      * @param  string|null  $filter  The tests to run; null runs them all
      */
-    private static function unchangedRefusal(string $root, string $path, string $original, array $variables, array $arguments, ?string $filter, float $limit, bool $wholeRepository): ?string
+    private static function unchangedRefusal(string $root, string $path, string $original, array $variables, ?string $filter, float $limit, bool $wholeRepository): ?string
     {
         // Where Pest writes its mutants, so that a bootstrap which reads the mutant finds it where it would
         $directory = $root.'/vendor/pestphp/pest-plugin-mutate/.temp/mutations';
@@ -366,11 +380,19 @@ final class MutationCanary
         $environment = [...self::environment(), 'PEST_MUTATION_TESTING' => $original, 'PEST_MUTATION_FILE' => $copy, ...$variables];
 
         try {
-            [$code, $output] = self::execute($root, [...$arguments, ...($filter === null ? [] : ['--filter='.$filter])], $environment, $limit);
+            // Never --parallel, which Pest gives no mutant
+            $arguments = $filter === null ? [] : ['--filter='.$filter];
+            [$code, $output] = self::execute($root, $arguments, $environment, $limit);
 
             // A filter that selects nothing proves nothing: the whole suite then
             if ($filter !== null && preg_match('/No tests (?:found|executed)/i', $output) === 1) {
                 $filter = null;
+                $arguments = [];
+                [$code, $output] = self::execute($root, $arguments, $environment, $limit);
+            }
+
+            // One flaky failure is no verdict; a run past the limit is not tried again
+            if ($code !== 0 && $code !== null) {
                 [$code, $output] = self::execute($root, $arguments, $environment, $limit);
             }
         } finally {

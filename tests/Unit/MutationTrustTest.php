@@ -327,7 +327,8 @@ describe('the tests on unchanged code run as a mutant', function (): void {
         $root = $covered('P\\Tests\\ATest::__pest_evaluable_it_reads__the_answer');
 
         expect(MutationCanary::unchanged($root, $paths)['refusal'])->toBeNull()
-            ->and(file_get_contents($root.'/filter'))->toBe($paths === [] ? '--filter=ATest::' : '--filter=ATest::(.*)it.reads.{1,2}the.answer');
+            // Never the whole class, even for the whole repository: its other tests may be run for no mutant
+            ->and(file_get_contents($root.'/filter'))->toBe('--filter=ATest::(.*)it.reads.{1,2}the.answer');
     })->with(['a file' => [['src/A.php']], 'the whole repository' => [[]]]);
 
     it('refuse the score when a test that covers the file fails', function () use ($covered): void {
@@ -404,11 +405,57 @@ describe('the tests on unchanged code run as a mutant', function (): void {
             ->and($run)->not->toHaveKey('unloaded');
     });
 
-    it('are compared in parallel for a suite that only holds that way', function (): void {
-        $root = trustProject('', "require getenv('PEST_MUTATION_FILE');");
-        file_put_contents($root.'/vendor/bin/pest', "<?php\nif (! in_array('--parallel', \$argv, true)) {\n    exit(1);\n}\nif (getenv('PEST_MUTATION_FILE') !== false) {\n    require getenv('PEST_MUTATION_FILE');\n    exit(str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-') ? 1 : 0);\n}\n");
+    /** A fake Pest whose suite only passes with --parallel on its own; `$mutant` is what a run as a mutant exits with. */
+    $parallelOnly = static function (string $mutant): string {
+        $root = trustProject('');
+        file_put_contents($root.'/vendor/bin/pest', "<?php\nif (getenv('PEST_MUTATION_FILE') !== false) {\n    require getenv('PEST_MUTATION_FILE');\n    {$mutant}\n}\nexit(in_array('--parallel', \$argv, true) ? 0 : 1);\n");
+
+        return $root;
+    };
+
+    it('never pass --parallel to a run as a mutant, which Pest does not do, even for a suite that needs it', function () use ($parallelOnly): void {
+        $root = $parallelOnly("exit(in_array('--parallel', \$argv, true) ? 0 : 1);");
 
         expect(MutationCanary::unchanged($root, ['src/A.php'])['refusal'])->toContain('fail (exit code 1)');
+    });
+
+    it('accept a suite that needs --parallel on its own when its tests pass as a mutant', function () use ($parallelOnly): void {
+        expect(MutationCanary::unchanged($parallelOnly('exit(0);'), ['src/A.php'])['refusal'])->toBeNull();
+    });
+
+    it('try the coverage of the control again, in parallel, before running every test as a mutant', function () use ($covered): void {
+        $root = $covered('P\\Tests\\ATest::__pest_evaluable_it_reads');
+        $pest = (string) file_get_contents($root.'/vendor/bin/pest');
+        // The single process fails, as one flaky test would make it
+        file_put_contents($root.'/vendor/bin/pest', str_replace("<?php\n", "<?php\nif (getenv('PEST_MUTATION_FILE') === false && ! in_array('--parallel', \$argv, true)) {\n    exit(1);\n}\n", $pest));
+
+        expect(MutationCanary::unchanged($root, ['src/A.php'])['refusal'])->toBeNull()
+            ->and(file_get_contents($root.'/filter'))->toBe('--filter=ATest::(.*)it.reads');
+    });
+
+    it('do not refuse a score for one flaky failure', function (): void {
+        $root = trustProject('', "require getenv('PEST_MUTATION_FILE'); if (str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-') && ! is_file('flaked')) { touch('flaked'); exit(1); }");
+
+        expect(MutationCanary::unchanged($root, ['src/A.php']))->toMatchArray(['refusal' => null, 'parallel' => true])
+            ->and($root.'/flaked')->toBeFile();
+    });
+
+    it('split a filter too long for PCRE over several runs, naming every test', function (): void {
+        $tests = array_map(static fn (int $i): string => 'P\\Tests\\ATest::__pest_evaluable_it_'.str_repeat('x', 100).$i, range(1, 500));
+        $root = trustProject('', "require getenv('PEST_MUTATION_FILE'); if (str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-')) { file_put_contents('filters', implode('', preg_grep('/^--filter=/', \$argv)).\"\\n\", FILE_APPEND); }");
+        $report = sprintf('<?php return new class { function getData() { return $this; } function lineCoverage() { return [%s => [3 => %s]]; } };', var_export(realpath($root.'/src/A.php'), true), var_export($tests, true));
+        file_put_contents($root.'/report', $report);
+        $pest = (string) file_get_contents($root.'/vendor/bin/pest');
+        file_put_contents($root.'/vendor/bin/pest', str_replace("<?php\n", "<?php\nforeach (\$argv as \$a) { if (str_starts_with(\$a, '--coverage-php=')) { copy('report', substr(\$a, 15)); } }\n", $pest));
+
+        expect(MutationCanary::unchanged($root, ['src/A.php'])['refusal'])->toBeNull();
+
+        $filters = file($root.'/filters', FILE_IGNORE_NEW_LINES);
+        $names = array_merge(...array_map(static fn (string $filter): array => explode('|', substr($filter, 9)), $filters));
+
+        expect(count($filters))->toBeGreaterThan(1)
+            ->and(max(array_map(strlen(...), $filters)))->toBeLessThan(20_100)
+            ->and(array_unique($names))->toHaveCount(500);
     });
 
     it('run the first source file for the whole repository, never one Composer loads at startup', function (): void {
