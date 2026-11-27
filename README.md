@@ -356,7 +356,7 @@ permissions: {}
 
 jobs:
   harness:
-    uses: Pollora/harness/.github/workflows/template.yml@v0.1.39
+    uses: Pollora/harness/.github/workflows/template.yml@v0.1.40
     with:
       mode: enforce # observe reports and never blocks
       observed: '' # gates reported but never blocking: secrets, style, security, audit, ratchet
@@ -415,7 +415,7 @@ Pollora packages test against Brain Monkey, which doubles WordPress. That is fas
 ```yaml
 jobs:
   harness:
-    uses: Pollora/harness/.github/workflows/php-package.yml@v0.1.39
+    uses: Pollora/harness/.github/workflows/php-package.yml@v0.1.40
     with:
       wordpress-integration: tests/Integration # the suite; empty (default) = off
       wordpress-version: latest # latest (default), nightly, 6.9, 6.9.1
