@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.40] - 2026-11-27
+
 ### Documentation
 
 - **README passages that were no longer true**: not every repository runs in `enforce` mode; a template may carry a `.harness.json`; the examples call a current tag instead of `@v0.1.10` and `@main`; the duration of the WordPress job is measured instead of estimated; the differences the `ThumbnailDriver` contract found in `media` have been fixed.
