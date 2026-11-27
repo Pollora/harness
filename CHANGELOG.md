@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- The README gives the security patterns a template runs (SEC-01 to SEC-07 and CONV-10) and says `mutation.min` has no default for `changed-relative`; the headers of the reusable workflows call a current tag.
+
 ## [0.1.40] - 2026-11-27
 
 ### Documentation
