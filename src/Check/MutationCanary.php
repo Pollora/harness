@@ -131,11 +131,11 @@ final class MutationCanary
 
             // ParaTest sets the variables of its workers itself when the suite needs --parallel
             $variables = $result['parallel'] && $arguments === [] ? self::workerVariables() : [];
-            $refusal = self::unchangedRefusal($root, $path, $original, $variables, $arguments, $filter, $result['limit']);
+            $refusal = self::unchangedRefusal($root, $path, $original, $variables, $arguments, $filter, $result['limit'], $paths === []);
 
             if ($refusal !== null && $variables !== []) {
                 $result['parallel'] = false;
-                $refusal = self::unchangedRefusal($root, $path, $original, [], $arguments, $filter, $result['limit']);
+                $refusal = self::unchangedRefusal($root, $path, $original, [], $arguments, $filter, $result['limit'], $paths === []);
             }
 
             if ($refusal !== null) {
@@ -353,7 +353,7 @@ final class MutationCanary
      * @param  list<string>  $arguments  Those the suite passes with on its own
      * @param  string|null  $filter  The tests to run; null runs them all
      */
-    private static function unchangedRefusal(string $root, string $path, string $original, array $variables, array $arguments, ?string $filter, float $limit): ?string
+    private static function unchangedRefusal(string $root, string $path, string $original, array $variables, array $arguments, ?string $filter, float $limit, bool $wholeRepository): ?string
     {
         // Where Pest writes its mutants, so that a bootstrap which reads the mutant finds it where it would
         $directory = $root.'/vendor/pestphp/pest-plugin-mutate/.temp/mutations';
@@ -385,11 +385,12 @@ final class MutationCanary
 
         return self::message(
             sprintf(
-                'the suite passes on its own but %s %s when Pest runs them as a mutant of %s that changes nothing%s',
+                'the suite passes on its own but %s %s when Pest runs them as a mutant of %s that changes nothing%s%s',
                 $filter === null ? 'its tests (all of them: no coverage data to select by)' : 'the tests covering the code',
                 $code === null ? sprintf('are still running after %d s', (int) ceil($limit)) : sprintf('fail (exit code %d)', $code),
                 $path,
                 $variables === [] ? '' : ', in a parallel run',
+                $wholeRepository ? ' (the first source file, standing for every one: the failure does not have to be about it)' : '',
             ),
             $output,
             'Pest counts such a failure as a caught mutant, and a loop as a timeout, which counts as caught too. Known causes: the stream wrapper Pest puts on `file` (it takes every flock() as shared and reports a file nobody may read as absent), Patchwork, which Brain Monkey loads, stacked on it (reading a directory then fails: antecedent/patchwork#235), and tests that only pass after others that Pest does not run with them. When PEST_MUTATION_TESTING is set, the test bootstrap can give `file` back and load PEST_MUTATION_FILE itself (see the framework\'s tests/bootstrap.php).',
@@ -495,6 +496,13 @@ final class MutationCanary
     private static function execute(string $root, array $arguments, array $environment, ?float $limit = null, array $flags = []): array
     {
         $log = (string) tempnam(sys_get_temp_dir(), 'pollora-pest-');
+        // A run of its own: what a killed or failing run leaves behind must not fail the next one
+        $temporary = sys_get_temp_dir().'/pollora-run-'.bin2hex(random_bytes(6));
+
+        if (@mkdir($temporary, 0o700)) {
+            $environment = [...$environment, 'TMPDIR' => $temporary, 'TMP' => $temporary, 'TEMP' => $temporary];
+        }
+
         $started = microtime(true);
 
         try {
@@ -535,7 +543,33 @@ final class MutationCanary
             return [$code, (string) file_get_contents($log), microtime(true) - $started];
         } finally {
             unlink($log);
+            self::remove($temporary);
         }
+    }
+
+    /**
+     * Removes a directory and what is in it, without following links.
+     */
+    private static function remove(string $directory): void
+    {
+        if (! is_dir($directory) || is_link($directory)) {
+            return;
+        }
+
+        // A test may leave a directory nobody can list
+        @chmod($directory, 0o700);
+
+        foreach (array_diff((array) @scandir($directory), ['.', '..', false]) as $name) {
+            $path = $directory.'/'.$name;
+
+            if (is_dir($path) && ! is_link($path)) {
+                self::remove($path);
+            } else {
+                @unlink($path);
+            }
+        }
+
+        @rmdir($directory);
     }
 
     /**

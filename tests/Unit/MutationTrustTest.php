@@ -343,6 +343,18 @@ describe('the tests on unchanged code run as a mutant', function (): void {
         expect(MutationCanary::unchanged($root, ['src/Unused.php'])['refusal'])->toBeNull();
     });
 
+    it('give each run its own temporary directory, removed with what the run left there', function (): void {
+        $root = trustProject('', "require getenv('PEST_MUTATION_FILE');");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\n\$temporary = sys_get_temp_dir();\nfile_put_contents('runs', \$temporary.\"\\n\", FILE_APPEND);\nif (is_file(\$temporary.'/leftover')) {\n    exit(1);\n}\ntouch(\$temporary.'/leftover');\nif (getenv('PEST_MUTATION_FILE') !== false) {\n    require getenv('PEST_MUTATION_FILE');\n}\n");
+
+        expect(MutationCanary::refusal($root, ['src/A.php']))->toBeNull();
+
+        $runs = file($root.'/runs', FILE_IGNORE_NEW_LINES);
+
+        expect($runs)->toHaveCount(count(array_unique($runs)))
+            ->and(array_filter($runs, is_dir(...)))->toBe([]);
+    });
+
     it('stop a loop at the limit, with the processes it started', function (): void {
         $loop = <<<'PHP'
             require getenv('PEST_MUTATION_FILE');
