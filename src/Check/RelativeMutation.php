@@ -30,7 +30,8 @@ use Pollora\Harness\Support\ChangedSources;
  * - **Base unmeasured** (its tests fail, a measuring guard trips): the file is held to `min` and says so; a
  *   regression cannot be proved, so it is the fixed floor or nothing.
  * - **Change unmeasured**: the gate fails. A score is refused rather than believed when Pest could not write its
- *   files, when no mutated source was seen being executed (`MutationCanary`: Patchwork or another stream wrapper
+ *   files, when the tests fail on unchanged code run as a mutant or no mutated source was seen being executed
+ *   (`MutationCanary`: Patchwork or another stream wrapper
  *   serving the original), when every mutant survived, or when the tests fail.
  * - **Nothing is measured twice for nothing.** The change is measured first; a file at or above `100 - tolerance`
  *   cannot have dropped beyond the tolerance, so its base is not measured.
@@ -203,7 +204,7 @@ final class RelativeMutation
             }
         }
 
-        return "The mutation score cannot be measured here: antecedent/patchwork is installed (Brain Monkey loads it) and no test bootstrap reads PEST_MUTATION_TESTING.\nPatchwork and Pest both rewrite what PHP loads through a stream wrapper on `file`: the mutant is never loaded and every mutant survives, or the process dies and counts as killed, so the score would be wrong in a way Pest does not report. Give the wrapper back to Pest in the tests' bootstrap when PEST_MUTATION_TESTING is set (see the framework's tests/bootstrap.php).";
+        return "The mutation score cannot be measured here: antecedent/patchwork is installed (Brain Monkey loads it) and no test bootstrap reads PEST_MUTATION_TESTING.\nPatchwork and Pest both rewrite what PHP loads through a stream wrapper on `file`: the mutant is never loaded and every mutant survives, or the process dies and counts as killed, so the score would be wrong in a way Pest does not report. When PEST_MUTATION_TESTING is set, the tests' bootstrap must give the wrapper back, only if Pest's wrapper is on `file`, and load PEST_MUTATION_FILE (the harness README shows how).";
     }
 
     /**

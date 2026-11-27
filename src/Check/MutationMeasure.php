@@ -20,7 +20,8 @@ namespace Pollora\Harness\Check;
  *   survives (`859 untested, 0 tested`, `unmeasured`); the second, a score of 100 % that no test earned, is refused
  *   by `RelativeMutation::patchworkGuard()` before any run, from the repository.
  * - Pest created no mutation: `Score: 0.00%` measures nothing (`empty`).
- * - `MutationCanary` saw no mutated source being executed: the score is about something else (`unmeasured`).
+ * - `MutationCanary` saw no mutated source being executed, or the tests fail in the process of a mutant that changes
+ *   nothing: the score is about something else (`unmeasured`).
  *
  * `RelativeMutation` adds the one check that needs the repository, not the output: a suite that loads Patchwork
  * without handing the stream wrapper back to Pest.
