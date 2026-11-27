@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Console\Commands;
 
+use Pollora\Harness\Check\MutationCanary;
 use Pollora\Harness\Check\Plan;
 use Pollora\Harness\Check\Report;
 use Pollora\Harness\Check\Runner;
@@ -34,6 +35,7 @@ final class CheckCommand implements Command
               --coverage[=FILE]   Run the tests with coverage and compare the Clover report with the ratchet (default file .harness/coverage.xml)
               --infection=FILE    Infection JSON log to compare with the ratchet
               --mutation          Run Pest's mutation testing (pest --mutate) and compare its score with the ratchet's msi
+              --mutation-canary[=FILES]  Run no gate: only check that a mutation score could be believed here (mutants load, and the tests pass on unchanged code run as a mutant), of the whole repository or of the files given (comma separated); fails whatever the mode
               --mutation-base=REF With a limited mutation.scope, the commit the changed files are counted from (default HEAD^1: a pull request's merge commit needs fetch-depth 2)
               --budgets-base=REF  The commit the query budgets (PERF-01) are compared with, to refuse a budget that went up (default HEAD^1; "not compared" when it is not in the checkout)
               --mutation-scope=S  all, changed, added or changed-relative: what --mutation mutates in this run, over .harness.json (a limited scope is held to mutation.min, 50 % without one)
@@ -50,6 +52,10 @@ final class CheckCommand implements Command
     {
         if ($io->flag('template')) {
             return $this->template($io);
+        }
+
+        if ($io->flag('mutation-canary')) {
+            return $this->mutationCanary($io);
         }
 
         $config = HarnessConfig::load($io->cwd);
@@ -90,6 +96,41 @@ final class CheckCommand implements Command
         }
 
         return $report->hasBlockingFailures() ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * `check --mutation-canary`: what a mutation run checks about its score, without the run itself, in the time of
+     * a few passes of the suite and without a coverage driver.
+     */
+    private function mutationCanary(Io $io): int
+    {
+        if (! is_dir($io->cwd.'/vendor/pestphp/pest-plugin-mutate')) {
+            $io->error('vendor/pestphp/pest-plugin-mutate is not installed: nothing was checked.');
+
+            return self::FAILURE;
+        }
+
+        $paths = array_values(array_filter(explode(',', $io->option('mutation-canary') ?? ''), static fn (string $path): bool => $path !== ''));
+
+        foreach ($paths as $path) {
+            if (! is_file($io->cwd.'/'.$path)) {
+                $io->error(sprintf('--mutation-canary: %s is not a file of the repository.', $path));
+
+                return self::FAILURE;
+            }
+        }
+
+        $refusal = MutationCanary::refusal($io->cwd, $paths);
+
+        if ($refusal !== null) {
+            $io->error($refusal);
+
+            return self::FAILURE;
+        }
+
+        $io->line('Mutation canary passed: mutants load, and the tests pass on unchanged code run as a mutant. No score was measured.');
+
+        return self::SUCCESS;
     }
 
     /**

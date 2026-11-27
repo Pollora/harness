@@ -32,9 +32,11 @@ use SplFileInfo;
  * Pest keeps the mutants it generated in a cache that names files it does not check again: after a run that could not
  * write them, the next one reads 100 % with no warning. The run therefore passes `--no-cache`.
  *
- * Last, a score is only returned once `MutationCanary` has seen a mutated source being executed: when something else
- * serves the original file (Patchwork replacing Pest's stream wrapper), the result has a null score and says why in
- * `unloaded`.
+ * Last, a score is only returned when `MutationCanary` has seen the tests pass as a mutant that changes nothing (asked
+ * before Pest runs, which is not started when they do not) and a mutated source being executed: otherwise (the suite
+ * fails or loops in a mutant's process whatever the file contains, or something else serves the original file) the
+ * result has a null score and says why in `unloaded`. When the tests only fail with the variables of a parallel run, the
+ * mutants are run in a single process.
  */
 final class MutationRun
 {
@@ -50,11 +52,22 @@ final class MutationRun
             return ['score' => null, 'summary' => '', 'output' => '', 'empty' => false, 'unwritable' => true];
         }
 
-        $started = time();
-        $result = self::execute($cwd, true, $paths);
+        // Before Pest runs: its mutants may leave files behind that make the suite fail afterwards
+        $unchanged = MutationCanary::unchanged($cwd, $paths);
 
-        if ($result['score'] === null && ! $result['empty'] && ! $result['unwritable']) {
-            $result = self::execute($cwd, false, $paths);
+        // No pass of Pest could give a score to believe: not worth its time
+        if ($unchanged['controlled'] && $unchanged['refusal'] !== null) {
+            return ['score' => null, 'summary' => '', 'output' => '', 'empty' => false, 'unwritable' => false, 'unloaded' => $unchanged['refusal']];
+        }
+
+        $started = time();
+        // Not in parallel when the tests fail with the variables of a worker, which would count mutants as caught
+        $parallel = $unchanged['parallel'];
+        $result = self::execute($cwd, $parallel, $paths);
+
+        if ($parallel && $result['score'] === null && ! $result['empty'] && ! $result['unwritable']) {
+            $parallel = false;
+            $result = self::execute($cwd, $parallel, $paths);
         }
 
         // A directory that stopped being writable, or a mutant left empty (a full disk), while Pest was running
@@ -62,7 +75,7 @@ final class MutationRun
             return [...$result, 'score' => null, 'empty' => false, 'unwritable' => true];
         }
 
-        $refusal = $result['score'] === null ? null : MutationCanary::refusal($cwd, $paths);
+        $refusal = $result['score'] === null ? null : ($unchanged['refusal'] ?? MutationCanary::loaded($cwd, $paths, $unchanged['limit']));
 
         return $refusal === null ? $result : [...$result, 'score' => null, 'unloaded' => $refusal];
     }

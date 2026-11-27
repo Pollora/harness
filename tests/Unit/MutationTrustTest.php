@@ -9,6 +9,9 @@ use Pollora\Harness\Check\Plan;
 use Pollora\Harness\Check\Step;
 use Pollora\Harness\Check\StepResult;
 use Pollora\Harness\Config\HarnessConfig;
+use Pollora\Harness\Console\Commands\CheckCommand;
+use Pollora\Harness\Console\Io;
+use Pollora\Harness\Support\ChangedSources;
 
 require_once __DIR__.'/../Support/RelativeMutationFixture.php';
 
@@ -204,8 +207,9 @@ describe('mutants that never load', function (): void {
  * @param  string  $bootstrap  PHP run by the test bootstrap, after the autoloader
  * @param  list<string>  $paths
  */
-function realPestRefusal(string $bootstrap, array $paths): ?string
+function realPestRefusal(string $bootstrap, array $paths, ?string $test = null): ?string
 {
+    $test ??= "expect(require __DIR__.'/../src/Answer.php')->toBeInt();";
     $harness = dirname(__DIR__, 2);
     $root = '/tmp/pollora-harness-canary-'.bin2hex(random_bytes(5));
 
@@ -219,7 +223,7 @@ function realPestRefusal(string $bootstrap, array $paths): ?string
     file_put_contents($root.'/vendor/autoload.php', "<?php\nreturn require '{$harness}/vendor/autoload.php';\n");
     file_put_contents($root.'/src/Answer.php', "<?php\n\nreturn 42;\n");
     file_put_contents($root.'/tests/bootstrap.php', "<?php\nrequire __DIR__.'/../vendor/autoload.php';\n\$mutated = getenv('PEST_MUTATION_TESTING');\n{$bootstrap}\n");
-    file_put_contents($root.'/tests/AnswerTest.php', "<?php\n\ntest('answers', function (): void {\n    expect(require __DIR__.'/../src/Answer.php')->toBeInt();\n});\n");
+    file_put_contents($root.'/tests/AnswerTest.php', "<?php\n\ntest('answers', function (): void {\n    {$test}\n});\n");
     file_put_contents($root.'/phpunit.xml', '<?xml version="1.0"?><phpunit bootstrap="tests/bootstrap.php"><testsuites><testsuite name="Unit"><directory>tests</directory></testsuite></testsuites></phpunit>');
 
     try {
@@ -249,5 +253,221 @@ describe('the canary, with a real Pest', function (): void {
         $bootstrap = "if (is_string(\$mutated)) {\n    \Pest\Mutate\Support\StreamWrapper::disable();\n    require (string) getenv('PEST_MUTATION_FILE');\n}";
 
         expect(realPestRefusal($bootstrap, $paths))->toBeNull();
+    })->with(['a file' => [['src/Answer.php']], 'the whole repository' => [[]]]);
+});
+
+/** A mutant's process that loads its mutant and then fails: what Patchwork on top of Pest's wrapper does to a suite. */
+const FAILS_AFTER_LOADING = "require getenv('PEST_MUTATION_FILE'); echo \"  FAILED  Tests\\\\ATest > it lists a directory\\n\"; exit(2);";
+
+describe('the tests on unchanged code run as a mutant', function (): void {
+    it('give no score when they fail, though the mutant loads and Pest reads 100 %', function (array $paths): void {
+        $root = trustProject(trustPrints(TRUST_REPORT), FAILS_AFTER_LOADING);
+
+        $measure = MutationMeasure::fromRun(MutationRun::run($root, $paths));
+
+        expect($measure->state)->toBe(MutationMeasure::UNMEASURED)
+            ->and($measure->why)->toContain('No mutation score can be believed')
+            ->and($measure->why)->toContain('fail (exit code 2) when Pest runs them as a mutant of src/A.php that changes nothing')
+            ->and($measure->why)->toContain('FAILED Tests\ATest > it lists a directory');
+    })->with(['a file' => [['src/A.php']], 'the whole repository' => [[]]]);
+
+    it('do not start Pest, whose mutants would all be read as caught', function (): void {
+        $root = trustProject("if (in_array('--mutate', \$argv, true)) {\n    touch('ran');\n}", FAILS_AFTER_LOADING);
+
+        expect(MutationRun::run($root)['score'])->toBeNull()
+            ->and($root.'/ran')->not->toBeFile();
+    });
+
+    it('are given an exact copy where Pest writes its mutants, neither --bail nor --parallel, and the copy is removed', function (): void {
+        $record = <<<'PHP'
+            $copy = (string) getenv('PEST_MUTATION_FILE');
+            $original = (string) getenv('PEST_MUTATION_TESTING');
+            if (str_contains($copy, 'pollora-unchanged-')) {
+                file_put_contents('seen', json_encode([$original, $copy, md5_file($copy) === md5_file($original), array_slice($argv, 1), getenv('PARATEST'), getenv('TEST_TOKEN')]));
+            }
+            require $copy;
+            PHP;
+        $root = trustProject('', $record);
+
+        expect(MutationCanary::refusal($root, ['src/A.php']))->toBeNull();
+
+        [$original, $copy, $same, $arguments, $paratest, $token] = json_decode((string) file_get_contents($root.'/seen'), true);
+
+        expect($original)->toBe(realpath($root.'/src/A.php'))
+            ->and($copy)->toStartWith(realpath($root).'/vendor/pestphp/pest-plugin-mutate/.temp/mutations/')
+            ->and($copy)->not->toBeFile()
+            ->and($same)->toBeTrue()
+            ->and($arguments)->toBe([])
+            // As the processes of the parallel pass, which the harness runs first
+            ->and([$paratest, $token])->toBe(['1', '1']);
+    });
+
+    it('are not run in parallel, rather than refused, when only the variables of a worker fail them', function (): void {
+        $mutant = "require getenv('PEST_MUTATION_FILE'); if (getenv('PARATEST') === '1' && getenv('TEST_TOKEN') !== false) { exit(1); }";
+        // The parallel pass would read 100 %, a single process reads the real score
+        $mutate = "echo in_array('--parallel', \$argv, true) ? ".var_export(TRUST_REPORT, true).' : '.var_export(TRUST_HONEST, true).';';
+
+        expect(MutationRun::run(trustProject($mutate, $mutant))['score'])->toBe(66.67);
+    });
+
+    /**
+     * A project whose control writes the coverage of src/A.php (by ATest) and whose mutant processes fail unless the
+     * `--filter` leaves out BTest, as a test that only fails under Pest's wrapper and does not cover A.php.
+     */
+    $covered = static function (string $coveredBy): string {
+        $root = trustProject('', "require getenv('PEST_MUTATION_FILE'); if (str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-')) { \$filter = implode(' ', preg_grep('/^--filter=/', \$argv)); file_put_contents('filter', \$filter); exit(\$filter !== '' && ! str_contains(\$filter, 'BTest') ? 0 : 1); }");
+        $report = sprintf('<?php return new class { function getData() { return $this; } function lineCoverage() { return [%s => [3 => [%s]]]; } };', var_export(realpath($root.'/src/A.php'), true), var_export($coveredBy, true));
+        $pest = (string) file_get_contents($root.'/vendor/bin/pest');
+        file_put_contents($root.'/vendor/bin/pest', str_replace("<?php\n", "<?php\nforeach (\$argv as \$a) { if (str_starts_with(\$a, '--coverage-php=')) { file_put_contents(substr(\$a, 15), ".var_export($report, true)."); } }\n", $pest));
+
+        return $root;
+    };
+
+    it('run only the tests that cover the file, selected as Pest selects them', function (array $paths) use ($covered): void {
+        $root = $covered('P\\Tests\\ATest::__pest_evaluable_it_reads__the_answer');
+
+        expect(MutationCanary::unchanged($root, $paths)['refusal'])->toBeNull()
+            ->and(file_get_contents($root.'/filter'))->toBe($paths === [] ? '--filter=ATest::' : '--filter=ATest::(.*)it.reads.{1,2}the.answer');
+    })->with(['a file' => [['src/A.php']], 'the whole repository' => [[]]]);
+
+    it('refuse the score when a test that covers the file fails', function () use ($covered): void {
+        $root = $covered('P\\Tests\\BTest::__pest_evaluable_it_locks');
+
+        expect(MutationCanary::unchanged($root, ['src/A.php'])['refusal'])->toContain('the tests covering the code fail');
+    });
+
+    it('say nothing about a file no test covers, which has no mutant', function () use ($covered): void {
+        $root = $covered('P\\Tests\\BTest::__pest_evaluable_it_locks');
+        file_put_contents($root.'/src/Unused.php', "<?php\n");
+
+        expect(MutationCanary::unchanged($root, ['src/Unused.php'])['refusal'])->toBeNull();
+    });
+
+    it('stop a loop at the limit, with the processes it started', function (): void {
+        $loop = <<<'PHP'
+            require getenv('PEST_MUTATION_FILE');
+            if (str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-')) {
+                $child = proc_open([PHP_BINARY, '-r', 'sleep(60);'], [], $pipes);
+                file_put_contents('child', (string) proc_get_status($child)['pid']);
+                sleep(60);
+            }
+            PHP;
+        $root = trustProject('', $loop);
+        $started = microtime(true);
+
+        $refusal = MutationCanary::refusal($root, ['src/A.php'], 1.0);
+
+        expect($refusal)->toContain('are still running after 1 s')
+            ->and(microtime(true) - $started)->toBeLessThan(30.0);
+
+        usleep(200_000);
+        $state = trim((string) shell_exec('ps -o stat= -p '.(int) file_get_contents($root.'/child')));
+
+        // Gone, or a zombie nobody reaped yet
+        expect($state === '' || str_starts_with($state, 'Z'))->toBeTrue();
+    });
+
+    it('accept a slow run within a few times the duration of the suite alone', function (): void {
+        $slow = "usleep(1_500_000); require getenv('PEST_MUTATION_FILE');";
+        // The suite alone takes 0.6 s: the limit is 3 s, well over the floor of this test
+        $root = trustProject('usleep(600_000);', $slow);
+
+        expect(MutationCanary::unchanged($root, ['src/A.php'], 0.1))->toMatchArray(['refusal' => null, 'parallel' => true]);
+    });
+
+    it('never allow less than two minutes, and five times the suite beyond', function (): void {
+        expect(MutationCanary::TIME_FLOOR)->toBe(120.0)
+            ->and(MutationCanary::TIME_FACTOR)->toBe(5.0)
+            ->and(MutationCanary::unchanged(trustProject(''), ['src/A.php'])['limit'])->toBe(120.0);
+    });
+
+    it('say that the tests fail on their own when they do, and leave Pest to report it', function (): void {
+        $root = trustProject('exit(1);');
+
+        expect(MutationCanary::refusal($root, ['src/A.php']))->toContain('the tests do not pass on their own');
+
+        $run = MutationRun::run($root);
+
+        expect($run['score'])->toBeNull()
+            ->and($run)->not->toHaveKey('unloaded');
+    });
+
+    it('are compared in parallel for a suite that only holds that way', function (): void {
+        $root = trustProject('', "require getenv('PEST_MUTATION_FILE');");
+        file_put_contents($root.'/vendor/bin/pest', "<?php\nif (! in_array('--parallel', \$argv, true)) {\n    exit(1);\n}\nif (getenv('PEST_MUTATION_FILE') !== false) {\n    require getenv('PEST_MUTATION_FILE');\n    exit(str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-') ? 1 : 0);\n}\n");
+
+        expect(MutationCanary::unchanged($root, ['src/A.php'])['refusal'])->toContain('fail (exit code 1)');
+    });
+
+    it('run the first source file for the whole repository, never one Composer loads at startup', function (): void {
+        $root = trustProject('');
+        mkdir($root.'/src/Deep');
+        file_put_contents($root.'/src/0-helpers.php', "<?php\n");
+        file_put_contents($root.'/src/Deep/B.php', "<?php\n");
+        file_put_contents($root.'/composer.json', '{"autoload":{"psr-4":{"App\\\\":"src/"},"files":["src/0-helpers.php"]}}');
+
+        expect(ChangedSources::all($root))->toBe(['src/A.php', 'src/Deep/B.php']);
+    });
+});
+
+describe('check --mutation-canary', function (): void {
+    $check = static function (string $root, array $argv = ['--mutation-canary']): array {
+        [$out, $err] = [fopen('php://memory', 'w+'), fopen('php://memory', 'w+')];
+        $code = (new CheckCommand)->run(Io::fromArgv($root, $argv, $out, $err));
+        rewind($out);
+        rewind($err);
+
+        return [$code, stream_get_contents($out).stream_get_contents($err)];
+    };
+
+    it('passes without running a mutation pass or a gate', function () use ($check): void {
+        $root = trustProject("if (in_array('--mutate', \$argv, true)) {\n    touch('ran');\n}");
+
+        [$code, $output] = $check($root);
+
+        expect($code)->toBe(0)
+            ->and($output)->toContain('No score was measured')
+            ->and($root.'/ran')->not->toBeFile()
+            ->and($root.'/.harness')->not->toBeDirectory();
+    });
+
+    it('fails when no score could be believed, even in observe mode', function (string $argument) use ($check): void {
+        [$code, $output] = $check(trustProject('', FAILS_AFTER_LOADING), [$argument, '--observe']);
+
+        expect($code)->toBe(1)->and($output)->toContain('that changes nothing');
+    })->with(['--mutation-canary', '--mutation-canary=src/A.php']);
+
+    it('fails rather than pass when there was nothing to check', function () use ($check): void {
+        expect($check(harnessTempDir())[1])->toContain('nothing was checked')
+            ->and($check(harnessTempDir())[0])->toBe(1)
+            ->and($check(trustProject(''), ['--mutation-canary=src/Missing.php'])[0])->toBe(1);
+    });
+});
+
+describe('unchanged code, with a real Pest', function (): void {
+    /** An exclusive lock keeps a second one out, except behind the wrapper of Pest, which takes every lock as shared. */
+    $locks = <<<'PHP'
+        require __DIR__.'/../src/Answer.php';
+        $file = sys_get_temp_dir().'/pollora-lock-'.getmypid();
+        $first = fopen($file, 'c');
+        $second = fopen($file, 'c');
+        flock($first, LOCK_EX);
+        $taken = flock($second, LOCK_EX | LOCK_NB);
+        unlink($file);
+        expect($taken)->toBeFalse();
+        PHP;
+
+    it('gives no score when a test fails only behind the wrapper of Pest', function (array $paths) use ($locks): void {
+        expect(realPestRefusal('', $paths, $locks))
+            ->toContain('fail (exit code')
+            ->toContain('src/Answer.php that changes nothing');
+    })->with(['a file' => [['src/Answer.php']], 'the whole repository' => [[]]]);
+
+    it('accepts the same suite once the bootstrap gives the wrapper back and loads the mutant itself', function (array $paths) use ($locks): void {
+        $bootstrap = "if (is_string(\$mutated)) {\n    \Pest\Mutate\Support\StreamWrapper::disable();\n    require (string) getenv('PEST_MUTATION_FILE');\n}";
+        // The file is already loaded by the bootstrap: the test reads nothing from it
+        $test = str_replace("require __DIR__.'/../src/Answer.php';", '', $locks);
+
+        expect(realPestRefusal($bootstrap, $paths, $paths === [] ? $test : $locks))->toBeNull();
     })->with(['a file' => [['src/Answer.php']], 'the whole repository' => [[]]]);
 });

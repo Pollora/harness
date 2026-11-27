@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Pollora\Harness\Support;
 
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+
 /**
  * The source files a change touches, for the mutation run limited to them (`mutation.scope: "changed"`).
  *
@@ -25,6 +29,43 @@ final class ChangedSources
 
     /** The name Pest's mutation bootstrap gives the copy of a file it mutates; never a source file. */
     private const string MUTANT_PREFIX = '.mutant-';
+
+    /**
+     * Every source file of the repository, by the same rules as `since()`, sorted, relative to `$cwd`.
+     *
+     * @return list<string>
+     */
+    public static function all(string $cwd): array
+    {
+        $root = rtrim($cwd, '/');
+        $loaded = self::autoloadFiles($cwd);
+        $files = [];
+
+        foreach (self::sourceDirectories($cwd) as $directory) {
+            $path = rtrim($root.'/'.$directory, '/');
+
+            // The root itself as a source directory would walk vendor/
+            if (! is_dir($path) || realpath($path) === realpath($root)) {
+                continue;
+            }
+
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::CURRENT_AS_PATHNAME | FilesystemIterator::SKIP_DOTS)) as $file) {
+                if (! is_string($file)) {
+                    continue;
+                }
+
+                $name = substr($file, strlen($root) + 1);
+
+                if (str_ends_with($name, '.php') && ! str_starts_with(basename($name), self::MUTANT_PREFIX) && ! in_array($name, $loaded, true)) {
+                    $files[] = $name;
+                }
+            }
+        }
+
+        sort($files);
+
+        return $files;
+    }
 
     /**
      * The PHP source files added, copied, modified or renamed between `$base` and `HEAD`, relative to `$cwd`.

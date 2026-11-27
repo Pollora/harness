@@ -30,7 +30,8 @@ use Pollora\Harness\Support\ChangedSources;
  * - **Base unmeasured** (its tests fail, a measuring guard trips): the file is held to `min` and says so; a
  *   regression cannot be proved, so it is the fixed floor or nothing.
  * - **Change unmeasured**: the gate fails. A score is refused rather than believed when Pest could not write its
- *   files, when no mutated source was seen being executed (`MutationCanary`: Patchwork or another stream wrapper
+ *   files, when the tests fail on unchanged code run as a mutant or no mutated source was seen being executed
+ *   (`MutationCanary`: Patchwork or another stream wrapper
  *   serving the original), when every mutant survived, or when the tests fail.
  * - **Nothing is measured twice for nothing.** The change is measured first; a file at or above `100 - tolerance`
  *   cannot have dropped beyond the tolerance, so its base is not measured.
