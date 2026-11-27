@@ -41,6 +41,8 @@ use Pollora\Harness\Support\InterpreterFlags;
  *   test that no mutant of the file would run.
  * - Pest never gives a mutant `--parallel`: in a parallel mutation run it sets the variables of a ParaTest worker, and
  *   so does this. When the tests only fail with those, mutants are not run in parallel.
+ * - pest-plugin-mutate 3 leaves `--coverage-php` among the arguments of a mutant (4 removes it), so with coverage data
+ *   those runs collect coverage too when the installed version does.
  * - A run that fails is tried once more: one flaky failure must not refuse the score.
  * - Without `--bail`, so that every failing test is listed; the verdict is the same.
  * - The limit of these runs is `TIME_FACTOR` times the control, and never below `TIME_FLOOR` seconds.
@@ -117,6 +119,8 @@ final class MutationCanary
         [$seconds, $coverage] = $control;
         $result['limit'] = max($floor, self::TIME_FACTOR * $seconds);
 
+        $covering = $coverage !== null && self::mutantsCollectCoverage($root);
+
         foreach ($originals as $path => $original) {
             $filters = null;
 
@@ -133,11 +137,11 @@ final class MutationCanary
 
             foreach ($filters ?? [null] as $filter) {
                 $variables = $result['parallel'] ? self::workerVariables() : [];
-                $refusal = self::unchangedRefusal($root, $path, $original, $variables, $filter, $result['limit'], $paths === []);
+                $refusal = self::unchangedRefusal($root, $path, $original, $variables, $filter, $result['limit'], $paths === [], $covering);
 
                 if ($refusal !== null && $variables !== []) {
                     $result['parallel'] = false;
-                    $refusal = self::unchangedRefusal($root, $path, $original, [], $filter, $result['limit'], $paths === []);
+                    $refusal = self::unchangedRefusal($root, $path, $original, [], $filter, $result['limit'], $paths === [], $covering);
                 }
 
                 if ($refusal !== null) {
@@ -352,6 +356,17 @@ final class MutationCanary
     }
 
     /**
+     * Whether the installed pest-plugin-mutate gives a mutant the `--coverage-php` of its own run: it does unless
+     * `MutationTest` removes it.
+     */
+    private static function mutantsCollectCoverage(string $root): bool
+    {
+        $source = $root.'/vendor/pestphp/pest-plugin-mutate/src/MutationTest.php';
+
+        return is_file($source) && ! str_contains((string) file_get_contents($source), "'--coverage'");
+    }
+
+    /**
      * What Pest sets in the process of a mutant of a parallel run.
      *
      * @return array<string, string>
@@ -367,7 +382,7 @@ final class MutationCanary
      * @param  array<string, string>  $variables  Those of a parallel run, or none
      * @param  string|null  $filter  The tests to run; null runs them all
      */
-    private static function unchangedRefusal(string $root, string $path, string $original, array $variables, ?string $filter, float $limit, bool $wholeRepository): ?string
+    private static function unchangedRefusal(string $root, string $path, string $original, array $variables, ?string $filter, float $limit, bool $wholeRepository, bool $covering): ?string
     {
         // Where Pest writes its mutants, so that a bootstrap which reads the mutant finds it where it would
         $directory = $root.'/vendor/pestphp/pest-plugin-mutate/.temp/mutations';
@@ -378,16 +393,18 @@ final class MutationCanary
         }
 
         $environment = [...self::environment(), 'PEST_MUTATION_TESTING' => $original, 'PEST_MUTATION_FILE' => $copy, ...$variables];
+        $report = $covering ? sys_get_temp_dir().'/pollora-coverage-'.bin2hex(random_bytes(8)).'.php' : null;
+        $coverageArguments = $report === null ? [] : ['--coverage-php='.$report];
 
         try {
             // Never --parallel, which Pest gives no mutant
-            $arguments = $filter === null ? [] : ['--filter='.$filter];
+            $arguments = [...$coverageArguments, ...($filter === null ? [] : ['--filter='.$filter])];
             [$code, $output] = self::execute($root, $arguments, $environment, $limit);
 
             // A filter that selects nothing proves nothing: the whole suite then
             if ($filter !== null && preg_match('/No tests (?:found|executed)/i', $output) === 1) {
                 $filter = null;
-                $arguments = [];
+                $arguments = $coverageArguments;
                 [$code, $output] = self::execute($root, $arguments, $environment, $limit);
             }
 
@@ -396,8 +413,10 @@ final class MutationCanary
                 [$code, $output] = self::execute($root, $arguments, $environment, $limit);
             }
         } finally {
-            if (is_file($copy)) {
-                unlink($copy);
+            foreach ([$copy, $report] as $file) {
+                if ($file !== null && is_file($file)) {
+                    unlink($file);
+                }
             }
         }
 
@@ -415,7 +434,7 @@ final class MutationCanary
                 $wholeRepository ? ' (the first source file, standing for every one: the failure does not have to be about it)' : '',
             ),
             $output,
-            'Pest counts such a failure as a caught mutant, and a loop as a timeout, which counts as caught too. Known causes: the stream wrapper Pest puts on `file` (it takes every flock() as shared and reports a file nobody may read as absent), Patchwork, which Brain Monkey loads, stacked on it (reading a directory then fails: antecedent/patchwork#235), and tests that only pass after others that Pest does not run with them. When PEST_MUTATION_TESTING is set, the test bootstrap can give `file` back and load PEST_MUTATION_FILE itself (see the framework\'s tests/bootstrap.php).',
+            'Pest counts such a failure as a caught mutant, and a loop as a timeout, which counts as caught too. Known causes: the stream wrapper Pest puts on `file` (it takes every flock() as shared and reports a file nobody may read as absent), Patchwork, which Brain Monkey loads, stacked on it (reading a directory then fails: antecedent/patchwork#235), and tests that only pass after others that Pest does not run with them. When PEST_MUTATION_TESTING is set, the test bootstrap can give `file` back, only if the wrapper of Pest is on it (a process PHPUnit isolates a test in has the variables but not the wrapper), and load PEST_MUTATION_FILE itself (the README shows how).',
         );
     }
 
@@ -649,13 +668,18 @@ final class MutationCanary
         preg_match_all('/^\s*FAILED\s+\S.*$/m', $clean, $failures);
         $failed = array_slice(array_map(static fn (string $line): string => '  '.trim((string) preg_replace('/\s{2,}/', ' ', $line)), $failures[0]), 0, 15);
         $tail = trim(substr($clean, -600));
+        // Said first: an exhausted memory looks like any other failure, and a flag of the command does not help
+        $memory = preg_match('/Allowed memory size of (\d+) bytes exhausted/', $clean, $exhausted) === 1
+            ? [sprintf('A process ran out of memory (memory_limit of %d MB). A `php -d memory_limit=...` on this command does not reach the processes of the tests, as it does not reach those Pest starts for its mutants: set it in php.ini (or a PHP_INI_SCAN_DIR file), or in phpunit.xml with <ini name="memory_limit" value="-1"/>.', intdiv((int) $exhausted[1], 1024 * 1024))]
+            : [];
 
         return implode("\n", [
             sprintf(
                 'No mutation score can be believed: %s, so Pest\'s score is not about its mutants (they survive unseen, or their processes die and count as killed). %s',
                 $what,
-                $advice ?? 'Something else serves the source files, usually Patchwork replacing the stream wrapper: the test bootstrap must give it back to Pest when PEST_MUTATION_TESTING is set and load PEST_MUTATION_FILE.',
+                $advice ?? 'Something else serves the source files, usually Patchwork replacing the stream wrapper: when PEST_MUTATION_TESTING is set, the test bootstrap must give it back to Pest, only if the wrapper of Pest is on it, and load PEST_MUTATION_FILE (the README shows how).',
             ),
+            ...$memory,
             ...$failed,
             ...($tail === '' ? [] : [$tail]),
         ]);

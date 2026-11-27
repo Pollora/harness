@@ -239,12 +239,34 @@ Pest hands a mutant to its process through `PEST_MUTATION_TESTING` and `PEST_MUT
 **The tests must also pass on code that did not change.** A mutant's process that fails is a caught mutant for Pest, one that loops is a timeout, counted as caught too: a suite that breaks there whatever the file contains scores mutants nothing tested. So, before Pest runs:
 
 1. **The suite runs alone** (`pest`, then `pest --parallel` if that fails, with coverage first, then without). It gives the duration and, with a coverage driver (pcov, Xdebug), which tests cover which file. When it does not pass, there is nothing to compare with.
-2. **The tests run as a mutant of an unchanged file**: `PEST_MUTATION_TESTING` is the source file, `PEST_MUTATION_FILE` an exact copy of it. As Pest does, only the tests that cover the file are selected, by name (`--filter`, in several runs when too long for PCRE; for the whole repository, the first source file stands for the others, with every test that covers a source file), and `--parallel` is never passed: the variables of a ParaTest worker are set instead. Without coverage data every test runs, which can refuse a score for a test no mutant of the file would run.
+2. **The tests run as a mutant of an unchanged file**: `PEST_MUTATION_TESTING` is the source file, `PEST_MUTATION_FILE` an exact copy of it. As Pest does, only the tests that cover the file are selected, by name (`--filter`, in several runs when too long for PCRE; for the whole repository, the first source file stands for the others, with every test that covers a source file), and `--parallel` is never passed: the variables of a ParaTest worker are set instead. With pest-plugin-mutate 3, whose mutants collect coverage, so does this run. Without coverage data every test runs, which can refuse a score for a test no mutant of the file would run.
 3. **They must exit 0** (a run that fails is tried once more) within five times the duration of step 1, and never less than 120 seconds. Otherwise Pest is not started and the gate fails, listing the failing tests. If they only fail with the worker variables, the mutants are run in a single process instead.
 
-Each of these runs has a temporary directory of its own (`TMPDIR`), removed afterwards, so that what a failing run leaves behind does not fail the next one. A test that starts further processes in a mutant's process (PHPUnit's `RunTestsInSeparateProcesses`) has them inherit `PEST_MUTATION_TESTING` without Pest's wrapper: a bootstrap must not assume the wrapper is there (`StreamWrapper::disable()` then raises a notice, which fails the test).
+Each of these runs has a temporary directory of its own (`TMPDIR`), removed afterwards, so that what a failing run leaves behind does not fail the next one. A test that starts further processes in a mutant's process (PHPUnit's `RunTestsInSeparateProcesses`) has them inherit `PEST_MUTATION_TESTING` without Pest's wrapper: a bootstrap must not assume the wrapper is there (`StreamWrapper::disable()` then raises a notice, `file:// was never changed`, which fails the test).
 
-Two causes have been seen. **Patchwork** (Brain Monkey loads it) stacked on Pest's stream wrapper breaks directory reading ([antecedent/patchwork#235](https://github.com/antecedent/patchwork/pull/235)). **Pest's wrapper itself** takes every `flock()` as a shared lock and reports a file nobody may read as absent, so a test of locking or permissions fails whatever Patchwork does. Both go away when the test bootstrap, if `PEST_MUTATION_TESTING` is set, calls `\Pest\Mutate\Support\StreamWrapper::disable()` and loads `PEST_MUTATION_FILE` itself (the framework's `tests/bootstrap.php`).
+Two causes have been seen. **Patchwork** (Brain Monkey loads it) stacked on Pest's stream wrapper breaks directory reading ([antecedent/patchwork#235](https://github.com/antecedent/patchwork/pull/235)). **Pest's wrapper itself** takes every `flock()` as a shared lock and reports a file nobody may read as absent, so a test of locking or permissions fails whatever Patchwork does. Both go away when the test bootstrap, if `PEST_MUTATION_TESTING` is set, gives `file` back and loads `PEST_MUTATION_FILE` itself. It gives it back **only when Pest's wrapper is on it**: a process PHPUnit isolates a test in has the variables but not the wrapper. At the top of the bootstrap, before Patchwork is loaded (it puts its own wrapper on `file`):
+
+```php
+$mutating = is_string(getenv('PEST_MUTATION_TESTING')) && class_exists(\Pest\Mutate\Support\StreamWrapper::class);
+
+if ($mutating) {
+    $handle = fopen(__FILE__, 'r');
+    $wrapped = (stream_get_meta_data($handle)['wrapper_data'] ?? null) instanceof \Pest\Mutate\Support\StreamWrapper;
+    fclose($handle);
+
+    if ($wrapped) {
+        \Pest\Mutate\Support\StreamWrapper::disable();
+    }
+}
+
+// Patchwork, Composer's autoloader and the helpers of the tests are loaded here
+
+if ($mutating) {
+    require (string) getenv('PEST_MUTATION_FILE');
+}
+```
+
+That `require` is enough for a file that can be included on its own. For `__DIR__` and `__FILE__` in the mutated file, see the framework's `tests/bootstrap.php`.
 
 **To check a repository without a mutation pass** (a few runs of the suite, no gate, no report):
 
@@ -256,7 +278,7 @@ vendor/bin/pollora-qa check --mutation-canary=src/A.php,src/B.php      # some fi
 It exits 1 when no score could be believed, whatever the mode of the repository, and when `pest-plugin-mutate` is not installed. Give it a coverage driver, as the mutation run has.
 
 - **Cost.** Two runs of the suite or of the covering tests (the control, then one per file; more when a run fails, which is tried again, and without the worker variables), then the canary: nothing more when a bootstrap loads the mutant at once (the framework: 0.1 s) or when a test includes the file early; otherwise as long as the suite takes to reach the file. A refusal costs a whole run of the suite.
-- **What it cannot see.** Pest selects tests line by line: a test that only fails in the smaller selection of one line is not seen, nor a flaky one: they count as killed. A wrapper replaced only by some tests, which the probe does not run before the file is read. For the whole repository, a bootstrap that loads some files and not others. A `pest --mutate` run outside `pollora-qa`.
+- **What it cannot see.** Pest selects tests line by line: a test that only fails in the smaller selection of one line is not seen, nor a flaky one: they count as killed. A test that fails only now and then as a mutant: a failing run is tried once more, Pest tries each mutant once. A test that is slower as a mutant than Pest's own limit (the duration of its first run, plus 5 s or 20 %) yet within the limit above. A wrapper replaced only by some tests, which the probe does not run before the file is read. For the whole repository, a bootstrap that loads some files and not others. A `pest --mutate` run outside `pollora-qa`.
 
 **Two traps of Pest's mutation runner.**
 - Pest builds its `--filter` as regex alternatives, one per test that covers the mutated line. Past the PCRE compilation limit (about 64 KB) the filter is invalid, no test runs and the mutant is counted as surviving. The lines covered by almost the whole suite are the ones concerned, and adding tests can lower the score there: fewer, broader tests (datasets folded into loops) beat more of them.

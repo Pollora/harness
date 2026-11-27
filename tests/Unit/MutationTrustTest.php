@@ -223,7 +223,8 @@ function realPestRefusal(string $bootstrap, array $paths, ?string $test = null):
     file_put_contents($root.'/vendor/autoload.php', "<?php\nreturn require '{$harness}/vendor/autoload.php';\n");
     file_put_contents($root.'/src/Answer.php', "<?php\n\nreturn 42;\n");
     file_put_contents($root.'/tests/bootstrap.php', "<?php\nrequire __DIR__.'/../vendor/autoload.php';\n\$mutated = getenv('PEST_MUTATION_TESTING');\n{$bootstrap}\n");
-    file_put_contents($root.'/tests/AnswerTest.php', "<?php\n\ntest('answers', function (): void {\n    {$test}\n});\n");
+    // A whole test file, or the body of one test
+    file_put_contents($root.'/tests/AnswerTest.php', str_starts_with($test, '<?php') ? $test : "<?php\n\ntest('answers', function (): void {\n    {$test}\n});\n");
     file_put_contents($root.'/phpunit.xml', '<?xml version="1.0"?><phpunit bootstrap="tests/bootstrap.php"><testsuites><testsuite name="Unit"><directory>tests</directory></testsuite></testsuites></phpunit>');
 
     try {
@@ -440,6 +441,20 @@ describe('the tests on unchanged code run as a mutant', function (): void {
             ->and($root.'/flaked')->toBeFile();
     });
 
+    it('collect coverage in a run as a mutant when the installed pest-plugin-mutate does', function (string $source, bool $collects) use ($covered): void {
+        $root = $covered('P\\Tests\\ATest::__pest_evaluable_it_reads');
+        mkdir($root.'/vendor/pestphp/pest-plugin-mutate/src');
+        file_put_contents($root.'/vendor/pestphp/pest-plugin-mutate/src/MutationTest.php', $source);
+        $pest = (string) file_get_contents($root.'/vendor/bin/pest');
+        file_put_contents($root.'/vendor/bin/pest', str_replace("<?php\n", "<?php\nif (str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-')) {\n    file_put_contents('arguments', implode(' ', \$argv));\n}\n", $pest));
+
+        expect(MutationCanary::unchanged($root, ['src/A.php'])['refusal'])->toBeNull()
+            ->and(str_contains((string) file_get_contents($root.'/arguments'), '--coverage-php='))->toBe($collects);
+    })->with([
+        'version 3, which passes the arguments as they are' => ['<?php new Process([...$originalArguments]);', true],
+        'version 4, which removes them' => ["<?php array_filter(\$originalArguments, fn (\$a) => ! str_starts_with(\$a, '--coverage'));", false],
+    ]);
+
     it('split a filter too long for PCRE over several runs, naming every test', function (): void {
         $tests = array_map(static fn (int $i): string => 'P\\Tests\\ATest::__pest_evaluable_it_'.str_repeat('x', 100).$i, range(1, 500));
         $root = trustProject('', "require getenv('PEST_MUTATION_FILE'); if (str_contains((string) getenv('PEST_MUTATION_FILE'), 'pollora-unchanged-')) { file_put_contents('filters', implode('', preg_grep('/^--filter=/', \$argv)).\"\\n\", FILE_APPEND); }");
@@ -529,4 +544,59 @@ describe('unchanged code, with a real Pest', function (): void {
 
         expect(realPestRefusal($bootstrap, $paths, $paths === [] ? $test : $locks))->toBeNull();
     })->with(['a file' => [['src/Answer.php']], 'the whole repository' => [[]]]);
+});
+
+describe('the bootstrap the README advises', function (): void {
+    preg_match('/only when Pest\'s wrapper is on it.*?```php\n(.*?)```/s', (string) file_get_contents(dirname(__DIR__, 2).'/README.md'), $advised);
+
+    /** A test PHPUnit runs in a process of its own, which has the variables of a mutant and not the wrapper of Pest. */
+    $isolated = <<<'PHP'
+        <?php
+
+        // Pest does not tell PHPUnit where the autoloader of its isolated processes is
+        defined('PHPUNIT_COMPOSER_INSTALL') || define('PHPUNIT_COMPOSER_INSTALL', dirname(__DIR__).'/vendor/autoload.php');
+
+        #[PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses]
+        final class AnswerTest extends PHPUnit\Framework\TestCase
+        {
+            public function test_answers(): void
+            {
+                $this->assertIsInt(require __DIR__.'/../src/Answer.php');
+            }
+        }
+        PHP;
+
+    it('works in a process PHPUnit isolates a test in', function () use ($advised, $isolated): void {
+        expect(realPestRefusal($advised[1] ?? '', ['src/Answer.php'], $isolated))->toBeNull();
+    });
+
+    it('gives the wrapper back in the process Pest starts', function () use ($advised): void {
+        // A second exclusive lock is only refused without the wrapper of Pest
+        $locks = <<<'PHP'
+            $file = sys_get_temp_dir().'/pollora-lock-'.getmypid();
+            [$first, $second] = [fopen($file, 'c'), fopen($file, 'c')];
+            flock($first, LOCK_EX);
+            $taken = flock($second, LOCK_EX | LOCK_NB);
+            unlink($file);
+            expect($taken)->toBeFalse();
+            PHP;
+
+        expect(realPestRefusal($advised[1] ?? '', [], $locks))->toBeNull();
+    });
+
+    it('would not without its condition', function () use ($isolated): void {
+        $unconditional = "if (is_string(\$mutated)) {\n    \\Pest\\Mutate\\Support\\StreamWrapper::disable();\n}";
+
+        expect(realPestRefusal($unconditional, ['src/Answer.php'], $isolated))->toContain('file:// was never changed');
+    });
+});
+
+describe('a run out of memory', function (): void {
+    it('is said to be, and where the limit has to be raised', function (): void {
+        $root = trustProject("echo 'PHP Fatal error:  Allowed memory size of 134217728 bytes exhausted (tried to allocate 20 bytes) in x.php'; echo str_repeat(\"\\ntrace\", 200); exit(255);");
+
+        expect(MutationCanary::refusal($root, ['src/A.php']))
+            ->toContain('ran out of memory (memory_limit of 128 MB)')
+            ->toContain('PHP_INI_SCAN_DIR');
+    });
 });
